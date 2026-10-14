@@ -9,6 +9,7 @@ LAUNCHER="$ROOT/includes/usr/local/bin/nexus-agent"
 DESKTOP="$ROOT/includes/usr/share/applications/nexus-agent.desktop"
 BOOT_UNIT="$ROOT/includes/etc/systemd/system/nexus-boot-ready.service"
 BOOT_HOOK="$ROOT/hooks/010-enable-nexus-boot-ready.hook.chroot"
+GRUB_HOOK="$ROOT/hooks/020-unattended-grub.hook.binary"
 BOOT_MARKER="$ROOT/includes/usr/local/libexec/nexus-boot-ready"
 CONTROL_CENTER="$ROOT/includes/opt/nexus/control-center.py"
 CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desktop"
@@ -17,9 +18,10 @@ bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
 bash -n "$LAUNCHER"
 bash -n "$BOOT_HOOK"
+sh -n "$GRUB_HOOK"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -43,6 +45,8 @@ if [ -e "$ROOT/includes/etc/systemd/system/multi-user.target.wants/nexus-boot-re
   exit 1
 fi
 grep -q 'NEXUS_LIVE_BOOT_READY_V1' "$BOOT_MARKER"
+grep -q 'config/hooks/binary' "$BUILD"
+grep -q 'set timeout=3' "$GRUB_HOOK"
 python3 -m py_compile "$CONTROL_CENTER"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
