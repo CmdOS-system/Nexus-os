@@ -28,7 +28,7 @@ jobs:
       - name: Install build and VM dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 ovmf
+          sudo apt-get install -y qemu-system-x86 ovmf xorriso
 
       - name: Preflight and build inside Debian Trixie
         run: |
@@ -58,6 +58,21 @@ jobs:
           test -n "$iso"
           echo "path=$iso" >> "$GITHUB_OUTPUT"
 
+      - name: Inspect final ISO boot configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          iso="${{ steps.iso.outputs.path }}"
+          xorriso -indev "$iso" -find /boot/grub -type f -print > nexus-iso-grub-files.txt 2>&1 || true
+          for cfg in /boot/grub/grub.cfg /EFI/BOOT/grub.cfg; do
+            out="nexus-iso-$(basename "$(dirname "$cfg")")-grub.cfg"
+            xorriso -osirrox on -indev "$iso" -extract "$cfg" "$out" 2>/dev/null || true
+            if [ -s "$out" ]; then
+              echo "Extracted $cfg"
+              grep -n -E 'timeout|default|menuentry|linux|initrd' "$out" | head -n 80 || true
+            fi
+          done
+
       - name: UEFI guest readiness smoke test
         env:
           NEXUS_BOOT_TIMEOUT: "180"
@@ -74,6 +89,8 @@ jobs:
           path: |
             nexus-qemu-serial.log
             nexus-qemu-debug.log
+            nexus-iso-grub-files.txt
+            nexus-iso-*-grub.cfg
 
       - name: Upload verified candidate evidence
         if: success()
