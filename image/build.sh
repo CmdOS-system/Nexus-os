@@ -19,7 +19,7 @@ fi
 mkdir -p "$WORK"
 cd "$WORK"
 
-lb config --mode debian --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer none --archive-areas "main non-free-firmware" --bootappend-live "boot=live components console=tty0 console=ttyS0,115200n8"
+lb config --mode debian --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer none --archive-areas "main non-free-firmware" --bootloader grub-efi --bootloader-timeout 3 --bootappend-live "boot=live components console=tty0 console=ttyS0,115200n8"
 
 mkdir -p config/package-lists
 cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot
