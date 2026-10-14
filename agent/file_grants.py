@@ -12,6 +12,7 @@ class FileGrant:
     path: Path
     device: int
     inode: int
+    ctime_ns: int
 
 class FileGrantStore:
     def __init__(self):
@@ -27,7 +28,7 @@ class FileGrantStore:
         if not stat.S_ISREG(info.st_mode):
             raise ValueError("Selected path must be a regular file")
         token = uuid.uuid4().hex
-        self._grants[token] = FileGrant(token, path, info.st_dev, info.st_ino)
+        self._grants[token] = FileGrant(token, path, info.st_dev, info.st_ino, info.st_ctime_ns)
         return token
 
     def consume_text(self, token: str, max_bytes: int = 1_000_000) -> str:
@@ -48,7 +49,7 @@ class FileGrantStore:
                 raise
             with os.fdopen(fd, "rb") as handle:
                 info = os.fstat(handle.fileno())
-                if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != (grant.device, grant.inode):
+                if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino, info.st_ctime_ns) != (grant.device, grant.inode, grant.ctime_ns):
                     raise PermissionError("Selected file changed after approval")
                 if info.st_size > max_bytes:
                     raise ValueError("Selected file exceeds read limit")
