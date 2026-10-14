@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
 BUILD="$ROOT/build.sh"
@@ -16,6 +15,8 @@ CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desk
 
 bash -n "$BUILD"
 bash -n "$LAUNCHER"
+bash -n "$BOOT_HOOK"
+bash -n "$BOOT_MARKER"
 
 for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
@@ -28,60 +29,10 @@ done
 grep -q 'NAME="Nexus OS"' "$IDENTITY"
 grep -q '^ID=nexus$' "$IDENTITY"
 grep -q '^ID_LIKE=debian$' "$IDENTITY"
-grep -q '^Name=Nexus Agent
-
-for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none'; do
-  grep -q -- "$flag" "$BUILD"
-done
-
-for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secret_store.py cli.py openai_compatible.py settings.py tool_broker.py system_tools.py file_grants.py permissions.py; do
-  test -s "$PROJECT_ROOT/agent/$module" || {
-    echo "Missing Nexus Agent runtime module: $module" >&2
-    exit 1
-  }
-  python3 -m py_compile "$PROJECT_ROOT/agent/$module"
-done
-
-if grep -Eqi '(password|passwd|api[_-]?key|secret|token)[[:space:]]*=' "$BUILD" "$PACKAGES"; then
-  echo "Potential embedded secret detected" >&2
-  exit 1
-fi
-
-if grep -Eq -- '--debian-installer[[:space:]]+(live|true|netinst)' "$BUILD"; then
-  echo "Installer unexpectedly enabled before safety gates" >&2
-  exit 1
-fi
-
-echo "Nexus OS image source checks passed"
- "$DESKTOP"
+grep -q '^Name=Nexus Agent$' "$DESKTOP"
+grep -q '^Name=Nexus Control Center$' "$CONTROL_DESKTOP"
 grep -q 'systemctl enable nexus-boot-ready.service' "$BOOT_HOOK"
 grep -q 'NEXUS_LIVE_BOOT_READY_V1' "$BOOT_MARKER"
-grep -q '^Name=Nexus Control Center
-
-for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none'; do
-  grep -q -- "$flag" "$BUILD"
-done
-
-for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secret_store.py cli.py openai_compatible.py settings.py tool_broker.py system_tools.py file_grants.py permissions.py; do
-  test -s "$PROJECT_ROOT/agent/$module" || {
-    echo "Missing Nexus Agent runtime module: $module" >&2
-    exit 1
-  }
-  python3 -m py_compile "$PROJECT_ROOT/agent/$module"
-done
-
-if grep -Eqi '(password|passwd|api[_-]?key|secret|token)[[:space:]]*=' "$BUILD" "$PACKAGES"; then
-  echo "Potential embedded secret detected" >&2
-  exit 1
-fi
-
-if grep -Eq -- '--debian-installer[[:space:]]+(live|true|netinst)' "$BUILD"; then
-  echo "Installer unexpectedly enabled before safety gates" >&2
-  exit 1
-fi
-
-echo "Nexus OS image source checks passed"
- "$CONTROL_DESKTOP"
 python3 -m py_compile "$CONTROL_CENTER"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none'; do
@@ -89,10 +40,7 @@ for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso
 done
 
 for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secret_store.py cli.py openai_compatible.py settings.py tool_broker.py system_tools.py file_grants.py permissions.py; do
-  test -s "$PROJECT_ROOT/agent/$module" || {
-    echo "Missing Nexus Agent runtime module: $module" >&2
-    exit 1
-  }
+  test -s "$PROJECT_ROOT/agent/$module" || { echo "Missing Nexus Agent runtime module: $module" >&2; exit 1; }
   python3 -m py_compile "$PROJECT_ROOT/agent/$module"
 done
 
@@ -100,7 +48,6 @@ if grep -Eqi '(password|passwd|api[_-]?key|secret|token)[[:space:]]*=' "$BUILD" 
   echo "Potential embedded secret detected" >&2
   exit 1
 fi
-
 if grep -Eq -- '--debian-installer[[:space:]]+(live|true|netinst)' "$BUILD"; then
   echo "Installer unexpectedly enabled before safety gates" >&2
   exit 1
