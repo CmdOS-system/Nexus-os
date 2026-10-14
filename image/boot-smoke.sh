@@ -30,11 +30,11 @@ DEBUG_LOG="${NEXUS_QEMU_DEBUG_LOG:-nexus-qemu-debug.log}"
 rm -f "$LOG" "$DEBUG_LOG"
 
 set +e
-{ sleep 20; printf 'sendkey ret\n'; sleep 20; printf 'sendkey ret\n'; } | timeout "$TIMEOUT" qemu-system-x86_64 \
+timeout "$TIMEOUT" qemu-system-x86_64 \
   -machine q35,accel=tcg -m 2048 -smp 2 -boot d \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF" \
   -cdrom "$ISO" -display none -serial "file:$LOG" \
-  -monitor stdio -no-reboot -snapshot -D "$DEBUG_LOG" -d guest_errors,unimp
+  -monitor none -no-reboot -snapshot -D "$DEBUG_LOG" -d guest_errors,unimp
 STATUS=$?
 set -e
 
