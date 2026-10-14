@@ -5,7 +5,7 @@ mkdir -p "$ROOT/work"
 cd "$ROOT/work"
 lb config --mode debian --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer none --archive-areas "main non-free-firmware" --bootappend-live "boot=live components"
 mkdir -p config/package-lists
-cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot
+cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot\nmkdir -p config/includes.chroot\ncp -a "$ROOT/includes/." config/includes.chroot/
 lb build
 test -n "$(find . -maxdepth 1 -name '*.iso' -print -quit)"
 sha256sum ./*.iso > SHA256SUMS
