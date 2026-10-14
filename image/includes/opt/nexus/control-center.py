@@ -1,33 +1,35 @@
 #!/usr/bin/env python3
-"""Nexus Control Center prototype: safe AI mode configuration UI."""
-import json
+"""Nexus Control Center prototype using the shared validated AI settings model."""
+import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk, messagebox
 
-CONFIG = Path.home() / ".config/nexus/ai-settings.json"
-MODES = ("off", "local", "cloud", "hybrid")
+AGENT_DIR=Path("/opt/nexus/agent")
+if str(AGENT_DIR) not in sys.path:
+    sys.path.insert(0,str(AGENT_DIR))
+from settings import AISettings
+from settings_store import load_settings, save_settings
+
+CONFIG=Path.home()/".config/nexus/ai-settings.json"
+MODES=("off","local","cloud","hybrid")
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Nexus Control Center")
-        self.geometry("560x360")
-        self.minsize(520, 320)
-        self.mode = tk.StringVar(value="off")
-        self.provider = tk.StringVar()
-        self.model = tk.StringVar()
-        self.consent = tk.BooleanVar(value=False)
-        self._build()
-        self._load()
+        self.geometry("560x360"); self.minsize(520,320)
+        self.mode=tk.StringVar(value="off")
+        self.provider=tk.StringVar(); self.model=tk.StringVar()
+        self.consent=tk.BooleanVar(value=False)
+        self._build(); self._load()
 
     def _build(self):
-        frame = ttk.Frame(self, padding=24)
-        frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Nexus AI", font=("", 18, "bold")).pack(anchor="w")
-        ttk.Label(frame, text="Choose how Nexus Agent may use AI. API keys are never stored here.").pack(anchor="w", pady=(4,20))
-        form = ttk.Frame(frame); form.pack(fill="x")
-        ttk.Label(form, text="Mode").grid(row=0,column=0,sticky="w",pady=6)
+        frame=ttk.Frame(self,padding=24); frame.pack(fill="both",expand=True)
+        ttk.Label(frame,text="Nexus AI",font=("",18,"bold")).pack(anchor="w")
+        ttk.Label(frame,text="Choose how Nexus Agent may use AI. API keys are never stored here.").pack(anchor="w",pady=(4,20))
+        form=ttk.Frame(frame); form.pack(fill="x")
+        ttk.Label(form,text="Mode").grid(row=0,column=0,sticky="w",pady=6)
         ttk.Combobox(form,textvariable=self.mode,values=MODES,state="readonly").grid(row=0,column=1,sticky="ew",pady=6)
         ttk.Label(form,text="Provider").grid(row=1,column=0,sticky="w",pady=6)
         ttk.Entry(form,textvariable=self.provider).grid(row=1,column=1,sticky="ew",pady=6)
@@ -39,16 +41,12 @@ class App(tk.Tk):
 
     def _load(self):
         try:
-            data=json.loads(CONFIG.read_text(encoding="utf-8"))
-        except FileNotFoundError:
+            s=load_settings(CONFIG)
+        except (RuntimeError,ValueError):
+            messagebox.showwarning("Nexus AI","Existing settings are invalid or cannot be read.")
             return
-        except (OSError,json.JSONDecodeError):
-            messagebox.showwarning("Nexus AI","Existing settings could not be read.")
-            return
-        self.mode.set(data.get("mode","off"))
-        self.provider.set(data.get("provider") or "")
-        self.model.set(data.get("model") or "")
-        self.consent.set(bool(data.get("cloud_consent",False)))
+        self.mode.set(s.mode); self.provider.set(s.provider or "")
+        self.model.set(s.model or ""); self.consent.set(s.cloud_consent)
 
     def _save(self):
         mode=self.mode.get()
@@ -57,19 +55,13 @@ class App(tk.Tk):
         consent=bool(self.consent.get())
         if mode=="off":
             provider=model=None; consent=False
-        elif not provider or not model:
-            messagebox.showerror("Nexus AI","Provider and model are required.")
+        try:
+            settings=AISettings(mode,provider,model,consent).validate()
+            save_settings(CONFIG,settings)
+        except (TypeError,ValueError,RuntimeError,OSError) as exc:
+            messagebox.showerror("Nexus AI",str(exc))
             return
-        if mode in {"cloud","hybrid"} and not consent:
-            messagebox.showerror("Nexus AI","Cloud mode requires explicit consent.")
-            return
-        if mode=="local" and consent:
-            messagebox.showerror("Nexus AI","Local mode cannot enable cloud consent.")
-            return
-        data={"mode":mode,"provider":provider,"model":model,"cloud_consent":consent}
-        CONFIG.parent.mkdir(parents=True,exist_ok=True)
-        CONFIG.write_text(json.dumps(data,indent=2)+"\n",encoding="utf-8")
-        messagebox.showinfo("Nexus AI","Settings saved.")
+        messagebox.showinfo("Nexus AI","Settings saved securely.")
 
 if __name__=="__main__":
     App().mainloop()
