@@ -21,6 +21,14 @@ cd "$WORK"
 
 lb config --mode debian --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer none --archive-areas "main non-free-firmware" --bootloader grub-efi --bootappend-live "boot=live components console=tty0 console=ttyS0,115200n8"
 
+mkdir -p config/bootloaders/grub-pc
+GRUB_TEMPLATE="/usr/share/live/build/bootloaders/grub-pc/grub.cfg"
+test -s "$GRUB_TEMPLATE" || { echo "Missing live-build GRUB template: $GRUB_TEMPLATE" >&2; exit 1; }
+{
+  printf "%s\n" "# Nexus OS: automatically boot the default live entry" "set default=0" "set timeout_style=menu" "set timeout=3"
+  cat "$GRUB_TEMPLATE"
+} > config/bootloaders/grub-pc/grub.cfg
+
 mkdir -p config/package-lists
 cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot
 
