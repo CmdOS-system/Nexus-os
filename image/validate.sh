@@ -45,7 +45,10 @@ if [ -e "$ROOT/includes/etc/systemd/system/multi-user.target.wants/nexus-boot-re
   exit 1
 fi
 grep -q 'NEXUS_LIVE_BOOT_READY_V1' "$BOOT_MARKER"
-grep -q 'config/hooks/live/020-unattended-grub.hook.binary' "$BUILD"
+if grep -q '020-unattended-grub.hook.binary' "$BUILD"; then
+  echo "GRUB binary hook runs before grub.cfg generation; do not stage it" >&2
+  exit 1
+fi
 if grep -q 'config/hooks/binary' "$BUILD"; then
   echo "Invalid binary hook directory; use config/hooks/live" >&2
   exit 1
