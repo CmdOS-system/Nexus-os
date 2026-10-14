@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import errno
 import stat
 import uuid
 
@@ -39,7 +40,12 @@ class FileGrantStore:
         except KeyError:
             raise PermissionError("Unknown or already consumed file grant") from None
         try:
-            fd = os.open(grant.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            try:
+                fd = os.open(grant.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            except OSError as exc:
+                if exc.errno == errno.ELOOP:
+                    raise PermissionError("Selected file became a symbolic link") from exc
+                raise
             with os.fdopen(fd, "rb") as handle:
                 info = os.fstat(handle.fileno())
                 if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != (grant.device, grant.inode):
