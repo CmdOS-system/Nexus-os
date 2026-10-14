@@ -28,9 +28,8 @@ mkdir -p config/hooks/live
 cp "$ROOT/hooks/010-enable-nexus-boot-ready.hook.chroot" config/hooks/live/
 chmod 0755 config/hooks/live/010-enable-nexus-boot-ready.hook.chroot
 
-mkdir -p config/hooks/binary
-cp "$ROOT/hooks/020-unattended-grub.hook.binary" config/hooks/binary/
-chmod 0755 config/hooks/binary/020-unattended-grub.hook.binary
+cp "$ROOT/hooks/020-unattended-grub.hook.binary" config/hooks/live/
+chmod 0755 config/hooks/live/020-unattended-grub.hook.binary
 
 mkdir -p config/includes.chroot
 cp -a "$ROOT/includes/." config/includes.chroot/
