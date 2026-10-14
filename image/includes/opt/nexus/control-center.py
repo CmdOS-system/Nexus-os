@@ -61,9 +61,12 @@ class App(tk.Tk):
             provider=model=None; consent=False
         try:
             settings=AISettings(mode,provider,model,consent).validate()
-            if mode in {"cloud","hybrid"} and self.api_key.get():
-                LinuxSecretStore().store(provider_secret_ref(provider),self.api_key.get())
-                self.api_key.set("")
+            if mode in {"cloud","hybrid"}:
+                store=LinuxSecretStore(); ref=provider_secret_ref(provider)
+                if self.api_key.get():
+                    store.store(ref,self.api_key.get()); self.api_key.set("")
+                elif not store.has(ref):
+                    raise ValueError("API key is required for this cloud provider")
             save_settings(CONFIG,settings)
         except (TypeError,ValueError,RuntimeError,OSError) as exc:
             messagebox.showerror("Nexus AI",str(exc))
