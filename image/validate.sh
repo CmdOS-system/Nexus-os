@@ -45,7 +45,7 @@ fi
 grep -q 'NEXUS_LIVE_BOOT_READY_V1' "$BOOT_MARKER"
 python3 -m py_compile "$CONTROL_CENTER"
 
-for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none'; do
+for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' 'console=ttyS0,115200n8'; do
   grep -q -- "$flag" "$BUILD"
 done
 
