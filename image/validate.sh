@@ -29,7 +29,7 @@ for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso
   grep -q -- "$flag" "$BUILD"
 done
 
-for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secrets.py cli.py openai_compatible.py settings.py tool_broker.py system_tools.py; do
+for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secrets.py cli.py openai_compatible.py settings.py tool_broker.py system_tools.py file_grants.py; do
   test -s "$PROJECT_ROOT/agent/$module" || {
     echo "Missing Nexus Agent runtime module: $module" >&2
     exit 1
