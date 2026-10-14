@@ -3,7 +3,7 @@ import json
 import urllib.request
 from urllib.parse import urlsplit
 from providers import AIProvider
-from secrets import SecretStore
+from secret_store import SecretStore
 
 class CompatibleChatProvider(AIProvider):
     def __init__(self, endpoint: str, secret_ref: str, secret_store: SecretStore, timeout: int = 30):
