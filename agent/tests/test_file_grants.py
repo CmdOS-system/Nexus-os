@@ -3,7 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from file_grants import FileGrantStore
+from file_grants import FileGrantStore, register_file_tools
+from nexus_agent import ToolPolicy
+from tool_broker import ToolBroker
 
 class FileGrantTests(unittest.TestCase):
     def test_one_shot_read(self):
@@ -37,3 +39,27 @@ class FileGrantTests(unittest.TestCase):
     def test_unknown_token_rejected(self):
         with self.assertRaises(PermissionError):
             FileGrantStore().consume_text("not-a-grant")
+
+    def test_broker_reads_only_granted_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "note.txt"
+            p.write_text("approved text", encoding="utf-8")
+            grants = FileGrantStore()
+            token = grants.grant(p.resolve())
+            broker = ToolBroker(ToolPolicy({"file.read_text"}))
+            register_file_tools(broker, grants)
+            self.assertEqual(
+                broker.invoke("file.read_text", {"grant_token": token}, approved=True),
+                "approved text",
+            )
+
+    def test_broker_schema_rejects_path_injection(self):
+        grants = FileGrantStore()
+        broker = ToolBroker(ToolPolicy({"file.read_text"}))
+        register_file_tools(broker, grants)
+        with self.assertRaises(ValueError):
+            broker.invoke(
+                "file.read_text",
+                {"grant_token": "opaque", "path": "/etc/shadow"},
+                approved=True,
+            )
