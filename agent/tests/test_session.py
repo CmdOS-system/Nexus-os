@@ -1,38 +1,55 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from nexus_agent import Provider
+from providers import AIProvider
 from session import AgentSession
 
-class SessionTests(unittest.TestCase):
-    def setUp(self):
-        self.session = AgentSession(Provider("ollama", "http://127.0.0.1:11434", True), "test")
+class FakeProvider(AIProvider):
+    def __init__(self, answers=None, error=None):
+        self.answers = list(answers or [])
+        self.error = error
+        self.calls = []
 
-    def test_context_sent_on_second_turn(self):
-        with patch("session.chat", side_effect=["First answer", "Second answer"]) as mocked:
-            self.assertEqual(self.session.ask("First question"), "First answer")
-            self.session.ask("Follow up")
-            self.assertIn("assistant: First answer", mocked.call_args.args[2])
-            self.assertIn("user: Follow up", mocked.call_args.args[2])
+    def send(self, model, messages):
+        self.calls.append((model, messages))
+        if self.error:
+            raise self.error
+        return self.answers.pop(0)
+
+class SessionTests(unittest.TestCase):
+    def test_context_sent_as_roles(self):
+        p = FakeProvider(["First answer", "Second answer"])
+        s = AgentSession(p, "test")
+        self.assertEqual(s.ask("First question"), "First answer")
+        s.ask("Follow up")
+        messages = p.calls[-1][1]
+        self.assertEqual(messages[0], {"role": "user", "content": "First question"})
+        self.assertEqual(messages[1], {"role": "assistant", "content": "First answer"})
+        self.assertEqual(messages[2], {"role": "user", "content": "Follow up"})
 
     def test_failure_does_not_change_history(self):
-        with patch("session.chat", side_effect=RuntimeError("offline")):
-            with self.assertRaises(RuntimeError):
-                self.session.ask("hello")
-        self.assertEqual(self.session.history.snapshot(), [])
+        s = AgentSession(FakeProvider(error=RuntimeError("offline")), "test")
+        with self.assertRaises(RuntimeError):
+            s.ask("hello")
+        self.assertEqual(s.history.snapshot(), [])
 
     def test_clear(self):
-        with patch("session.chat", return_value="answer"):
-            self.session.ask("hello")
-        self.session.clear()
-        self.assertEqual(self.session.history.snapshot(), [])
+        s = AgentSession(FakeProvider(["answer"]), "test")
+        s.ask("hello")
+        s.clear()
+        self.assertEqual(s.history.snapshot(), [])
 
-    def test_reject_cloud(self):
-        with self.assertRaises(ValueError):
-            AgentSession(Provider("cloud", "https://example.org"), "model")
+    def test_reject_non_adapter(self):
+        with self.assertRaises(TypeError):
+            AgentSession(object(), "model")
 
     def test_empty_prompt(self):
         with self.assertRaises(ValueError):
-            self.session.ask("  ")
+            AgentSession(FakeProvider(["unused"]), "test").ask("  ")
+
+    def test_invalid_provider_response_does_not_change_history(self):
+        s = AgentSession(FakeProvider([""]), "test")
+        with self.assertRaises(ValueError):
+            s.ask("hello")
+        self.assertEqual(s.history.snapshot(), [])
