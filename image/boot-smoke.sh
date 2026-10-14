@@ -43,5 +43,10 @@ test -s "$LOG" || {
   exit 1
 }
 
-echo "QEMU produced serial boot evidence at $LOG"
-echo "Manual/guest-level verification is still required before this gate can pass."
+if ! grep -Fq "NEXUS_LIVE_BOOT_READY_V1" "$LOG"; then
+  echo "Guest did not emit Nexus live readiness marker; boot gate FAILED" >&2
+  exit 1
+fi
+
+echo "Nexus live guest readiness marker verified at $LOG"
+echo "This verifies guest multi-user boot, not graphical login or installer readiness."
