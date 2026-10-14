@@ -18,6 +18,7 @@ GRAPHICAL_MARKER="$ROOT/includes/usr/local/libexec/nexus-graphical-ready"
 
 bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
+bash "$ROOT/validate-launchers.sh"
 bash -n "$LAUNCHER"
 bash -n "$BOOT_HOOK"
 sh -n "$GRUB_HOOK"
