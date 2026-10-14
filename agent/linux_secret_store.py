@@ -42,6 +42,13 @@ class LinuxSecretStore(SecretStore):
             raise KeyError("Secret not found in keyring")
         return value
 
+    def has(self, reference: str) -> bool:
+        try:
+            self.resolve(reference)
+            return True
+        except KeyError:
+            return False
+
     def store(self, reference: str, value: str) -> None:
         name = _name(reference)
         if not isinstance(value, str) or not value.strip():
