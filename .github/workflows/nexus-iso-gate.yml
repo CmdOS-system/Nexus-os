@@ -37,7 +37,10 @@ jobs:
         run: sudo --preserve-env=PATH bash image/build.sh
 
       - name: Verify ISO artifact
-        run: bash image/verify-artifact.sh image/work
+        run: |
+          bash image/verify-artifact.sh image/work
+          cd image/work
+          sha256sum -c SHA256SUMS
 
       - name: Locate candidate
         id: iso
