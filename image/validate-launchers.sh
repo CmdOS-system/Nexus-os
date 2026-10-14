@@ -7,7 +7,7 @@ INCLUDES="$ROOT/includes"
 for desktop in nexus-agent nexus-control-center; do
   file="$INCLUDES/usr/share/applications/$desktop.desktop"
   test -s "$file" || { echo "Missing launcher: $file" >&2; exit 1; }
-  grep -qx '[Desktop Entry]' "$file" || { echo "Invalid launcher: $file" >&2; exit 1; }
+  grep -Fxq '[Desktop Entry]' "$file" || { echo "Invalid launcher: $file" >&2; exit 1; }
   grep -qx 'Type=Application' "$file" || exit 1
   grep -q '^Exec=' "$file" || exit 1
 done
