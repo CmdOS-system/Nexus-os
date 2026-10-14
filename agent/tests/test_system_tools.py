@@ -26,7 +26,8 @@ class SystemToolTests(unittest.TestCase):
                 nexus_identity(p)
 
     def test_broker_rejects_model_supplied_path(self):
-        permissions = PermissionBroker()\n        b = ToolBroker(ToolPolicy({"system.identity"}), permissions)
+        permissions = PermissionBroker()
+        b = ToolBroker(ToolPolicy({"system.identity"}), permissions)
         b.register("system.identity", lambda: {"NAME":"Nexus OS"}, {"type":"object","properties":{},"required":[]})
         with self.assertRaises(ValueError):
             b.invoke_authorized("system.identity", {"path":"/etc/shadow"}, "none")
