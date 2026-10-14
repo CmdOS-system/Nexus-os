@@ -12,11 +12,14 @@ for module in nexus_agent.py provider_client.py conversation.py providers.py ses
   }
 done
 
-rm -rf "$WORK"
+if [ -L "$WORK" ]; then
+  echo "Refusing symlinked work directory" >&2
+  exit 1
+fi
 mkdir -p "$WORK"
 cd "$WORK"
 
-lb config   --mode debian   --distribution trixie   --architectures amd64   --binary-images iso-hybrid   --debian-installer none   --archive-areas "main non-free-firmware"   --bootappend-live "boot=live components"
+lb config --mode debian --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer none --archive-areas "main non-free-firmware" --bootappend-live "boot=live components"
 
 mkdir -p config/package-lists
 cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot
@@ -28,6 +31,11 @@ mkdir -p config/includes.chroot/opt/nexus/agent
 for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secrets.py cli.py; do
   cp "$PROJECT_ROOT/agent/$module" config/includes.chroot/opt/nexus/agent/
 done
+
+if [ "${NEXUS_PREPARE_ONLY:-0}" = "1" ]; then
+  echo "Nexus image staging prepared; no ISO was built"
+  exit 0
+fi
 
 lb build
 
