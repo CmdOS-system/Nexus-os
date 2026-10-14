@@ -34,7 +34,7 @@ class SecurityRegressions(unittest.TestCase):
             token = store.grant(path)
             path.unlink()
             path.symlink_to(other)
-            with self.assertRaises((PermissionError, RuntimeError)):
+            with self.assertRaises(PermissionError):
                 store.consume_text(token)
 
     def test_read_limit_and_one_use(self):
