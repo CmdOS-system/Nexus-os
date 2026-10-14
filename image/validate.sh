@@ -22,7 +22,7 @@ for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_H
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
-for package in task-xfce-desktop network-manager ca-certificates python3-tk; do
+for package in task-xfce-desktop network-manager ca-certificates python3-tk libsecret-tools; do
   grep -qx "$package" "$PACKAGES"
 done
 
