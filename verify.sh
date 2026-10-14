@@ -10,9 +10,9 @@ need grep
 need xargs
 
 echo "[0/5] Shell syntax regression scan"
-for script in "$ROOT/verify.sh" "$ROOT/image/"*.sh "$ROOT/image/hooks/"*.sh; do
-  bash -n "$script"
-done
+bash -n "$ROOT/verify.sh"
+find "$ROOT/image" -maxdepth 1 -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+find "$ROOT/image/hooks" -type f -print0 | xargs -0 -r -n1 bash -n
 
 echo "[1/5] Security regression scan"
 if grep -R -n -E 'from secrets import|\.invoke\(' "$ROOT/agent" --include='*.py' --exclude-dir='__pycache__'; then
