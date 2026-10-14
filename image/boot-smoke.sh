@@ -56,5 +56,11 @@ if ! grep -Fq "NEXUS_LIVE_BOOT_READY_V1" "$LOG"; then
   exit 1
 fi
 
-echo "Nexus live guest readiness marker verified at $LOG"
-echo "This verifies guest multi-user boot, not graphical login or installer readiness."
+if ! grep -Fq "NEXUS_GRAPHICAL_STACK_READY_V1" "$LOG"; then
+  echo "Guest reached multi-user boot but graphical stack readiness was not proven" >&2
+  tail -n 120 "$LOG" >&2 || true
+  exit 1
+fi
+
+echo "Nexus live and graphical-stack readiness markers verified at $LOG"
+echo "This verifies an active display manager and graphical.target, not yet a logged-in XFCE user session or installer readiness."
