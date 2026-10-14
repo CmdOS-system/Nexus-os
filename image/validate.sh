@@ -45,7 +45,11 @@ if [ -e "$ROOT/includes/etc/systemd/system/multi-user.target.wants/nexus-boot-re
   exit 1
 fi
 grep -q 'NEXUS_LIVE_BOOT_READY_V1' "$BOOT_MARKER"
-grep -q 'config/hooks/binary' "$BUILD"
+grep -q 'config/hooks/live/020-unattended-grub.hook.binary' "$BUILD"
+if grep -q 'config/hooks/binary' "$BUILD"; then
+  echo "Invalid binary hook directory; use config/hooks/live" >&2
+  exit 1
+fi
 grep -q 'set timeout=3' "$GRUB_HOOK"
 python3 -m py_compile "$CONTROL_CENTER"
 
