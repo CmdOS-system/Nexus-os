@@ -10,7 +10,7 @@ need grep
 need xargs
 
 echo "[1/5] Security regression scan"
-if grep -R -n -E 'from secrets import|\.invoke\(' "$ROOT/agent" --include='*.py'; then
+if grep -R -n -E 'from secrets import|\.invoke\(' "$ROOT/agent" --include='*.py' --exclude-dir='__pycache__'; then
   echo "Forbidden legacy security API detected" >&2
   exit 1
 fi
