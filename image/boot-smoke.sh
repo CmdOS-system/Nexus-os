@@ -26,10 +26,11 @@ fi
 
 TIMEOUT="${NEXUS_BOOT_TIMEOUT:-90}"
 LOG="${NEXUS_BOOT_LOG:-nexus-qemu-serial.log}"
-rm -f "$LOG"
+DEBUG_LOG="${NEXUS_QEMU_DEBUG_LOG:-nexus-qemu-debug.log}"
+rm -f "$LOG" "$DEBUG_LOG"
 
 set +e
-timeout "$TIMEOUT" qemu-system-x86_64   -machine q35,accel=tcg   -m 2048   -smp 2   -boot d   -drive if=pflash,format=raw,readonly=on,file="$OVMF"   -cdrom "$ISO"   -display none   -serial "file:$LOG"   -monitor none   -no-reboot   -snapshot
+timeout "$TIMEOUT" qemu-system-x86_64   -machine q35,accel=tcg   -m 2048   -smp 2   -boot d   -drive if=pflash,format=raw,readonly=on,file="$OVMF"   -cdrom "$ISO"   -display none   -serial "file:$LOG"   -monitor none   -no-reboot   -snapshot -D "$DEBUG_LOG" -d guest_errors,unimp
 STATUS=$?
 set -e
 
@@ -45,6 +46,9 @@ test -s "$LOG" || {
 
 if ! grep -Fq "NEXUS_LIVE_BOOT_READY_V1" "$LOG"; then
   echo "Guest did not emit Nexus live readiness marker; boot gate FAILED" >&2
+  echo "Serial log bytes: $(wc -c < "$LOG")" >&2
+  tail -n 80 "$LOG" >&2 || true
+  tail -n 40 "$DEBUG_LOG" >&2 || true
   exit 1
 fi
 
