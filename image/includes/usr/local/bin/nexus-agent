@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AGENT_DIR="/opt/nexus/agent"
+if [ ! -d "$AGENT_DIR" ]; then
+  printf '%s\n' "Nexus Agent is not installed in this image yet." >&2
+  exit 1
+fi
+
+MODEL="${NEXUS_AI_MODEL:-}"
+if [ -z "$MODEL" ]; then
+  printf '%s\n' "Set NEXUS_AI_MODEL to a local model before starting Nexus Agent." >&2
+  exit 2
+fi
+
+exec python3 "$AGENT_DIR/cli.py" --model "$MODEL"
