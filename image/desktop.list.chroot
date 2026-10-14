@@ -3,3 +3,5 @@ network-manager
 sudo
 curl
 ca-certificates
+
+python3-tk
