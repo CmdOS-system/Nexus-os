@@ -53,7 +53,9 @@ if grep -q 'config/hooks/binary' "$BUILD"; then
   echo "Invalid binary hook directory; use config/hooks/live" >&2
   exit 1
 fi
-grep -q 'set timeout=3' "$GRUB_HOOK"
+grep -q 'set timeout=3' "$BUILD"
+grep -q 'config/bootloaders/grub-pc/grub.cfg' "$BUILD"
+grep -q 'GRUB_TEMPLATE=' "$BUILD"
 python3 -m py_compile "$CONTROL_CENTER"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
