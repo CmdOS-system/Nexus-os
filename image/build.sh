@@ -24,6 +24,9 @@ lb config --mode debian --distribution trixie --architectures amd64 --binary-ima
 mkdir -p config/package-lists
 cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot
 
+mkdir -p config/hooks/normal
+cp "$ROOT/hooks/010-enable-nexus-boot-ready.hook.chroot" config/hooks/normal/
+
 mkdir -p config/includes.chroot
 cp -a "$ROOT/includes/." config/includes.chroot/
 
