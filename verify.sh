@@ -16,7 +16,7 @@ if grep -R -n -E 'from secrets import|\.invoke\(' "$ROOT/agent" --include='*.py'
 fi
 
 echo "[2/5] Python syntax"
-find "$ROOT/agent" -maxdepth 1 -name '*.py' -print0 | xargs -0 -n1 python3 -m py_compile
+find "$ROOT/agent" -name '*.py' -print0 | xargs -0 -n1 python3 -m py_compile
 
 echo "[3/5] Agent unit tests"
 python3 -m unittest discover -s "$ROOT/agent/tests" -p 'test_*.py' -v
