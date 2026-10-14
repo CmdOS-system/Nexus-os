@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from openai_compatible import CompatibleChatProvider
-from secrets import MemorySecretStore
+from secret_store import MemorySecretStore
 
 class Response:
     def __enter__(self): return self
