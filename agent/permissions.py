@@ -33,19 +33,15 @@ class PermissionBroker:
             item = self._pending.pop(request_id)
         except KeyError:
             raise PermissionError("Permission request is unknown or already decided") from None
-        self._decisions[request_id] = approved
+        self._decisions[request_id] = (item, approved)
         return item
 
     def consume_approval(self, request_id: str, tool: str) -> bool:
         try:
-            approved = self._decisions.pop(request_id)
+            item, approved = self._decisions.pop(request_id)
         except KeyError:
             raise PermissionError("No user decision is available") from None
-        if not approved:
-            raise PermissionError("User denied the action")
-        # Bind the decision to the original tool.
-        # The request is retained only long enough to validate the binding.
-        return True
+        if item.tool != tool:\n            raise PermissionError("Approval does not match requested tool")\n        if not approved:\n            raise PermissionError("User denied the action")\n        return True
 
     def pending(self):
         return tuple(self._pending.values())
