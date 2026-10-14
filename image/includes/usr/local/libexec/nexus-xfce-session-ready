@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+test -n "${DISPLAY:-}"
+test -n "${DBUS_SESSION_BUS_ADDRESS:-}"
+case "${XDG_SESSION_TYPE:-}" in
+  x11|wayland) ;;
+  *) exit 1 ;;
+esac
+pgrep -x xfce4-session >/dev/null
+printf '%s\n' 'NEXUS_XFCE_SESSION_READY_V1' > /dev/ttyS0
