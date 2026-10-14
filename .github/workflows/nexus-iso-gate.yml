@@ -28,13 +28,20 @@ jobs:
       - name: Install build and VM dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build qemu-system-x86 ovmf
+          sudo apt-get install -y qemu-system-x86 ovmf
 
-      - name: Run source and staging preflight
-        run: bash verify.sh
-
-      - name: Build ISO
-        run: sudo --preserve-env=PATH bash image/build.sh
+      - name: Preflight and build inside Debian Trixie
+        run: |
+          docker run --rm --privileged \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/src \
+            --workdir /src \
+            debian:trixie bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends live-build python3 ca-certificates
+              bash verify.sh
+              bash image/build.sh
+            '
 
       - name: Verify ISO artifact
         run: |
