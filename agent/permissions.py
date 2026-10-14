@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 import hashlib
 import json
-import secrets
+import uuid
 
 def _arguments_digest(arguments: dict) -> str:
     if not isinstance(arguments, dict):
@@ -34,7 +34,7 @@ class PermissionBroker:
         if risk not in {"R0", "R1", "R2", "R3"}:
             raise ValueError("Invalid risk class")
         item = PermissionRequest(
-            secrets.token_urlsafe(24),
+            uuid.uuid4().hex,
             tool,
             summary,
             risk,
