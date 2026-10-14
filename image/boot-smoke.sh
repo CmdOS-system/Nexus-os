@@ -62,5 +62,11 @@ if ! grep -Fq "NEXUS_GRAPHICAL_STACK_READY_V1" "$LOG"; then
   exit 1
 fi
 
-echo "Nexus live and graphical-stack readiness markers verified at $LOG"
-echo "This verifies an active display manager and graphical.target, not yet a logged-in XFCE user session or installer readiness."
+if ! grep -Fq "NEXUS_XFCE_SESSION_READY_V1" "$LOG"; then
+  echo "Graphical stack is active but a real XFCE user session was not proven" >&2
+  tail -n 140 "$LOG" >&2 || true
+  exit 1
+fi
+
+echo "Nexus live, graphical-stack, and XFCE user-session readiness verified at $LOG"
+echo "This verifies a real XFCE session with DISPLAY and session D-Bus; it does not yet prove visual rendering quality or installer readiness."
