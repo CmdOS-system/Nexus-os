@@ -5,3 +5,4 @@ curl
 ca-certificates
 
 python3-tk
+libsecret-tools
