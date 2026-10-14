@@ -1,6 +1,6 @@
 [Unit]
 Description=Nexus OS live guest boot readiness marker
-After=multi-user.target
+After=local-fs.target systemd-user-sessions.service
 ConditionPathExists=/etc/nexus-os-release
 
 [Service]
