@@ -17,7 +17,7 @@ test -s SHA256SUMS
 sha256sum --check SHA256SUMS
 
 case "$(file -b "$ISO")" in
-  *ISO 9660*) ;;
+  *"ISO 9660"*) ;;
   *)
     echo "Artifact does not look like an ISO 9660 image" >&2
     exit 1
