@@ -19,8 +19,9 @@ class SecurityRegressions(unittest.TestCase):
             path.write_text("approved")
             store = FileGrantStore()
             token = store.grant(path)
-            path.unlink()
-            path.write_text("replacement")
+            replacement = Path(directory) / "replacement.txt"
+            replacement.write_text("replacement")
+            replacement.replace(path)
             with self.assertRaises(PermissionError):
                 store.consume_text(token)
 
