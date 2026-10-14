@@ -1,19 +1,24 @@
-"""Minimal Ollama-compatible chat client. No automatic tools or fallback."""
+"""Local Ollama chat client with native role-separated message history."""
 import json
 import urllib.request
-from urllib.parse import urlparse
 from nexus_agent import Provider
 
-def chat(provider: Provider, model: str, message: str, timeout: int = 30) -> str:
+def chat_messages(provider: Provider, model: str, messages: list, timeout: int = 30) -> str:
     provider.validate()
     if not provider.local:
         raise ValueError("This prototype supports only local providers")
-    if not model.strip() or not message.strip():
-        raise ValueError("Model and message are required")
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("Model is required")
+    if not isinstance(messages, list) or not messages:
+        raise ValueError("Messages are required")
+    for item in messages:
+        if not isinstance(item, dict) or set(item) != {"role", "content"}:
+            raise ValueError("Invalid message structure")
+        if item["role"] not in ("user", "assistant") or not isinstance(item["content"], str) or not item["content"].strip():
+            raise ValueError("Invalid message")
     url = provider.endpoint.rstrip("/") + "/api/chat"
-    payload = json.dumps({"model": model, "messages": [{"role": "user", "content": message}], "stream": False}).encode()
+    payload = json.dumps({"model": model, "messages": messages, "stream": False}).encode()
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
-    # Disable redirects and proxy routing for local requests.
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None
@@ -29,3 +34,8 @@ def chat(provider: Provider, model: str, message: str, timeout: int = 30) -> str
     if not isinstance(content, str):
         raise ValueError("Invalid provider response")
     return content
+
+def chat(provider: Provider, model: str, message: str, timeout: int = 30) -> str:
+    if not isinstance(message, str) or not message.strip():
+        raise ValueError("Message is required")
+    return chat_messages(provider, model, [{"role": "user", "content": message}], timeout)
