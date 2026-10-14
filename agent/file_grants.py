@@ -1,12 +1,16 @@
 """User-mediated file grants for R1 read access."""
 from dataclasses import dataclass
 from pathlib import Path
+import os
+import stat
 import uuid
 
 @dataclass(frozen=True)
 class FileGrant:
     token: str
     path: Path
+    device: int
+    inode: int
 
 class FileGrantStore:
     def __init__(self):
@@ -15,10 +19,14 @@ class FileGrantStore:
     def grant(self, path: Path) -> str:
         if not isinstance(path, Path) or not path.is_absolute():
             raise ValueError("An absolute user-selected path is required")
-        if not path.is_file():
+        try:
+            info = path.lstat()
+        except OSError as exc:
+            raise ValueError("Selected path is unavailable") from exc
+        if not stat.S_ISREG(info.st_mode):
             raise ValueError("Selected path must be a regular file")
         token = uuid.uuid4().hex
-        self._grants[token] = path
+        self._grants[token] = FileGrant(token, path, info.st_dev, info.st_ino)
         return token
 
     def consume_text(self, token: str, max_bytes: int = 1_000_000) -> str:
@@ -27,16 +35,25 @@ class FileGrantStore:
         if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000:
             raise ValueError("Invalid read limit")
         try:
-            path = self._grants.pop(token)
+            grant = self._grants.pop(token)
         except KeyError:
             raise PermissionError("Unknown or already consumed file grant") from None
         try:
-            size = path.stat().st_size
-            if size > max_bytes:
+            fd = os.open(grant.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as handle:
+                info = os.fstat(handle.fileno())
+                if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != (grant.device, grant.inode):
+                    raise PermissionError("Selected file changed after approval")
+                if info.st_size > max_bytes:
+                    raise ValueError("Selected file exceeds read limit")
+                data = handle.read(max_bytes + 1)
+            if len(data) > max_bytes:
                 raise ValueError("Selected file exceeds read limit")
-            return path.read_text(encoding="utf-8")
+            return data.decode("utf-8")
         except UnicodeError as exc:
             raise ValueError("Selected file is not UTF-8 text") from exc
+        except PermissionError:
+            raise
         except OSError as exc:
             raise RuntimeError("Selected file cannot be read") from exc
 
