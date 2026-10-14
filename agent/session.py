@@ -1,15 +1,14 @@
-"""Conversation-aware local session using native chat roles."""
+"""Provider-independent conversation session."""
 from conversation import Conversation
-from nexus_agent import Provider
-from provider_client import chat_messages
+from providers import AIProvider
 
 class AgentSession:
-    def __init__(self, provider: Provider, model: str, max_turns: int = 12):
-        self.provider = provider.validate()
-        if not self.provider.local:
-            raise ValueError("Only local models supported by this prototype")
+    def __init__(self, provider: AIProvider, model: str, max_turns: int = 12):
+        if not isinstance(provider, AIProvider):
+            raise TypeError("provider must implement AIProvider")
         if not isinstance(model, str) or not model.strip():
             raise ValueError("A model is required")
+        self.provider = provider
         self.model = model
         self.history = Conversation(max_turns=max_turns)
 
@@ -18,7 +17,9 @@ class AgentSession:
             raise ValueError("A prompt is required")
         messages = self.history.snapshot()
         messages.append(dict(role="user", content=prompt))
-        response = chat_messages(self.provider, self.model, messages)
+        response = self.provider.send(self.model, messages)
+        if not isinstance(response, str) or not response.strip():
+            raise ValueError("Provider returned an invalid response")
         self.history.add("user", prompt)
         self.history.add("assistant", response)
         return response
