@@ -45,7 +45,7 @@ fi
 grep -q 'NEXUS_LIVE_BOOT_READY_V1' "$BOOT_MARKER"
 python3 -m py_compile "$CONTROL_CENTER"
 
-for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' 'console=ttyS0,115200n8'; do
+for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' '--bootloader-timeout 3' 'console=ttyS0,115200n8'; do
   grep -q -- "$flag" "$BUILD"
 done
 
@@ -60,6 +60,11 @@ if grep -Eqi '(password|passwd|api[_-]?key|secret|token)[[:space:]]*=' "$BUILD" 
 fi
 if grep -Eq -- '--debian-installer[[:space:]]+(live|true|netinst)' "$BUILD"; then
   echo "Installer unexpectedly enabled before safety gates" >&2
+  exit 1
+fi
+
+if grep -Eq "sendkey|monitor stdio" "$ROOT/boot-smoke.sh"; then
+  echo "Boot smoke test must not depend on synthetic keyboard input" >&2
   exit 1
 fi
 
