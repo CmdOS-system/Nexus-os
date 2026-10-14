@@ -64,6 +64,17 @@ jobs:
           NEXUS_BOOT_LOG: nexus-qemu-serial.log
         run: bash image/boot-smoke.sh "${{ steps.iso.outputs.path }}"
 
+      - name: Upload boot diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-boot-diagnostics-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            nexus-qemu-serial.log
+            nexus-qemu-debug.log
+
       - name: Upload verified candidate evidence
         if: success()
         uses: actions/upload-artifact@v4
