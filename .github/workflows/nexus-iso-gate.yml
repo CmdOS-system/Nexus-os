@@ -1,0 +1,67 @@
+name: Nexus ISO Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - "image/**"
+      - "verify.sh"
+      - ".github/workflows/nexus-iso-gate.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build and VM dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y live-build qemu-system-x86 ovmf
+
+      - name: Run source and staging preflight
+        run: bash verify.sh
+
+      - name: Build ISO
+        run: sudo --preserve-env=PATH bash image/build.sh
+
+      - name: Verify ISO artifact
+        run: bash image/verify-artifact.sh image/work
+
+      - name: Locate candidate
+        id: iso
+        shell: bash
+        run: |
+          set -euo pipefail
+          iso="$(find image/work -maxdepth 1 -type f -name '*.iso' -print -quit)"
+          test -n "$iso"
+          echo "path=$iso" >> "$GITHUB_OUTPUT"
+
+      - name: UEFI guest readiness smoke test
+        env:
+          NEXUS_BOOT_TIMEOUT: "180"
+          NEXUS_BOOT_LOG: nexus-qemu-serial.log
+        run: bash image/boot-smoke.sh "${{ steps.iso.outputs.path }}"
+
+      - name: Upload verified candidate evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-os-candidate-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            image/work/*.iso
+            image/work/SHA256SUMS
+            nexus-qemu-serial.log
