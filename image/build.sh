@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
 WORK="$ROOT/work"
 
-for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secrets.py cli.py; do
+for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secrets.py cli.py openai_compatible.py; do
   test -s "$PROJECT_ROOT/agent/$module" || {
     echo "Missing Nexus Agent runtime module: $module" >&2
     exit 1
@@ -28,7 +28,7 @@ mkdir -p config/includes.chroot
 cp -a "$ROOT/includes/." config/includes.chroot/
 
 mkdir -p config/includes.chroot/opt/nexus/agent
-for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secrets.py cli.py; do
+for module in nexus_agent.py provider_client.py conversation.py providers.py session.py capabilities.py router.py config.py secrets.py cli.py openai_compatible.py; do
   cp "$PROJECT_ROOT/agent/$module" config/includes.chroot/opt/nexus/agent/
 done
 
