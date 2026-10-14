@@ -1,7 +1,7 @@
 """User-mediated file grants for R1 read access."""
 from dataclasses import dataclass
 from pathlib import Path
-import secrets
+import uuid
 
 @dataclass(frozen=True)
 class FileGrant:
@@ -17,7 +17,7 @@ class FileGrantStore:
             raise ValueError("An absolute user-selected path is required")
         if not path.is_file():
             raise ValueError("Selected path must be a regular file")
-        token = secrets.token_urlsafe(24)
+        token = uuid.uuid4().hex
         self._grants[token] = path
         return token
 
