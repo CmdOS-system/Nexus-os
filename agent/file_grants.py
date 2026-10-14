@@ -39,3 +39,16 @@ class FileGrantStore:
             raise ValueError("Selected file is not UTF-8 text") from exc
         except OSError as exc:
             raise RuntimeError("Selected file cannot be read") from exc
+
+def register_file_tools(broker, grants: FileGrantStore):
+    if not isinstance(grants, FileGrantStore):
+        raise TypeError("FileGrantStore required")
+    broker.register(
+        "file.read_text",
+        lambda grant_token: grants.consume_text(grant_token),
+        {
+            "type": "object",
+            "properties": {"grant_token": {"type": "string"}},
+            "required": ["grant_token"],
+        },
+    )
