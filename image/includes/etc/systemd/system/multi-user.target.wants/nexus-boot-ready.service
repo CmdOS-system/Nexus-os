@@ -5,7 +5,7 @@ ConditionPathExists=/etc/nexus-os-release
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/libexec/nexus-boot-ready
+ExecStart=/bin/sh /usr/local/libexec/nexus-boot-ready
 StandardOutput=journal+console
 RemainAfterExit=yes
 
