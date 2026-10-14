@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from nexus_agent import ToolPolicy
 from tool_broker import ToolBroker
+from permissions import PermissionBroker
 from system_tools import nexus_identity
 
 class SystemToolTests(unittest.TestCase):
@@ -25,7 +26,7 @@ class SystemToolTests(unittest.TestCase):
                 nexus_identity(p)
 
     def test_broker_rejects_model_supplied_path(self):
-        b = ToolBroker(ToolPolicy({"system.identity"}))
+        permissions = PermissionBroker()\n        b = ToolBroker(ToolPolicy({"system.identity"}), permissions)
         b.register("system.identity", lambda: {"NAME":"Nexus OS"}, {"type":"object","properties":{},"required":[]})
         with self.assertRaises(ValueError):
-            b.invoke("system.identity", {"path":"/etc/shadow"}, approved=True)
+            b.invoke_authorized("system.identity", {"path":"/etc/shadow"}, "none")
