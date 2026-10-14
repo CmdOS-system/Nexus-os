@@ -38,6 +38,20 @@ class LocalModelSelectionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 resolve_local_model(settings_path=path)
 
+    def test_corrupt_settings_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ai-settings.json"
+            path.write_text('{"mode": "local"}', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                resolve_local_model(settings_path=path)
+
+    def test_hybrid_settings_do_not_enable_local_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ai-settings.json"
+            save_settings(path, AISettings("hybrid", "ollama", "model", True))
+            with self.assertRaises(ValueError):
+                resolve_local_model(settings_path=path)
+
     def test_explicit_model_override(self):
         self.assertEqual(resolve_local_model("test-model"), "test-model")
 
