@@ -1,0 +1,5 @@
+task-xfce-desktop
+network-manager
+sudo
+curl
+ca-certificates
