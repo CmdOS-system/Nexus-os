@@ -18,8 +18,9 @@ class LockingTests(unittest.TestCase):
             controller.store.save(BootState())
             controller.stage_verified("B", authenticated=True, image_durable=True,
                                       attempts=1)
-            queue = multiprocessing.Queue()
-            processes = [multiprocessing.Process(target=attempt_boot, args=(directory, queue))
+            context = multiprocessing.get_context("spawn")
+            queue = context.Queue()
+            processes = [context.Process(target=attempt_boot, args=(directory, queue))
                          for _ in range(2)]
             for process in processes:
                 process.start()
