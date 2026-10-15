@@ -49,9 +49,12 @@ def validate_qcow2(path, *, qemu_img="qemu-img", runner=subprocess.run):
     report = json.loads(check.stdout)
     if not isinstance(report, dict):
         raise ValueError("QCOW2 consistency report is invalid")
-    # A missing field is not evidence of a successful consistency check.
+    # QAPI ImageCheck omits optional zero-valued corruptions/leaks.
+    # The subprocess exit code (check=True) independently guarantees that
+    # qemu-img completed its check with no corruption or leaked clusters.
     for key in ("corruptions", "leaks"):
-        if type(report.get(key)) is not int or report[key] != 0:
+        count = report.get(key, 0)
+        if type(count) is not int or count != 0:
             raise ValueError("QCOW2 consistency check failed")
     # qemu-img check JSON may omit check-errors entirely on success.
     # Its process exit code is already checked by subprocess.run(check=True).
