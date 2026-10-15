@@ -27,3 +27,26 @@ def tentative_entry(name, tries=3):
     if parsed["tries_left"] is not None:
         raise ValueError("entry is already tentative")
     return f"{name}+{tries}.conf"
+
+def entry_status(filename):
+    """Return BLS assessment status without touching the EFI partition."""
+    entry = parse_entry(filename)
+    if entry["tries_left"] is None:
+        return "good"
+    return "bad" if entry["tries_left"] == 0 else "indeterminate"
+
+def after_boot_attempt(filename):
+    """Model systemd-boot's rename BEFORE launching the selected kernel."""
+    entry = parse_entry(filename)
+    left = entry["tries_left"]
+    if left is None or left == 0:
+        raise ValueError("entry has no remaining counted attempts")
+    done = entry["tries_done"] or 0
+    return f'{entry["name"]}+{left - 1}-{done + 1}.conf'
+
+def bless_entry(filename):
+    """Model systemd-bless-boot after successful health assessment."""
+    entry = parse_entry(filename)
+    if entry["tries_left"] is None:
+        raise ValueError("entry is not counted")
+    return entry["name"] + ".conf"
