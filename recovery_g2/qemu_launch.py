@@ -21,6 +21,9 @@ def build_launch_plan(*, qemu_binary, firmware_code, firmware_vars,
         raise ValueError("firmware and disk paths must be distinct")
     if disk.is_block_device():
         raise ValueError("physical block devices are forbidden")
+    with disk.open("rb") as stream:
+        if stream.read(4) != b"QFI\\xfb":
+            raise ValueError("disk is not a QCOW2 image")
     return [
         str(qemu_binary), "-machine", "q35", "-m", str(memory_mb),
         "-drive", f"if=pflash,format=raw,readonly=on,file={code}",
