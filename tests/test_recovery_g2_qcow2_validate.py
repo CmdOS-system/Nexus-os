@@ -54,12 +54,13 @@ class Qcow2ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "consistency"):
             validate_qcow2(self.path, runner=runner)
 
-    def test_optional_check_errors_absent_is_accepted(self):
+    def test_required_check_errors_absent_is_rejected(self):
         def runner(args, **kwargs):
             if args[1] == "check":
                 return SimpleNamespace(stdout=json.dumps({"corruptions": 0, "leaks": 0}))
             return SimpleNamespace(stdout=json.dumps({"format": "qcow2", "virtual-size": 2 * 1024**3}))
-        self.assertEqual(validate_qcow2(self.path, runner=runner)["format"], "qcow2")
+        with self.assertRaisesRegex(ValueError, "consistency"):
+            validate_qcow2(self.path, runner=runner)
 
     def test_optional_zero_corruptions_and_leaks_omitted(self):
         def runner(args, **kwargs):
