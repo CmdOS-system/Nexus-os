@@ -29,7 +29,7 @@ jobs:
       - name: Install real QCOW2 tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-utils
+          sudo apt-get install -y qemu-utils qemu-system-x86 ovmf
           qemu-img --version
       - name: Compile Recovery G2 sources
         run: python -m compileall -q recovery_g2 tests
@@ -37,3 +37,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_recovery_g2_*.py' -v
       - name: Run real qemu-img smoke test
         run: python -m recovery_g2.smoke
+      - name: Power on real OVMF firmware in QEMU (not an OS boot)
+        run: python -m recovery_g2.ovmf_probe
