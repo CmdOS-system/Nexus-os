@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from recovery_g2.qemu_launch import build_launch_plan
 
 class QemuLaunchTests(unittest.TestCase):
@@ -10,7 +11,8 @@ class QemuLaunchTests(unittest.TestCase):
             for path in paths[:2]:
                 path.write_bytes(b"test fixture")
             paths[2].write_bytes(bytes.fromhex("514649fb") + b"qcow2 fixture")
-            argv = build_launch_plan(qemu_binary="qemu-system-x86_64",
+            with patch("recovery_g2.qemu_launch.validate_qcow2", return_value={"format": "qcow2"}):
+                argv = build_launch_plan(qemu_binary="qemu-system-x86_64",
                                      firmware_code=paths[0], firmware_vars=paths[1],
                                      disk_image=paths[2])
             self.assertIn("if=pflash,format=raw,readonly=on,file=" + str(paths[0]), argv)
@@ -21,7 +23,7 @@ class QemuLaunchTests(unittest.TestCase):
             paths = [Path(folder) / name for name in ("CODE.fd", "VARS.fd", "disk.qcow2")]
             for path in paths:
                 path.write_bytes(b"not qcow2")
-            with self.assertRaisesRegex(ValueError, "not a QCOW2"):
+            with self.assertRaisesRegex(ValueError, "invalid QCOW2"):
                 build_launch_plan(qemu_binary="qemu", firmware_code=paths[0],
                                   firmware_vars=paths[1], disk_image=paths[2])
 
