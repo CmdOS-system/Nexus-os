@@ -54,6 +54,14 @@ class Qcow2ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "consistency"):
             validate_qcow2(self.path, runner=runner)
 
+    def test_missing_check_fields_rejected(self):
+        def runner(args, **kwargs):
+            if args[1] == "check":
+                return SimpleNamespace(stdout=json.dumps({}))
+            return SimpleNamespace(stdout=json.dumps({"format": "qcow2", "virtual-size": 2 * 1024**3}))
+        with self.assertRaisesRegex(ValueError, "consistency"):
+            validate_qcow2(self.path, runner=runner)
+
     def test_wrong_format_rejected(self):
         with self.assertRaises(ValueError):
             validate_qcow2(self.path, runner=self.run_info(
