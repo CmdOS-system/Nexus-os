@@ -22,7 +22,7 @@ def build_launch_plan(*, qemu_binary, firmware_code, firmware_vars,
     if disk.is_block_device():
         raise ValueError("physical block devices are forbidden")
     with disk.open("rb") as stream:
-        if stream.read(4) != b"QFI\\xfb":
+        if stream.read(4) != bytes.fromhex("514649fb"):
             raise ValueError("disk is not a QCOW2 image")
     return [
         str(qemu_binary), "-machine", "q35", "-m", str(memory_mb),
