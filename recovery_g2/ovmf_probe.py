@@ -37,14 +37,17 @@ def probe_ovmf(*, seconds=8):
                                   lab_root=folder) as argv:
             # -display none and -serial stdio are already set by launch plan.
             # Disable networking, daemonization and acceleration in CI.
+            debug_log = Path(folder) / "ovmf-debug.log"
             command = argv + ["-accel", "tcg", "-nic", "none", "-monitor", "none",
-                              "-no-reboot"]
+                              "-no-reboot", "-debugcon", f"file:{debug_log}",
+                              "-global", "isa-debugcon.iobase=0x402"]
             try:
                 result = subprocess.run(command, capture_output=True, text=True,
                                         timeout=seconds, check=False)
             except subprocess.TimeoutExpired:
                 return {"status": "qemu_running_at_timeout",
-                        "firmware_power_on_probe": True, "os_booted": False}
+                        "firmware_power_on_probe": True, "os_booted": False,
+                        "ovmf_debug_bytes": debug_log.stat().st_size if debug_log.exists() else 0}
             raise RuntimeError(
                 "QEMU exited before probe timeout (exit=%s): %s" %
                 (result.returncode, (result.stderr or result.stdout)[-1500:])
