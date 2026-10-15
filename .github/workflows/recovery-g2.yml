@@ -45,6 +45,6 @@ jobs:
       - name: Require actual UEFI guest execution marker
         run: python -m recovery_g2.efi_boot_probe
       - name: Install Linux kernel and static initramfs tooling
-        run: sudo apt-get install -y linux-image-amd64 busybox-static cpio
+        run: sudo apt-get install -y linux-image-generic busybox-static cpio
       - name: Boot real Linux kernel and require guest init marker
         run: bash recovery_g2/linux_boot_ci.sh
