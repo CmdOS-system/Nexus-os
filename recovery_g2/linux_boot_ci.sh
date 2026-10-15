@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p build/linux-boot/rootfs/{bin,dev,proc,sys}
-kernel="$(find /boot -maxdepth 1 -type f -name 'vmlinuz-*' | sort -V | tail -1)"
+kernel="$(find /boot -maxdepth 1 -type f -name 'vmlinuz-*-generic' | sort -V | tail -1)"
 if [[ -z "$kernel" ]]; then echo "No installed Linux kernel" >&2; exit 1; fi
 busybox_binary="$(dpkg-query -L busybox-static | grep -E '/bin/busybox$' | head -n 1)"
 if [[ -z "$busybox_binary" || ! -x "$busybox_binary" ]]; then
