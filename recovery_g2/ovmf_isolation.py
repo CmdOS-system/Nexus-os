@@ -10,8 +10,11 @@ from pathlib import Path
 
 @contextmanager
 def isolated_ovmf_vars(template, *, lab_root=None):
-    source = Path(template).resolve(strict=True)
-    if not source.is_file() or source.is_symlink():
+    original = Path(template)
+    if original.is_symlink():
+        raise ValueError("symlinked OVMF VARS template is forbidden")
+    source = original.resolve(strict=True)
+    if not source.is_file():
         raise ValueError("OVMF VARS template must be a regular file")
     with tempfile.TemporaryDirectory(prefix="nexus-ovmf-", dir=lab_root) as directory:
         destination = Path(directory) / "OVMF_VARS.fd"
