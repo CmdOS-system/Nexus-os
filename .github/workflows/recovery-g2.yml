@@ -1,0 +1,28 @@
+name: Recovery G2 Python tests
+on:
+  push:
+    paths:
+      - 'recovery_g2/**'
+      - 'tests/test_recovery_g2_*.py'
+      - '.github/workflows/recovery-g2.yml'
+  pull_request:
+    paths:
+      - 'recovery_g2/**'
+      - 'tests/test_recovery_g2_*.py'
+      - '.github/workflows/recovery-g2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile Recovery G2 sources
+        run: python -m compileall -q recovery_g2 tests
+      - name: Run Recovery G2 unit tests
+        run: python -m unittest discover -s tests -p 'test_recovery_g2_*.py' -v
