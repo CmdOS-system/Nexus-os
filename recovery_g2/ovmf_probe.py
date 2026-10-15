@@ -13,7 +13,7 @@ from .qemu_lab import isolated_launch_plan
 
 
 def probe_ovmf(*, seconds=8):
-    if not 2 <= seconds <= 60:
+    if type(seconds) not in (int, float) or not 2 <= seconds <= 60:
         raise ValueError("probe timeout must be 2..60 seconds")
     if shutil.which("qemu-system-x86_64") is None or shutil.which("qemu-img") is None:
         raise RuntimeError("qemu-system-x86_64 and qemu-img are required")
@@ -22,9 +22,10 @@ def probe_ovmf(*, seconds=8):
         ("/usr/share/OVMF/OVMF_CODE.fd", "/usr/share/OVMF/OVMF_VARS.fd"),
     ]
     firmware = next(((Path(a), Path(b)) for a, b in pairs
-                     if Path(a).is_file() and Path(b).is_file()), None)
+                     if Path(a).is_file() and Path(b).is_file()
+                     and Path(a).stat().st_size == Path(b).stat().st_size), None)
     if firmware is None:
-        raise RuntimeError("matching OVMF CODE/VARS firmware files not found")
+        raise RuntimeError("matching OVMF CODE/VARS firmware files with equal flash size not found")
     with tempfile.TemporaryDirectory(prefix="nexus-ovmf-probe-") as folder:
         disk = Path(folder) / "blank.qcow2"
         subprocess.run(["qemu-img", "create", "-f", "qcow2", str(disk), "64M"],
