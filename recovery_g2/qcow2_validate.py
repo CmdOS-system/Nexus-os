@@ -8,8 +8,18 @@ def validate_qcow2(path, *, qemu_img="qemu-img", runner=subprocess.run):
     if not image.is_file():
         raise ValueError("disk must be a regular file")
     with image.open("rb") as stream:
-        if stream.read(4) != bytes.fromhex("514649fb"):
-            raise ValueError("invalid QCOW2 signature")
+        header = stream.read(80)
+    if header[:4] != bytes.fromhex("514649fb"):
+        raise ValueError("invalid QCOW2 signature")
+    if len(header) < 80:
+        raise ValueError("truncated QCOW2 header")
+    version = int.from_bytes(header[4:8], "big")
+    if version not in (2, 3):
+        raise ValueError("unsupported QCOW2 version")
+    if version == 3:
+        incompatible = int.from_bytes(header[72:80], "big")
+        if incompatible & (1 << 2):
+            raise ValueError("external QCOW2 data file is forbidden")
     result = runner([qemu_img, "info", "--output=json", "-f", "qcow2", str(image)],
                     capture_output=True, text=True, check=True, timeout=15)
     metadata = json.loads(result.stdout)
