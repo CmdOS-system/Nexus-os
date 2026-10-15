@@ -14,8 +14,21 @@ def run_efi_probe(efi_binary, *, timeout=45):
         if shutil.which(tool) is None:
             raise RuntimeError(f"required tool not found: {tool}")
     binary = Path(efi_binary).resolve(strict=True)
-    if not binary.is_file() or binary.stat().st_size == 0:
-        raise ValueError("EFI binary must be a nonempty file")
+    if not binary.is_file() or binary.stat().st_size < 256:
+        raise ValueError("EFI binary must be a nonempty PE32+ application")
+    with binary.open("rb") as stream:
+        dos_header = stream.read(64)
+        if dos_header[:2] != b"MZ":
+            raise ValueError("EFI binary lacks MZ signature")
+        pe_offset = int.from_bytes(dos_header[60:64], "little")
+        if not 64 <= pe_offset <= 4096 or pe_offset + 26 > binary.stat().st_size:
+            raise ValueError("EFI binary has invalid PE offset")
+        stream.seek(pe_offset)
+        pe_header = stream.read(26)
+        if pe_header[:4] != b"PE\\x00\\x00" or int.from_bytes(pe_header[4:6], "little") != 0x8664:
+            raise ValueError("EFI binary is not PE x86-64")
+        if int.from_bytes(pe_header[24:26], "little") != 0x20b:
+            raise ValueError("EFI binary is not PE32+")
     firmware_pairs = [
         ("/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_VARS_4M.fd"),
         ("/usr/share/OVMF/OVMF_CODE.fd", "/usr/share/OVMF/OVMF_VARS.fd"),
