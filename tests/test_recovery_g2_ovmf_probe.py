@@ -51,4 +51,4 @@ class OvmfProbeTests(unittest.TestCase):
                 plan.return_value.__enter__.return_value = ["qemu-system-x86_64"]
                 result = probe_ovmf(seconds=2)
                 self.assertIs(result["os_booted"], False)
-                self.assertTrue(result["firmware_power_on_probe"])
+                self.assertEqual(result["firmware_power_on_probe"], "inconclusive")
