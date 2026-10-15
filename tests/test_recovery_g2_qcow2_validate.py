@@ -106,6 +106,13 @@ class Qcow2ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "encrypted"):
             validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
 
+    def test_invalid_v3_declared_header_length_rejected(self):
+        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(92) + (104).to_bytes(4, "big"))
+        header[100:104] = (103).to_bytes(4, "big")
+        self.path.write_bytes(header)
+        with self.assertRaisesRegex(ValueError, "header length"):
+            validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
+
     def test_wrong_format_rejected(self):
         with self.assertRaises(ValueError):
             validate_qcow2(self.path, runner=self.run_info(
