@@ -61,6 +61,13 @@ class Qcow2ValidationTests(unittest.TestCase):
             return SimpleNamespace(stdout=json.dumps({"format": "qcow2", "virtual-size": 2 * 1024**3}))
         self.assertEqual(validate_qcow2(self.path, runner=runner)["format"], "qcow2")
 
+    def test_optional_zero_corruptions_and_leaks_omitted(self):
+        def runner(args, **kwargs):
+            if args[1] == "check":
+                return SimpleNamespace(stdout=json.dumps({"check-errors": 0}))
+            return SimpleNamespace(stdout=json.dumps({"format": "qcow2", "virtual-size": 2 * 1024**3}))
+        self.assertEqual(validate_qcow2(self.path, runner=runner)["format"], "qcow2")
+
     def test_missing_check_fields_rejected(self):
         def runner(args, **kwargs):
             if args[1] == "check":
