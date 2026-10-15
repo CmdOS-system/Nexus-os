@@ -25,7 +25,7 @@ def run_efi_probe(efi_binary, *, timeout=45):
             raise ValueError("EFI binary has invalid PE offset")
         stream.seek(pe_offset)
         pe_header = stream.read(26)
-        if pe_header[:4] != b"PE\\x00\\x00" or int.from_bytes(pe_header[4:6], "little") != 0x8664:
+        if pe_header[:4] != b"PE" + bytes(2) or int.from_bytes(pe_header[4:6], "little") != 0x8664:
             raise ValueError("EFI binary is not PE x86-64")
         if int.from_bytes(pe_header[24:26], "little") != 0x20b:
             raise ValueError("EFI binary is not PE32+")
