@@ -17,12 +17,12 @@ def isolated_launch_plan(*, qemu_binary, firmware_code, firmware_vars_template,
     Both OVMF variables and QCOW2 disk are private disposable copies.
     """
     with isolated_ovmf_vars(firmware_vars_template, lab_root=lab_root) as vars_copy:
-      with isolated_qcow2_disk(disk_image, lab_root=lab_root) as disk_copy:
-        argv = build_launch_plan(
-            qemu_binary=qemu_binary,
-            firmware_code=firmware_code,
-            firmware_vars=vars_copy,
-            disk_image=disk_copy,
-            memory_mb=memory_mb,
-        )
-        yield argv
+        with isolated_qcow2_disk(disk_image, lab_root=lab_root) as disk_copy:
+            argv = build_launch_plan(
+                qemu_binary=qemu_binary,
+                firmware_code=firmware_code,
+                firmware_vars=vars_copy,
+                disk_image=disk_copy,
+                memory_mb=memory_mb,
+            )
+            yield argv
