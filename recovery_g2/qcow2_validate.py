@@ -16,10 +16,19 @@ def validate_qcow2(path, *, qemu_img="qemu-img", runner=subprocess.run):
     version = int.from_bytes(header[4:8], "big")
     if version not in (2, 3):
         raise ValueError("unsupported QCOW2 version")
+    backing_offset = int.from_bytes(header[8:16], "big")
+    backing_size = int.from_bytes(header[16:20], "big")
+    if backing_offset or backing_size:
+        raise ValueError("QCOW2 backing image is forbidden")
+    crypt_method = int.from_bytes(header[32:36], "big")
+    if crypt_method:
+        raise ValueError("encrypted QCOW2 image is forbidden")
     if version == 3:
         if len(header) < 104:
             raise ValueError("truncated QCOW2 v3 header")
         incompatible = int.from_bytes(header[72:80], "big")
+        if incompatible & 0b11:
+            raise ValueError("dirty or corrupt QCOW2 image is forbidden")
         if incompatible & (1 << 2):
             raise ValueError("external QCOW2 data file is forbidden")
     result = runner([qemu_img, "info", "--output=json", "-f", "qcow2", str(image)],
