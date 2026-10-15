@@ -18,6 +18,9 @@ def isolated_qcow2_disk(template, *, lab_root=None):
     source = source.resolve(strict=True)
     if not source.is_file():
         raise ValueError("QCOW2 template must be a regular file")
+    with source.open("rb") as stream:
+        if stream.read(4) != bytes.fromhex("514649fb"):
+            raise ValueError("invalid QCOW2 signature")
     validate_qcow2(source)
     with tempfile.TemporaryDirectory(prefix="nexus-disk-", dir=lab_root) as directory:
         destination = Path(directory) / "guest.qcow2"
