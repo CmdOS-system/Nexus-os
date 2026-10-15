@@ -48,7 +48,7 @@ class RecoveryFaultTests(unittest.TestCase):
 
     def test_bad_utf8_is_rejected(self):
         with self.assertRaises(ValueError):
-            storage.decode(b"\\xff")
+            storage.decode(bytes([255]))
 
     def test_repeated_atomic_writes_preserve_complete_records(self):
         with tempfile.TemporaryDirectory() as d:
