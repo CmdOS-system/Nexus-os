@@ -10,7 +10,7 @@ class Qcow2ValidationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "disk.qcow2"
-        self.path.write_bytes(bytes.fromhex("514649fb") + b"fixture")
+        self.path.write_bytes(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(72))
 
     def run_info(self, metadata):
         def runner(args, **kwargs):
