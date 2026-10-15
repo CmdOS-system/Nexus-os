@@ -16,6 +16,8 @@ class BootState:
             raise ValueError("invalid slot")
         if self.candidate == self.confirmed:
             raise ValueError("candidate must be inactive")
+        if type(self.attempts_left) is not int or type(self.generation) is not int:
+            raise ValueError("counters must be integers")
         if self.attempts_left < 0 or self.generation < 0:
             raise ValueError("negative counter")
         if self.candidate is None and self.attempts_left:
@@ -25,7 +27,7 @@ def stage(state: BootState, slot: Slot, attempts: int = 3) -> BootState:
     """Caller MUST authenticate, verify, and durably stage the image first."""
     if state.candidate is not None or slot not in ("A", "B") or slot == state.confirmed:
         raise ValueError("unsafe update target")
-    if not 1 <= attempts <= 10:
+    if type(attempts) is not int or not 1 <= attempts <= 10:
         raise ValueError("invalid attempt budget")
     return replace(state, candidate=slot, attempts_left=attempts,
                    generation=state.generation + 1)
