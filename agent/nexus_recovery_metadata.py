@@ -6,6 +6,7 @@ Unprivileged and deliberately independent from block devices and bootloaders.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import tempfile
@@ -62,7 +63,7 @@ def decode(raw: bytes) -> Metadata:
     if body.get("schema") != SCHEMA:
         raise ValueError("unsupported metadata schema")
     expected = hashlib.sha256(_canonical(body)).hexdigest()
-    if not isinstance(digest, str) or not hashlib.compare_digest(digest, expected):
+    if not isinstance(digest, str) or not hmac.compare_digest(digest, expected):
         raise ValueError("metadata checksum mismatch")
     try:
         meta = Metadata(**body["metadata"])
