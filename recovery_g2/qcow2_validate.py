@@ -23,6 +23,6 @@ def validate_qcow2(path, *, qemu_img="qemu-img", runner=subprocess.run):
     check = runner([qemu_img, "check", "--output=json", "-f", "qcow2", str(image)],
                    capture_output=True, text=True, check=True, timeout=60)
     report = json.loads(check.stdout)
-    if not isinstance(report, dict) or report.get("corruptions", 0) != 0 or report.get("leaks", 0) != 0 or report.get("check-errors", 0) != 0:
+    if not isinstance(report, dict) or report.get("corruptions", 0) != 0 or report.get("leaks", 0) != 0 or report.get("check-errors", report.get("check_errors", 0)) != 0:
         raise ValueError("QCOW2 consistency check failed")
     return {"format": "qcow2", "virtual_size": size}
