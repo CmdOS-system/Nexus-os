@@ -45,9 +45,12 @@ def probe_ovmf(*, seconds=8):
                 result = subprocess.run(command, capture_output=True, text=True,
                                         timeout=seconds, check=False)
             except subprocess.TimeoutExpired:
+                # A timeout only proves that the process did not exit; it is
+                # not evidence that OVMF actually initialized successfully.
+                size = debug_log.stat().st_size if debug_log.exists() else 0
                 return {"status": "qemu_running_at_timeout",
-                        "firmware_power_on_probe": True, "os_booted": False,
-                        "ovmf_debug_bytes": debug_log.stat().st_size if debug_log.exists() else 0}
+                        "firmware_power_on_probe": "inconclusive",
+                        "os_booted": False, "ovmf_debug_bytes": size}
             raise RuntimeError(
                 "QEMU exited before probe timeout (exit=%s): %s" %
                 (result.returncode, (result.stderr or result.stdout)[-1500:])
