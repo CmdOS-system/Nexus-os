@@ -13,15 +13,21 @@ GRUB_HOOK="$ROOT/hooks/020-unattended-grub.hook.binary"
 BOOT_MARKER="$ROOT/includes/usr/local/libexec/nexus-boot-ready"
 CONTROL_CENTER="$ROOT/includes/opt/nexus/control-center.py"
 CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desktop"
+GRAPHICAL_UNIT="$ROOT/includes/etc/systemd/system/nexus-graphical-ready.service"
+GRAPHICAL_MARKER="$ROOT/includes/usr/local/libexec/nexus-graphical-ready"
+GUI_SMOKE="$ROOT/gui-manual-smoke.sh"
 
 bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
+bash "$ROOT/validate-launchers.sh"
 bash -n "$LAUNCHER"
+bash -n "$GUI_SMOKE"
 bash -n "$BOOT_HOOK"
 sh -n "$GRUB_HOOK"
 bash -n "$BOOT_MARKER"
+sh -n "$GRAPHICAL_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$GRAPHICAL_UNIT" "$GRAPHICAL_MARKER" "$GUI_SMOKE"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -45,6 +51,10 @@ if [ -e "$ROOT/includes/etc/systemd/system/multi-user.target.wants/nexus-boot-re
   exit 1
 fi
 grep -q 'NEXUS_LIVE_BOOT_READY_V1' "$BOOT_MARKER"
+grep -q 'NEXUS_GRAPHICAL_STACK_READY_V1' "$GRAPHICAL_MARKER"
+grep -q 'systemctl enable nexus-graphical-ready.service' "$BOOT_HOOK"
+grep -qx 'Requires=display-manager.service' "$GRAPHICAL_UNIT"
+grep -qx 'WantedBy=graphical.target' "$GRAPHICAL_UNIT"
 if grep -q '020-unattended-grub.hook.binary' "$BUILD"; then
   echo "GRUB binary hook runs before grub.cfg generation; do not stage it" >&2
   exit 1
@@ -73,6 +83,15 @@ if grep -Eqi '(password|passwd|api[_-]?key|secret|token)[[:space:]]*=' "$BUILD" 
 fi
 if grep -Eq -- '--debian-installer[[:space:]]+(live|true|netinst)' "$BUILD"; then
   echo "Installer unexpectedly enabled before safety gates" >&2
+  exit 1
+fi
+
+if ! grep -Fq -- "-vnc 127.0.0.1:1" "$GUI_SMOKE"; then
+  echo "Manual VNC diagnostic must bind to loopback only" >&2
+  exit 1
+fi
+if ! grep -Fq "This diagnostic is MANUAL" "$GUI_SMOKE"; then
+  echo "Manual graphical diagnostic must not claim automated proof" >&2
   exit 1
 fi
 
