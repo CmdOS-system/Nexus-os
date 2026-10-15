@@ -62,6 +62,18 @@ class Qcow2ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "consistency"):
             validate_qcow2(self.path, runner=runner)
 
+    def test_external_data_bit_rejected_before_runner(self):
+        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(72))
+        header[72:80] = (1 << 2).to_bytes(8, "big")
+        self.path.write_bytes(header)
+        with self.assertRaisesRegex(ValueError, "external QCOW2 data"):
+            validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
+
+    def test_truncated_header_rejected(self):
+        self.path.write_bytes(bytes.fromhex("514649fb") + b"short")
+        with self.assertRaisesRegex(ValueError, "truncated"):
+            validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
+
     def test_wrong_format_rejected(self):
         with self.assertRaises(ValueError):
             validate_qcow2(self.path, runner=self.run_info(
