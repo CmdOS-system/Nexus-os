@@ -23,9 +23,9 @@ def probe_ovmf(*, seconds=8):
     ]
     firmware = next(((Path(a), Path(b)) for a, b in pairs
                      if Path(a).is_file() and Path(b).is_file()
-                     and Path(a).stat().st_size == Path(b).stat().st_size), None)
+                     and Path(a).stat().st_size > 0 and Path(b).stat().st_size > 0), None)
     if firmware is None:
-        raise RuntimeError("matching OVMF CODE/VARS firmware files with equal flash size not found")
+        raise RuntimeError("matching nonempty OVMF CODE/VARS firmware files not found")
     with tempfile.TemporaryDirectory(prefix="nexus-ovmf-probe-") as folder:
         disk = Path(folder) / "blank.qcow2"
         subprocess.run(["qemu-img", "create", "-f", "qcow2", str(disk), "64M"],
