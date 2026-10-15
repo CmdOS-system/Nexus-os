@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'recovery_g2/**'
+      - 'efi_probe/**'
       - 'tests/test_recovery_g2_*.py'
       - '.github/workflows/recovery-g2.yml'
   pull_request:
@@ -29,7 +30,7 @@ jobs:
       - name: Install real QCOW2 tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-utils qemu-system-x86 ovmf
+          sudo apt-get install -y qemu-utils qemu-system-x86 ovmf clang lld dosfstools mtools file
           qemu-img --version
       - name: Compile Recovery G2 sources
         run: python -m compileall -q recovery_g2 tests
@@ -39,3 +40,7 @@ jobs:
         run: python -m recovery_g2.smoke
       - name: Power on real OVMF firmware in QEMU (not an OS boot)
         run: python -m recovery_g2.ovmf_probe
+      - name: Build minimal UEFI executable
+        run: bash efi_probe/build.sh
+      - name: Require actual UEFI guest execution marker
+        run: python -m recovery_g2.efi_boot_probe
