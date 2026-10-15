@@ -74,6 +74,17 @@ class Qcow2ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "truncated"):
             validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
 
+    def test_version_2_header_72_bytes_accepted(self):
+        self.path.write_bytes(bytes.fromhex("514649fb") + (2).to_bytes(4, "big") + bytes(64))
+        result = validate_qcow2(self.path, runner=self.run_info(
+            {"format": "qcow2", "virtual-size": 2 * 1024**3}))
+        self.assertEqual(result["format"], "qcow2")
+
+    def test_version_3_header_80_bytes_rejected(self):
+        self.path.write_bytes(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(72))
+        with self.assertRaisesRegex(ValueError, "truncated QCOW2 v3"):
+            validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
+
     def test_wrong_format_rejected(self):
         with self.assertRaises(ValueError):
             validate_qcow2(self.path, runner=self.run_info(
