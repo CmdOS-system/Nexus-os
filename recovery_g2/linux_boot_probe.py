@@ -42,7 +42,8 @@ def probe_linux(kernel, initramfs, *, timeout=60, runner=subprocess.run):
                 "evidence": "guest_serial_marker"}
     if MARKER not in result.stdout.splitlines():
         raise RuntimeError(f"Linux init marker absent; QEMU exited {result.returncode}; "
-                           f"serial tail: {result.stdout[-1000:]}")
+                           f"serial tail: {result.stdout[-1000:]}; "
+                           f"QEMU stderr: {result.stderr[-1200:]}")
     return {"linux_init_confirmed": True, "uefi_boot_confirmed": False,
             "evidence": "guest_serial_marker"}
 
