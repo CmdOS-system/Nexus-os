@@ -56,9 +56,8 @@ def validate_qcow2(path, *, qemu_img="qemu-img", runner=subprocess.run):
         count = report.get(key, 0)
         if type(count) is not int or count != 0:
             raise ValueError("QCOW2 consistency check failed")
-    # qemu-img check JSON may omit check-errors entirely on success.
-    # Its process exit code is already checked by subprocess.run(check=True).
-    errors = report.get("check-errors", report.get("check_errors", 0))
+    # ImageCheck requires check-errors; corruptions and leaks are optional.
+    errors = report.get("check-errors", report.get("check_errors"))
     if type(errors) is not int or errors != 0:
         raise ValueError("QCOW2 consistency check failed")
     return {"format": "qcow2", "virtual_size": size}
