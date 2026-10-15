@@ -7,4 +7,5 @@ case "${XDG_SESSION_TYPE:-}" in
   *) exit 1 ;;
 esac
 pgrep -x xfce4-session >/dev/null
-printf '%s\n' 'NEXUS_XFCE_SESSION_READY_V1' > /dev/ttyS0
+test -d "${XDG_RUNTIME_DIR:-/nonexistent}"
+printf '%s\n' 'NEXUS_XFCE_SESSION_READY_V1' > "$XDG_RUNTIME_DIR/nexus-xfce-session-ready"
