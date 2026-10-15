@@ -32,8 +32,10 @@ def smoke_test():
                                   firmware_vars_template=vars_template,
                                   disk_image=disk,
                                   lab_root=folder) as argv:
-            assert any(arg.startswith("if=virtio,format=qcow2,file=") for arg in argv)
-            assert any(arg.startswith("if=pflash,format=raw,file=") for arg in argv)
+            if not any(arg.startswith("if=virtio,format=qcow2,file=") for arg in argv):
+                raise RuntimeError("QEMU plan lacks isolated QCOW2 disk")
+            if not any(arg.startswith("if=pflash,format=raw,file=") for arg in argv):
+                raise RuntimeError("QEMU plan lacks isolated OVMF variables")
             result = {"status": "passed", "disk_format": validated["format"],
                       "virtual_size": validated["virtual_size"],
                       "launch_plan_created": True, "vm_booted": False}
