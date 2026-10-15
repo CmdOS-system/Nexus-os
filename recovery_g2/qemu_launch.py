@@ -4,6 +4,7 @@ This module only constructs commands. It does not execute them.
 """
 import os
 from pathlib import Path
+from .qcow2_validate import validate_qcow2
 
 def build_launch_plan(*, qemu_binary, firmware_code, firmware_vars,
                       disk_image, memory_mb=2048):
@@ -21,9 +22,7 @@ def build_launch_plan(*, qemu_binary, firmware_code, firmware_vars,
         raise ValueError("firmware and disk paths must be distinct")
     if disk.is_block_device():
         raise ValueError("physical block devices are forbidden")
-    with disk.open("rb") as stream:
-        if stream.read(4) != bytes.fromhex("514649fb"):
-            raise ValueError("disk is not a QCOW2 image")
+    validate_qcow2(disk)
     return [
         str(qemu_binary), "-machine", "q35", "-m", str(memory_mb),
         "-drive", f"if=pflash,format=raw,readonly=on,file={code}",
