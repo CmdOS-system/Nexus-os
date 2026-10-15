@@ -10,7 +10,7 @@ class Qcow2ValidationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "disk.qcow2"
-        self.path.write_bytes(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(96))
+        self.path.write_bytes(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(92) + (104).to_bytes(4, "big"))
 
     def run_info(self, metadata):
         def runner(args, **kwargs):
@@ -63,7 +63,7 @@ class Qcow2ValidationTests(unittest.TestCase):
             validate_qcow2(self.path, runner=runner)
 
     def test_external_data_bit_rejected_before_runner(self):
-        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(96))
+        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(92) + (104).to_bytes(4, "big"))
         header[72:80] = (1 << 2).to_bytes(8, "big")
         self.path.write_bytes(header)
         with self.assertRaisesRegex(ValueError, "external QCOW2 data"):
@@ -86,21 +86,21 @@ class Qcow2ValidationTests(unittest.TestCase):
             validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
 
     def test_header_backing_pointer_rejected_without_runner(self):
-        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(96))
+        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(92) + (104).to_bytes(4, "big"))
         header[8:16] = (65536).to_bytes(8, "big")
         self.path.write_bytes(header)
         with self.assertRaisesRegex(ValueError, "backing"):
             validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
 
     def test_header_corrupt_flag_rejected_without_runner(self):
-        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(96))
+        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(92) + (104).to_bytes(4, "big"))
         header[72:80] = (1 << 1).to_bytes(8, "big")
         self.path.write_bytes(header)
         with self.assertRaisesRegex(ValueError, "dirty or corrupt"):
             validate_qcow2(self.path, runner=lambda *a, **k: self.fail("must not run"))
 
     def test_header_encryption_rejected_without_runner(self):
-        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(96))
+        header = bytearray(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(92) + (104).to_bytes(4, "big"))
         header[32:36] = (1).to_bytes(4, "big")
         self.path.write_bytes(header)
         with self.assertRaisesRegex(ValueError, "encrypted"):
