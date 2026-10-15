@@ -29,6 +29,23 @@ class StoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 store.save(BootState())
 
+
+    def test_same_generation_conflict_fails_closed(self):
+        from recovery_g2.store import encode
+        with tempfile.TemporaryDirectory() as directory:
+            store = RedundantStore(directory)
+            store.paths[0].write_bytes(encode(BootState(confirmed="A", generation=4)))
+            store.paths[1].write_bytes(encode(BootState(confirmed="B", generation=4)))
+            with self.assertRaises(RecoveryRequired):
+                store.load()
+
+    def test_recovery_after_torn_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = RedundantStore(directory)
+            store.save(BootState())
+            store.paths[1].write_bytes(b'{"payload":')
+            self.assertEqual(store.load(), BootState())
+
     def test_missing_metadata_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(RecoveryRequired):
