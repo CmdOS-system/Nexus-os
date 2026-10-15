@@ -14,8 +14,10 @@ class Qcow2ValidationTests(unittest.TestCase):
 
     def run_info(self, metadata):
         def runner(args, **kwargs):
-            self.assertEqual(args[1:4], ["info", "--output=json", "-f"])
+            self.assertIn(args[1], ("info", "check"))
             self.assertTrue(kwargs["check"])
+            if args[1] == "check":
+                return SimpleNamespace(stdout=json.dumps({"corruptions": 0, "leaks": 0, "check-errors": 0}))
             return SimpleNamespace(stdout=json.dumps(metadata))
         return runner
 
@@ -29,6 +31,20 @@ class Qcow2ValidationTests(unittest.TestCase):
             validate_qcow2(self.path, runner=self.run_info(
                 {"format": "qcow2", "virtual-size": 2 * 1024**3,
                  "backing-filename": "/host/sensitive.qcow2"}))
+
+    def test_external_data_file_rejected(self):
+        with self.assertRaisesRegex(ValueError, "external backing"):
+            validate_qcow2(self.path, runner=self.run_info(
+                {"format": "qcow2", "virtual-size": 2 * 1024**3,
+                 "data-file": "/host/external.bin"}))
+
+    def test_consistency_errors_rejected(self):
+        def runner(args, **kwargs):
+            if args[1] == "check":
+                return SimpleNamespace(stdout=json.dumps({"corruptions": 1}))
+            return SimpleNamespace(stdout=json.dumps({"format": "qcow2", "virtual-size": 2 * 1024**3}))
+        with self.assertRaisesRegex(ValueError, "consistency"):
+            validate_qcow2(self.path, runner=runner)
 
     def test_wrong_format_rejected(self):
         with self.assertRaises(ValueError):
