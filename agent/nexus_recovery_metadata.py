@@ -99,3 +99,32 @@ def atomic_write(path: str, meta: Metadata) -> None:
 def load(path: str) -> Metadata:
     with open(path, "rb") as f:
         return decode(f.read())
+
+
+def load_redundant(primary: str, secondary: str) -> Metadata:
+    """Load the newest valid copy; reject ambiguity at the same transaction."""
+    valid = []
+    for path in (primary, secondary):
+        try:
+            valid.append(load(path))
+        except (OSError, ValueError):
+            pass
+    if not valid:
+        raise ValueError("no valid recovery metadata copy")
+    newest_tx = max(m.transaction_id for m in valid)
+    newest = [m for m in valid if m.transaction_id == newest_tx]
+    if len(newest) == 2 and newest[0] != newest[1]:
+        raise ValueError("conflicting recovery metadata at same transaction")
+    return newest[0]
+
+
+def write_redundant(primary: str, secondary: str, meta: Metadata) -> None:
+    """Persist independently recoverable copies.
+
+    The secondary is committed first; a crash before the primary update leaves
+    at least one valid newest record and one older valid record.
+    """
+    if os.path.abspath(primary) == os.path.abspath(secondary):
+        raise ValueError("redundant metadata paths must differ")
+    atomic_write(secondary, meta)
+    atomic_write(primary, meta)
