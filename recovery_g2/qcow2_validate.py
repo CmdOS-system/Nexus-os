@@ -26,6 +26,9 @@ def validate_qcow2(path, *, qemu_img="qemu-img", runner=subprocess.run):
     if version == 3:
         if len(header) < 104:
             raise ValueError("truncated QCOW2 v3 header")
+        header_length = int.from_bytes(header[100:104], "big")
+        if header_length < 104 or header_length % 8:
+            raise ValueError("invalid QCOW2 v3 header length")
         incompatible = int.from_bytes(header[72:80], "big")
         if incompatible & 0b11:
             raise ValueError("dirty or corrupt QCOW2 image is forbidden")
