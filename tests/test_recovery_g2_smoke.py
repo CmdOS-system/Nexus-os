@@ -11,7 +11,7 @@ from recovery_g2.smoke import smoke_test
 class SmokeTests(unittest.TestCase):
     def test_smoke_uses_private_paths_and_never_claims_boot(self):
         def fake_create(args, **kwargs):
-            Path(args[-2]).write_bytes(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(96))
+            Path(args[-2]).write_bytes(bytes.fromhex("514649fb") + (3).to_bytes(4, "big") + bytes(92) + (104).to_bytes(4, "big"))
             return SimpleNamespace(returncode=0)
         with patch("recovery_g2.smoke.shutil.which", return_value="/usr/bin/qemu-img"), \
              patch("recovery_g2.smoke.subprocess.run", side_effect=fake_create), \
