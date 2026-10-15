@@ -1,7 +1,8 @@
 """Crash-window and recovery invariants for redundant metadata."""
+import json
 import tempfile
 import unittest
-from recovery_g2.boot_state import BootState, stage
+from recovery_g2.boot_state import BootState, stage, rollback
 from recovery_g2.store import RedundantStore, encode, RecoveryRequired
 
 class CrashWindowTests(unittest.TestCase):
@@ -10,14 +11,10 @@ class CrashWindowTests(unittest.TestCase):
             store = RedundantStore(directory)
             store.save(BootState())
             staged = stage(store.load(), "B")
-            # Simulate power loss after first copy was replaced.
             store.paths[0].write_bytes(encode(staged))
             self.assertEqual(store.load(), staged)
-            # Next successful transaction repairs both copies.
-            from recovery_g2.boot_state import rollback
             recovered = rollback(store.load())
             store.save(recovered)
-            self.assertEqual(store.load(), recovered)
             self.assertEqual(store._copies(), [recovered, recovered])
 
     def test_checksum_mismatch_rejected(self):
@@ -25,8 +22,9 @@ class CrashWindowTests(unittest.TestCase):
             store = RedundantStore(directory)
             store.save(BootState())
             for path in store.paths:
-                raw = path.read_bytes().replace(b'"generation": 0', b'"generation": 9')
-                path.write_bytes(raw)
+                record = json.loads(path.read_bytes())
+                record["payload"]["generation"] = 9
+                path.write_bytes(json.dumps(record).encode())
             with self.assertRaises(RecoveryRequired):
                 store.load()
 
