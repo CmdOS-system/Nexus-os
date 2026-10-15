@@ -17,11 +17,15 @@ jobs:
   recovery-unit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
       - name: Compile Recovery G2 sources
         run: python -m compileall -q recovery_g2 tests
       - name: Run Recovery G2 unit tests
