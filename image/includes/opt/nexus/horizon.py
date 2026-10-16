@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """Nexus Horizon: keyboard-first application launcher prototype for XFCE."""
-import os
 import subprocess
 import tkinter as tk
-from pathlib import Path
-from tkinter import ttk
 
 # Fixed commands; search text is never interpreted as a shell command.
 APPLICATIONS = (
@@ -14,6 +11,7 @@ APPLICATIONS = (
     ("Settings", "Personalize your desktop", ("xfce4-settings-manager",)),
     ("Nexus Control Center", "AI preferences and system tools", ("/usr/bin/python3", "/opt/nexus/control-center.py")),
     ("Installation Preview", "Inspect an installation plan without writing disks", ("/usr/bin/python3", "/opt/nexus/installer-preview.py")),
+    ("Nexus Agent", "Open your AI assistant", ("/usr/local/bin/nexus-agent",)),
 )
 
 def matching_apps(query):
@@ -32,6 +30,7 @@ class Horizon(tk.Tk):
         self.minsize(560, 460)
         self.configure(bg="#101827")
         self.search = tk.StringVar()
+        self._app_buttons = []
         self.search.trace_add("write", lambda *_: self.render_apps())
         self.bind("<Escape>", lambda _: self.destroy())
         self.bind("<Control-f>", lambda _: self.search_entry.focus_set())
@@ -56,6 +55,7 @@ class Horizon(tk.Tk):
         for child in self.list_frame.winfo_children():
             child.destroy()
         results = matching_apps(self.search.get())
+        self._app_buttons = []
         if not results:
             tk.Label(self.list_frame, text="No matching applications", bg="#101827", fg="#a9b9d0").pack(anchor="w")
         for name, description, command in results:
@@ -63,6 +63,7 @@ class Horizon(tk.Tk):
                                bg="#202d41", fg="#f3f6fc", activebackground="#31516a", activeforeground="white",
                                relief="flat", anchor="w", padx=16, pady=11, font=("Sans", 11))
             button.pack(fill="x", pady=3)
+            self._app_buttons.append(button)
 
     def open_app(self, command):
         try:
