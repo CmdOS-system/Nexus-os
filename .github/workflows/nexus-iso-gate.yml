@@ -5,7 +5,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "image/**"
+      - "image/build.sh"
+      - "image/desktop.list.chroot"
+      - "image/hooks/**"
+      - "image/includes/**"
+      - "image/boot-smoke.sh"
+      - "image/verify-artifact.sh"
       - ".github/workflows/nexus-iso-gate.yml"
 
 permissions:
