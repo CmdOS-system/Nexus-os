@@ -58,6 +58,11 @@ def capture(socket_path, serial_path, output, timeout=240):
             key("esc")
             key("alt", "f2")
             screenshot(output.with_name(output.stem + "-run-dialog.png"))
+            key("esc")
+            key("meta_l", "spc")
+            # TCG guests may need additional time to start Python/Tk.
+            time.sleep(8)
+            screenshot(output.with_name(output.stem + "-horizon.png"))
     if not output.is_file() or output.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
         raise RuntimeError("No valid PNG framebuffer captured")
     print(f"Actual guest framebuffer captured: {output}")

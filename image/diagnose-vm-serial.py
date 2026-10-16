@@ -57,6 +57,10 @@ def collect(socket_path, log_path):
         time.sleep(3)
         client.sendall(b"printf 'NEXUS_SERIAL_%s\\n' AUTH_OK\n")
         wait_for("NEXUS_SERIAL_AUTH_OK", 20)
+        # A serial login can precede LightDM/XFCE. Earlier diagnostics raced X
+        # startup and reported missing authorization before the desktop existed.
+        wait_for("NEXUS_XFCE_SESSION_READY_V1")
+        time.sleep(10)
         # Fixed read-only diagnostic commands, executed only inside the test guest.
         command = (
             "printf '\\nNEXUS_DIAG_BEGIN\\n'; "
