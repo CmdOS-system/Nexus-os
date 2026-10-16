@@ -18,7 +18,7 @@ class HorizonPanel(tk.Tk):
         self.title("Nexus Horizon Panel")
         self.configure(bg=PANEL_BG)
         self.resizable(False, False)
-        self.attributes("-topmost", True)
+        # Preview mode: do not cover maximized apps or override XFCE panel.
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self._position()
         tk.Button(self, text="◈  NEXUS", bg=PANEL_BG, fg=ACCENT, activebackground="#202d41",
