@@ -49,13 +49,21 @@ jobs:
       - name: Install virtual display and Tk
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xauth python3-tk
+          sudo apt-get install -y xvfb xauth python3-tk python3-pil
       - name: Exercise installer read-only UI
         run: xvfb-run -a /usr/bin/python3 agent/tests/gui_smoke.py
       - name: Exercise Nexus Control Center widgets
         run: xvfb-run -a /usr/bin/python3 agent/tests/control_center_gui_smoke.py
       - name: Exercise Nexus Horizon graphical launcher
         run: xvfb-run -a /usr/bin/python3 agent/tests/horizon_gui_smoke.py
+      - name: Capture real Nexus Horizon screenshot
+        run: xvfb-run -a -s "-screen 0 1024x768x24" /usr/bin/python3 agent/tests/horizon_screenshot.py
+      - name: Publish Nexus Horizon screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-horizon-visual-preview
+          path: nexus-horizon-preview.png
+          if-no-files-found: error
 
   image-staging:
     name: Installer runtime staging (no ISO)
