@@ -54,6 +54,20 @@ class InstallerPlanTests(unittest.TestCase):
         with self.assertRaises(UnsafeTarget):
             plan_install(inventory, "/dev/vdb")
 
+    def test_rejects_duplicate_child_path(self):
+        inventory = self.inventory()
+        inventory["blockdevices"][0]["children"].append(
+            {"path": "/dev/vdb1", "type": "part", "mountpoints": [None]}
+        )
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/vdb")
+
+    def test_rejects_missing_child_path(self):
+        inventory = self.inventory()
+        del inventory["blockdevices"][0]["children"][0]["path"]
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/vdb")
+
     def test_rejects_ambiguous_identity(self):
         inventory = self.inventory()
         inventory["blockdevices"].append(dict(inventory["blockdevices"][0]))
