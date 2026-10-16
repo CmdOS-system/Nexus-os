@@ -45,17 +45,16 @@ class Preview(tk.Tk):
         self.show("Scanning read-only inventory…")
         try:
             inventory = capture_inventory()
-            devices = [d for d in inventory["blockdevices"] if isinstance(d, dict) and d.get("type") == "disk"]
-            self.devices = [d.get("path") for d in devices if isinstance(d.get("path"), str)]
+            report = inspect(inventory)
+            self.devices = [item["path"] for item in report["disks"] if item["eligible"]]
             self.inventory = inventory
             self.choice.configure(values=self.devices)
-            report = inspect(inventory)
             lines = ["Disk readiness (read-only):"]
             for item in report["disks"]:
                 status = "READY FOR PREVIEW" if item["eligible"] else "REJECTED"
                 detail = "" if item["eligible"] else f" — {item['reason']}"
                 lines.append(f"{item['path']}: {status}{detail}")
-            lines.append("\nSelect a disk and review its safety checks. No changes will be made.")
+            lines.append("\nOnly eligible disks are selectable. Review is read-only; no changes will be made.")
             self.show("\n".join(lines))
         except UnsafeTarget as exc:
             self.show(f"Disk inventory unavailable: {exc}")
@@ -63,6 +62,10 @@ class Preview(tk.Tk):
     def review(self):
         if self.inventory is None or not self.target.get():
             messagebox.showwarning("Nexus OS", "Refresh inventory and select a disk first.")
+            return
+        if self.target.get() not in self.devices:
+            self.target.set("")
+            self.show("Target rejected: disk is not eligible in the current inventory. No disk changes were made.")
             return
         try:
             # Re-enumerate before previewing: disk topology may have changed since Refresh.
