@@ -1,0 +1,90 @@
+name: Nexus ISO Desktop Capture
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/nexus-vm-screenshot.yml'
+      - 'image/capture-vm.py'
+      - 'image/diagnose-vm-serial.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  capture-verified-iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU and UEFI firmware
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf python3-pil
+      - name: Retrieve exact verified candidate
+        run: |
+          for attempt in $(seq 1 20); do
+            if gh run download 38978527786 --repo CmdOS-system/Nexus-os --name nexus-os-candidate-98e23179b2feddbb4fc8e4ec6abb26c675f24c81 --dir candidate; then
+              checksums=$(find candidate -name SHA256SUMS -print -quit)
+              test -n "$checksums"
+              cd "$(dirname "$checksums")"
+              sha256sum -c SHA256SUMS
+              exit 0
+            fi
+            sleep 15
+          done
+          exit 1
+      - name: Boot candidate and capture actual desktop
+        run: |
+          set -euo pipefail
+          iso=$(find "$PWD/candidate" -name '*.iso' -print -quit)
+          test -n "$iso"
+          echo "Candidate: $iso"
+          firmware=""
+          for candidate_firmware in /usr/share/OVMF/OVMF_CODE.fd /usr/share/ovmf/OVMF.fd /usr/share/OVMF/OVMF_CODE_4M.fd; do
+            if test -r "$candidate_firmware"; then firmware="$candidate_firmware"; break; fi
+          done
+          test -n "$firmware" || { echo "No readable UEFI firmware" >&2; exit 1; }
+          echo "Firmware: $firmware"
+          sha256sum "$iso" > nexus-vm-iso.sha256
+          qemu-system-x86_64 -machine q35,accel=tcg -m 2048 -smp 2 -boot d \
+            -drive if=pflash,format=raw,readonly=on,file="$firmware" \
+            -cdrom "$iso" -display none -vga std -serial unix:/tmp/nexus-serial.sock,server=on,wait=off \
+            -qmp unix:/tmp/nexus-capture.sock,server=on,wait=off \
+            -monitor none -no-reboot -snapshot > nexus-vm-qemu.log 2>&1 &
+          vm_pid=$!
+          trap 'kill "$vm_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
+          python3 image/diagnose-vm-serial.py /tmp/nexus-serial.sock nexus-vm-serial.log > nexus-serial-client.log 2>&1 &
+          serial_pid=$!
+          trap 'kill "$vm_pid" "$serial_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
+          python3 image/capture-vm.py /tmp/nexus-capture.sock nexus-vm-serial.log nexus-iso-desktop.png
+      - name: Reject blank visual evidence
+        run: |
+          /usr/bin/python3 - <<'PYCODE'
+          from PIL import Image
+          from pathlib import Path
+          paths = list(Path('.').glob('nexus-iso-desktop*.png'))
+          if len(paths) != 3:
+              raise SystemExit('Expected three guest screenshots')
+          for path in paths:
+              image = Image.open(path).convert('RGB')
+              visible = sum(max(pixel) > 20 for pixel in image.getdata()) / (image.width * image.height)
+              print(path, 'non-dark fraction', visible)
+              if visible < 0.01:
+                  raise SystemExit('Black framebuffer: desktop visual validation FAILED')
+          PYCODE
+      - name: Preserve screenshot and boot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-iso-desktop-capture
+          path: |
+            nexus-iso-desktop*.png
+            nexus-vm-serial.log
+            nexus-vm-qemu.log
+            nexus-serial-client.log
+            nexus-vm-iso.sha256
+          if-no-files-found: warn
