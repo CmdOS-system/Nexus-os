@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from local_model_diagnostics import check_local_model, OLLAMA_TAGS_URL, _NoRedirect, _open_local_tags
+from urllib.request import ProxyHandler
 
 class Response:
     status = 200
@@ -48,7 +49,10 @@ class LocalModelTests(unittest.TestCase):
     @patch("local_model_diagnostics.build_opener")
     def test_local_probe_uses_redirect_blocking_handler(self, build):
         _open_local_tags(2.0)
-        self.assertIs(build.call_args.args[0], _NoRedirect)
+        handlers = build.call_args.args
+        self.assertIsInstance(handlers[0], ProxyHandler)
+        self.assertEqual(handlers[0].proxies, {})
+        self.assertIs(handlers[1], _NoRedirect)
         build.return_value.open.assert_called_once_with(OLLAMA_TAGS_URL, timeout=2.0)
 
     def test_rejects_excessive_timeout(self):
