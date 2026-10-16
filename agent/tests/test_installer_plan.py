@@ -83,6 +83,12 @@ class InstallerPlanTests(unittest.TestCase):
         with self.assertRaises(UnsafeTarget):
             plan_install(inventory, "/dev/vdb")
 
+    def test_rejects_mapped_child(self):
+        inventory = self.inventory()
+        inventory["blockdevices"][0]["children"] = [{"path": "/dev/mapper/data", "type": "crypt", "mountpoints": []}]
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/vdb")
+
     def test_rejects_missing_child_path(self):
         inventory = self.inventory()
         del inventory["blockdevices"][0]["children"][0]["path"]
