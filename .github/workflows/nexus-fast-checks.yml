@@ -53,6 +53,21 @@ jobs:
       - name: Exercise installer read-only UI
         run: xvfb-run -a /usr/bin/python3 agent/tests/gui_smoke.py
 
+  image-staging:
+    name: Installer runtime staging (no ISO)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify image runtime modules and staged launcher imports
+        run: |
+          bash image/validate.sh
+          test -s agent/installer_preflight.py
+          test -s image/includes/opt/nexus/installer-preview.py
+          python3 -m py_compile agent/installer_preflight.py image/includes/opt/nexus/installer-preview.py
+          grep -q "from installer_preflight import inspect" image/includes/opt/nexus/installer-preview.py
+          grep -q "installer_preflight.py" image/build.sh
+          echo "Installer runtime staging checks passed without ISO rebuild"
+
   image-static:
     name: Image static validation
     runs-on: ubuntu-24.04
