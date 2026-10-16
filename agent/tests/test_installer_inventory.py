@@ -5,11 +5,19 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from installer_inventory import LSBLK_COMMAND, capture_inventory
+from installer_inventory import LSBLK_COMMAND, capture_inventory, require_unchanged_inventory
 from installer_plan import UnsafeTarget
 
 
 class InventoryTests(unittest.TestCase):
+    def test_inventory_freshness_guard(self):
+        before = {"blockdevices": [{"path": "/dev/vdb", "size": 20000000000}]}
+        self.assertEqual(require_unchanged_inventory(before, dict(before)), before)
+        with self.assertRaises(UnsafeTarget):
+            require_unchanged_inventory(before, {"blockdevices": []})
+        with self.assertRaises(UnsafeTarget):
+            require_unchanged_inventory(before, {"unexpected": []})
+
     @patch("installer_inventory.subprocess.run")
     def test_readonly_command_and_json(self, run):
         run.return_value.stdout = '{"blockdevices": []}'
