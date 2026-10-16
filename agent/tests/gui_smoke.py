@@ -30,6 +30,7 @@ def run():
             assert str(app.choice.cget("state")) == "readonly"
             assert "/dev/vdb" in app.choice["values"]
             assert "/dev/vdb: READY FOR PREVIEW" in app.result.get("1.0", "end")
+            assert "1 eligible, 0 rejected" in app.result.get("1.0", "end")
             app.target.set("/dev/vdb")
             app.review()
             assert "Installation is DISABLED" in app.result.get("1.0", "end")
@@ -53,6 +54,8 @@ def run():
             output = app.result.get("1.0", "end")
             assert "/dev/vdb: REJECTED" in output
             assert "mounted" in output
+            assert "0 eligible, 1 rejected" in output
+            assert "No eligible disks found" in output
             assert "/dev/vdb" not in app.choice["values"]
             app.target.set("/dev/vdb")  # Programmatic injection must not bypass UI eligibility.
             app.review()
