@@ -25,7 +25,10 @@ class App(tk.Tk):
         self.mode=tk.StringVar(value="off")
         self.provider=tk.StringVar(); self.model=tk.StringVar()
         self.consent=tk.BooleanVar(value=False); self.api_key=tk.StringVar()
+        self.status=tk.StringVar(value="AI status: Off — no AI requests")
+        self.mode.trace_add("write",self._update_status)
         self._build(); self._load()
+        self._update_status()
 
     def _build(self):
         frame=ttk.Frame(self,padding=24); frame.pack(fill="both",expand=True)
@@ -33,7 +36,8 @@ class App(tk.Tk):
         ttk.Label(frame,text="Your system, your choices — local controls first.",font=("",10)).pack(anchor="w",pady=(2,14))
         ttk.Separator(frame,orient="horizontal").pack(fill="x",pady=(0,12))
         ttk.Label(frame,text="Nexus AI",font=("",15,"bold")).pack(anchor="w")
-        ttk.Label(frame,text="Choose how Nexus Agent may use AI. API keys are never stored here.").pack(anchor="w",pady=(4,20))
+        ttk.Label(frame,text="Choose how Nexus Agent may use AI. API keys are never stored here.").pack(anchor="w",pady=(4,8))
+        ttk.Label(frame,textvariable=self.status).pack(anchor="w",pady=(0,12))
         form=ttk.Frame(frame); form.pack(fill="x")
         ttk.Label(form,text="Mode").grid(row=0,column=0,sticky="w",pady=6)
         ttk.Combobox(form,textvariable=self.mode,values=MODES,state="readonly").grid(row=0,column=1,sticky="ew",pady=6)
@@ -50,6 +54,15 @@ class App(tk.Tk):
         ttk.Label(frame,text="System tools",font=("",15,"bold")).pack(anchor="w")
         ttk.Label(frame,text="Installation is disabled. You can inspect disks and review a plan safely.").pack(anchor="w",pady=(4,8))
         ttk.Button(frame,text="Open installation preview (read-only)",command=self._open_installer_preview).pack(anchor="w")
+
+    def _update_status(self, *_):
+        descriptions = {
+            "off": "AI status: Off — no AI requests",
+            "local": "AI status: Local — configured for on-device inference",
+            "cloud": "AI status: Cloud — requires explicit consent and credentials",
+            "hybrid": "AI status: Hybrid — local and cloud routing with consent",
+        }
+        self.status.set(descriptions.get(self.mode.get(), "AI status: Invalid mode"))
 
     def _open_installer_preview(self):
         preview = Path("/opt/nexus/installer-preview.py")
