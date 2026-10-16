@@ -1,9 +1,18 @@
 """Read-only Ollama model availability probe; loopback only, no prompts or credentials."""
 import json
-from urllib.request import urlopen
-from urllib.error import URLError
+from urllib.request import build_opener, HTTPRedirectHandler
+from urllib.error import URLError, HTTPError
 
 OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+def _open_local_tags(timeout):
+    # Do not follow a malicious local service redirect to the public internet.
+    opener = build_opener(_NoRedirect)
+    return opener.open(OLLAMA_TAGS_URL, timeout=timeout)
 
 def check_local_model(model: str, *, timeout: float = 2.0) -> tuple[bool, str]:
     """Return availability without invoking inference or revealing network errors."""
@@ -12,7 +21,7 @@ def check_local_model(model: str, *, timeout: float = 2.0) -> tuple[bool, str]:
     if not isinstance(timeout, (int, float)) or not 0 < timeout <= 10:
         raise ValueError("Invalid probe timeout")
     try:
-        with urlopen(OLLAMA_TAGS_URL, timeout=timeout) as response:
+        with _open_local_tags(timeout) as response:
             if response.status != 200:
                 return False, "Local model service is not ready."
             payload = response.read(1024 * 1024 + 1)
