@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus Horizon
+Comment=Search and launch applications from one place
+Exec=/usr/bin/python3 /opt/nexus/horizon.py
+Icon=system-search
+Terminal=false
+Categories=Utility;System;
