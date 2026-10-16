@@ -20,6 +20,12 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertEqual(plan.serial, "DISPOSABLE-TEST-DISK")
         self.assertIn("WOULD BE ERASED", plan.warning)
 
+    def test_rejects_noncanonical_path(self):
+        inventory = self.inventory()
+        inventory["blockdevices"][0]["path"] = "/dev/disk/../vdb"
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/disk/../vdb")
+
     def test_rejects_partition_target(self):
         with self.assertRaises(UnsafeTarget):
             plan_install(self.inventory(), "/dev/vdb1")
