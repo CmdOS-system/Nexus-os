@@ -80,6 +80,23 @@ def run():
         finally:
             app.destroy()
 
+    # The review must use a freshly captured snapshot and pass the selected target unchanged.
+    with (patch.object(module, "capture_inventory", return_value=INVENTORY),
+          patch.object(module, "plan_install") as planner):
+        planner.return_value.path = "/dev/vdb"
+        planner.return_value.model = "Virtual test disk"
+        planner.return_value.serial = "TEST-DISK-001"
+        planner.return_value.size_bytes = 20 * 1024 ** 3
+        planner.return_value.warning = "Read-only preview"
+        app = module.Preview()
+        try:
+            app.target.set("/dev/vdb")
+            app.review()
+            planner.assert_called_once_with(INVENTORY, "/dev/vdb")
+            assert "Installation is DISABLED" in app.result.get("1.0", "end")
+        finally:
+            app.destroy()
+
     print("Nexus installer GUI smoke passed (no disk writes).")
 
 
