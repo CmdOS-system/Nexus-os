@@ -8,6 +8,7 @@ from tkinter import ttk, messagebox
 sys.path.insert(0, str(Path("/opt/nexus/agent")))
 from installer_inventory import capture_inventory, require_unchanged_inventory
 from installer_plan import plan_install, UnsafeTarget
+from installer_preflight import inspect
 
 
 class Preview(tk.Tk):
@@ -48,7 +49,14 @@ class Preview(tk.Tk):
             self.devices = [d.get("path") for d in devices if isinstance(d.get("path"), str)]
             self.inventory = inventory
             self.choice.configure(values=self.devices)
-            self.show("Select a disk and review its safety checks. No changes will be made.")
+            report = inspect(inventory)
+            lines = ["Disk readiness (read-only):"]
+            for item in report["disks"]:
+                status = "READY FOR PREVIEW" if item["eligible"] else "REJECTED"
+                detail = "" if item["eligible"] else f" — {item['reason']}"
+                lines.append(f"{item['path']}: {status}{detail}")
+            lines.append("\\nSelect a disk and review its safety checks. No changes will be made.")
+            self.show("\\n".join(lines))
         except UnsafeTarget as exc:
             self.show(f"Disk inventory unavailable: {exc}")
 
