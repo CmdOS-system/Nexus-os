@@ -57,7 +57,16 @@ class Preview(tk.Tk):
             messagebox.showwarning("Nexus OS", "Refresh inventory and select a disk first.")
             return
         try:
-            plan = plan_install(self.inventory, self.target.get())
+            # Re-enumerate before previewing: disk topology may have changed since Refresh.
+            current_inventory = capture_inventory()
+            if current_inventory != self.inventory:
+                self.inventory = None
+                self.devices = []
+                self.target.set("")
+                self.choice.configure(values=[])
+                self.show("Disk inventory changed. Refresh and select the target again. No disk changes were made.")
+                return
+            plan = plan_install(current_inventory, self.target.get())
             self.show(f"Disk: {plan.path}\nModel: {plan.model}\nSerial: {plan.serial}\nSize: {plan.size_bytes:,} bytes\n\n{plan.warning}\n\nInstallation is DISABLED in this preview.")
         except UnsafeTarget as exc:
             self.show(f"Target rejected: {exc}\n\nNo disk changes were made.")
