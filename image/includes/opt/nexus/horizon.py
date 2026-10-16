@@ -11,7 +11,7 @@ APPLICATIONS = (
     ("Settings", "Personalize your desktop", ("xfce4-settings-manager",)),
     ("Nexus Control Center", "AI preferences and system tools", ("/usr/bin/python3", "/opt/nexus/control-center.py")),
     ("Installation Preview", "Inspect an installation plan without writing disks", ("/usr/bin/python3", "/opt/nexus/installer-preview.py")),
-    ("Nexus Agent", "Open your AI assistant", ("/usr/local/bin/nexus-agent",)),
+    ("Nexus Agent", "Open your AI assistant", ("x-terminal-emulator", "-e", "/usr/local/bin/nexus-agent")),
 )
 
 def matching_apps(query):
