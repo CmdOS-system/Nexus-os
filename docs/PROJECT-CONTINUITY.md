@@ -83,3 +83,13 @@ Se recuperó contexto de Acceso a GitHub, Nexus OS desarrollo autónomo y Avanza
 - [PR #2](https://github.com/CmdOS-system/Nexus-os/pull/2), `08c66bcbee51bcb04d5cdb85f91c1f568ee03ba4`: consentimiento booleano y lectura acotada ligada a identidad del archivo. Se reprodujeron fallos previos. 177 unit tests y validación de imagen locales aprobados; los cinco jobs de [Fast Checks 38978238994](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978238994) también finalizaron con success. Continúa en borrador, sin integrar ni reconstruir ISO.
 - [PR #3](https://github.com/CmdOS-system/Nexus-os/pull/3), `0aef476a4def78051c487044826d894a78535869`: Agent toma el modelo local Ollama guardado en Control Center si no hay override explícito; rechaza configuración off/cloud/hybrid/inválida. 180 unit tests locales aprobados, sintaxis Python/shell y image/validate.sh correctos. Borrador independiente basado en main; CI y ejecución con modelo real/ISO pendientes.
 - Ambas propuestas recuperan partes concretas de PR #1 sin incorporar sus cambios históricos conflictivos. Revisar compatibilidad conjunta antes de integrar; no cerrar #1 mientras falten sus otros cambios.
+
+## Integración confirmada — 2026-10-16
+
+PR #2 integrada mediante `342024e07163d9b0016579e9868cee76f712fa9f`; PR #3 integrada mediante `98e23179b2feddbb4fc8e4ec6abb26c675f24c81`. Sustituye el estado anterior de borrador de ambas propuestas.
+
+- PR #3 Fast Checks [38978387910](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978387910): success; PR #2 también verde según registro anterior.
+- Combinación de ambos cambios sobre main actualizada: 184 pruebas unitarias locales aprobadas, compilación Python y image/validate.sh aprobados.
+- [ISO Gate integrado 38978527786](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978527786): ejecución iniciada y observada in_progress para `98e23179b2feddbb4fc8e4ec6abb26c675f24c81`; aún no atribuir éxito ni nueva ISO verificada.
+- [Fast Checks integrado 38978527776](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978527776): observado pending al corte.
+- Siguiente paso: inspeccionar ambas ejecuciones integradas y sus artefactos; probar Agent con un modelo Ollama real. La prueba de modelo real no ha ocurrido en esta sesión.
