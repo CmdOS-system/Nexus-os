@@ -41,6 +41,18 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s agent/tests -p 'test_*.py' -v
 
+  gui-smoke:
+    name: Installer GUI smoke (Xvfb)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install virtual display and Tk
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth python3-tk
+      - name: Exercise installer read-only UI
+        run: xvfb-run -a /usr/bin/python3 agent/tests/gui_smoke.py
+
   image-static:
     name: Image static validation
     runs-on: ubuntu-24.04
