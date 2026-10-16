@@ -41,8 +41,13 @@ jobs:
           set -euo pipefail
           iso=$(find "$PWD/candidate" -name '*.iso' -print -quit)
           test -n "$iso"
-          firmware=/usr/share/OVMF/OVMF_CODE.fd
-          test -r "$firmware"
+          echo "Candidate: $iso"
+          firmware=""
+          for candidate_firmware in /usr/share/OVMF/OVMF_CODE.fd /usr/share/ovmf/OVMF.fd /usr/share/OVMF/OVMF_CODE_4M.fd; do
+            if test -r "$candidate_firmware"; then firmware="$candidate_firmware"; break; fi
+          done
+          test -n "$firmware" || { echo "No readable UEFI firmware" >&2; exit 1; }
+          echo "Firmware: $firmware"
           sha256sum "$iso" > nexus-vm-iso.sha256
           qemu-system-x86_64 -machine q35,accel=tcg -m 2048 -smp 2 -boot d \
             -drive if=pflash,format=raw,readonly=on,file="$firmware" \
@@ -58,7 +63,7 @@ jobs:
         with:
           name: nexus-iso-desktop-capture
           path: |
-            nexus-iso-desktop.png
+            nexus-iso-desktop*.png
             nexus-vm-serial.log
             nexus-vm-qemu.log
             nexus-vm-iso.sha256
