@@ -7,10 +7,7 @@ if [ ! -d "$AGENT_DIR" ]; then
   exit 1
 fi
 
-MODEL="${NEXUS_AI_MODEL:-}"
-if [ -z "$MODEL" ]; then
-  printf '%s\n' "Set NEXUS_AI_MODEL to a local model before starting Nexus Agent." >&2
-  exit 2
+if [ -n "${NEXUS_AI_MODEL:-}" ]; then
+  exec python3 "$AGENT_DIR/cli.py" --model "$NEXUS_AI_MODEL"
 fi
-
-exec python3 "$AGENT_DIR/cli.py" --model "$MODEL"
+exec python3 "$AGENT_DIR/cli.py"
