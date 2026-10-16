@@ -112,3 +112,9 @@ El usuario solicitó captura del sistema de pruebas arrancado, no sólo el rende
 ## Bloqueo visual Live descubierto — 2026-10-16
 
 Se generaron e inspeccionaron tres capturas REALES de la ISO en QEMU en run 38980101821, artefacto 12080767543: todas muestran pantalla negra (apenas puntero). La captura se ejecutó, pero el escritorio visual NO está validado. Los marcadores XFCE/services no bastan para acreditar UI utilizable. Priorizar diagnóstico de pantalla/VT, inicio de XFCE, DPMS y compositor antes de pulido visual o declarar escritorio listo. Ver `docs/bugs/live-iso-black-framebuffer-2026-10-16.md`. PR #5 sigue sin integrar. Primera ejecución de captura falló antes de QEMU; el segundo intento sí produjo los PNG.
+
+## Escritorio Live visible confirmado — 2026-10-16
+
+El run 38980833818 terminó con success. Se inspeccionaron imágenes reales de la misma ISO (checksum sin cambios): escritorio XFCE y menú Applications visibles. La captura ahora espera 45 s tras readiness y rechaza PNG casi negros. PR #5 integrada en 6ac50336d246903606b89c4c5a706ea88f6e48c0; Fast Checks 38980839173 aprobó. Las imágenes anteriores negras apuntan a captura demasiado temprana; causa exacta de la demora pendiente. No afirmar reparación de la ISO, ya que no fue modificada. Alt-F2 no mostró el diálogo en la tercera imagen; esa acción no está validada.
+
+Estado: arranque Live, sesión y salida visual básica comprobados; diseño Horizon completo, interacción de todas las apps, IA dentro de ISO, instalación/persistencia y compatibilidad Windows/PS5 siguen pendientes. Próximo paso: capturar y ejercitar Nexus Control Center/Horizon dentro de la ISO y mejorar la condición de readiness basada en UI visible.
