@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Nexus Control Center prototype using the shared validated AI settings model."""
 import sys
+import subprocess
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk, messagebox
@@ -20,7 +21,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Nexus Control Center")
-        self.geometry("560x360"); self.minsize(520,320)
+        self.geometry("640x500"); self.minsize(580,440)
         self.mode=tk.StringVar(value="off")
         self.provider=tk.StringVar(); self.model=tk.StringVar()
         self.consent=tk.BooleanVar(value=False); self.api_key=tk.StringVar()
@@ -28,7 +29,10 @@ class App(tk.Tk):
 
     def _build(self):
         frame=ttk.Frame(self,padding=24); frame.pack(fill="both",expand=True)
-        ttk.Label(frame,text="Nexus AI",font=("",18,"bold")).pack(anchor="w")
+        ttk.Label(frame,text="Nexus Control Center",font=("",20,"bold")).pack(anchor="w")
+        ttk.Label(frame,text="Your system, your choices — local controls first.",font=("",10)).pack(anchor="w",pady=(2,14))
+        ttk.Separator(frame,orient="horizontal").pack(fill="x",pady=(0,12))
+        ttk.Label(frame,text="Nexus AI",font=("",15,"bold")).pack(anchor="w")
         ttk.Label(frame,text="Choose how Nexus Agent may use AI. API keys are never stored here.").pack(anchor="w",pady=(4,20))
         form=ttk.Frame(frame); form.pack(fill="x")
         ttk.Label(form,text="Mode").grid(row=0,column=0,sticky="w",pady=6)
@@ -41,7 +45,21 @@ class App(tk.Tk):
         ttk.Entry(form,textvariable=self.api_key,show="•").grid(row=3,column=1,sticky="ew",pady=6)
         ttk.Checkbutton(form,text="Allow cloud AI for this configuration",variable=self.consent).grid(row=4,column=1,sticky="w",pady=8)
         form.columnconfigure(1,weight=1)
-        ttk.Button(frame,text="Save",command=self._save).pack(anchor="e",pady=18)
+        ttk.Button(frame,text="Save AI settings",command=self._save).pack(anchor="e",pady=14)
+        ttk.Separator(frame,orient="horizontal").pack(fill="x",pady=(2,12))
+        ttk.Label(frame,text="System tools",font=("",15,"bold")).pack(anchor="w")
+        ttk.Label(frame,text="Installation is disabled. You can inspect disks and review a plan safely.").pack(anchor="w",pady=(4,8))
+        ttk.Button(frame,text="Open installation preview (read-only)",command=self._open_installer_preview).pack(anchor="w")
+
+    def _open_installer_preview(self):
+        preview = Path("/opt/nexus/installer-preview.py")
+        if not preview.is_file():
+            messagebox.showerror("Nexus OS", "Installation preview is not available in this system.")
+            return
+        try:
+            subprocess.Popen(["/usr/bin/python3", str(preview)], stdin=subprocess.DEVNULL, close_fds=True)
+        except OSError as exc:
+            messagebox.showerror("Nexus OS", f"Could not open installation preview: {exc}")
 
     def _load(self):
         try:
