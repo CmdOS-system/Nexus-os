@@ -25,3 +25,11 @@ La primera ejecución de captura 38979740620 falló antes de iniciar QEMU. Se am
 - Añadir rechazo de capturas casi uniformes al gate visual, conservando imagen y logs como diagnóstico.
 
 No se ha confirmado ninguna de esas hipótesis. No presentar capturas Xvfb de componentes como sustituto de esta evidencia Live.
+
+## Resultado posterior: escritorio visible en la misma ISO
+
+Run 38980833818 (código e0174cf0) finalizó con success. Se descargó artefacto 12080953164 y se inspeccionaron los PNG: fondo XFCE, Home/File System/Trash, paneles y menú Applications visibles. El intento Alt-F2 no mostró un diálogo en la captura; no se valida esa interacción.
+
+La ISO y su checksum no cambiaron. El capturador pasó de esperar 5 a 45 segundos tras readiness y recogió diagnósticos de consola de solo lectura. Esto apunta a captura prematura, no demuestra una reparación del motor gráfico o de la ISO. La causa exacta del retraso de inicio sigue pendiente; los diagnósticos se recogieron tan pronto que parte de la sesión X aún no estaba disponible.
+
+Se añadió un gate que exige tres PNG y rechaza imágenes casi negras (menos del 1% de píxeles con algún canal superior a 20). Es una salvaguarda básica contra capturas vacías, no una prueba completa de calidad de UI. Las capturas negras originales fallan ese criterio. PR #5 integrada en 6ac50336d246903606b89c4c5a706ea88f6e48c0.
