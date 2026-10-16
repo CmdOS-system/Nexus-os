@@ -62,6 +62,15 @@ class InstallerPlanTests(unittest.TestCase):
         with self.assertRaises(UnsafeTarget):
             plan_install(inventory, "/dev/vdb")
 
+    def test_rejects_unknown_mount_status_on_other_disk(self):
+        inventory = self.inventory()
+        inventory["blockdevices"].append({
+            "path": "/dev/vda", "type": "disk", "serial": "SYSTEM",
+            "mountpoints": None,
+        })
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/vdb")
+
     def test_rejects_missing_child_path(self):
         inventory = self.inventory()
         del inventory["blockdevices"][0]["children"][0]["path"]
