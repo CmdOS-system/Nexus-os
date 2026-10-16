@@ -128,3 +128,12 @@ Estado: arranque Live, sesión y salida visual básica comprobados; diseño Hori
 - Fast Checks 38982260992: cinco jobs success para el ajuste de diagnóstico. Fast Checks 38982642570: success para `e3d58916cda6982c4ca22bae3b367fb3435ed021`, que también añade un intento Super+Espacio y cuarta captura de Horizon.
 - Captura extendida 38982639554: observada in_progress al registrar esta nota. Falta inspeccionar `nexus-iso-desktop-horizon.png`; un PNG no negro no demuestra por sí solo que se abrió Horizon.
 - Siguiente paso concreto: inspeccionar el artefacto de 38982639554, confirmar visualmente el lanzador o diagnosticar el atajo; integrar PR #6 cuando termine la validación del head vigente.
+
+
+## Resultado de la captura extendida — 2026-10-16
+
+- Run 38982639554 terminó con success para `e3d58916cda6982c4ca22bae3b367fb3435ed021`; todas sus etapas fueron inspeccionadas. Artefacto `12081613752`, ZIP SHA256 `9c190d1ac7db00b28521e83ca92616cf19ebc770981776f341634b8cdc8e6865`, descargado localmente.
+- Se inspeccionó `nexus-iso-desktop-horizon.png`: muestra Application Finder de XFCE con lista de comandos, NO Nexus Horizon. El éxito del workflow acredita captura y rechazo básico de imágenes negras, no la interacción Horizon.
+- PR #6 integrada en `b5a7ac744855dc414e67d43b60e53dd1bc89c080`, tras Fast Checks 38982642570 y captura extendida aprobados. Sustituye su estado de borrador registrado arriba.
+- Próximo bloqueo: distinguir latencia de Alt-F2/Escape/Super+Espacio frente a configuración efectiva del atajo en el huésped. Consultar xfconf y archivos/ejecutables Horizon dentro de la ISO; separar cada interacción con esperas verificables. No declarar el lanzador validado hasta verlo y comprobar su respuesta.
+- Progreso global: Live visible y diagnósticos de sesión útiles; proveedor+CLI de IA real ya verificados fuera de ISO. Persisten gates independientes de Horizon Live, instalación/persistencia, IA dentro de ISO/voz y compatibilidad Windows.
