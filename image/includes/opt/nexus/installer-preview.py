@@ -55,8 +55,8 @@ class Preview(tk.Tk):
                 status = "READY FOR PREVIEW" if item["eligible"] else "REJECTED"
                 detail = "" if item["eligible"] else f" — {item['reason']}"
                 lines.append(f"{item['path']}: {status}{detail}")
-            lines.append("\\nSelect a disk and review its safety checks. No changes will be made.")
-            self.show("\\n".join(lines))
+            lines.append("\nSelect a disk and review its safety checks. No changes will be made.")
+            self.show("\n".join(lines))
         except UnsafeTarget as exc:
             self.show(f"Disk inventory unavailable: {exc}")
 
