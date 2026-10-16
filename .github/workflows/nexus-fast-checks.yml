@@ -52,6 +52,8 @@ jobs:
           sudo apt-get install -y xvfb xauth python3-tk
       - name: Exercise installer read-only UI
         run: xvfb-run -a /usr/bin/python3 agent/tests/gui_smoke.py
+      - name: Exercise Nexus Control Center widgets
+        run: xvfb-run -a /usr/bin/python3 agent/tests/control_center_gui_smoke.py
 
   image-staging:
     name: Installer runtime staging (no ISO)
@@ -63,7 +65,7 @@ jobs:
           bash image/validate.sh
           test -s agent/installer_preflight.py
           test -s image/includes/opt/nexus/installer-preview.py
-          python3 -m py_compile agent/installer_preflight.py image/includes/opt/nexus/installer-preview.py
+          python3 -m py_compile agent/installer_preflight.py agent/local_model_diagnostics.py image/includes/opt/nexus/installer-preview.py image/includes/opt/nexus/control-center.py
           grep -q "from installer_preflight import inspect" image/includes/opt/nexus/installer-preview.py
           grep -q "installer_preflight.py" image/build.sh
           grep -q "Open installation preview (read-only)" image/includes/opt/nexus/control-center.py
