@@ -29,11 +29,10 @@ Conversaciones anteriores describen arranque Live UEFI en QEMU, XFCE/LightDM, Ne
 
 ## Próximas acciones por orden
 
-1. Corregir el SyntaxError del smoke del panel Horizon; compilar y ejecutar las pruebas relevantes.
-2. Confirmar Fast Checks verde para el nuevo SHA y registrar enlace y resultado.
-3. Revisar los jobs y artefactos de ISO Gate; documentar exactamente qué se construyó y qué se arrancó.
-4. Actualizar build-and-test.md a partir de esa evidencia.
-5. Continuar instalador y persistencia en VM, luego integración de IA y matriz de compatibilidad, siguiendo release-gates.md.
+1. Revisar PR #1 de seguridad BYOAI/file grants (abierta y sin integrar al revisar); comprobar regresiones y compatibilidad antes de integrarla.
+2. Contrastar artefactos de ISO Gate y pruebas visuales con el SHA y checksum exactos; comprobar la integración panel+lanzador y el atajo real.
+3. Continuar instalador y persistencia en VM, luego integración de IA y matriz Wine/Proton, siguiendo release-gates.md.
+4. Mantener actualizados los documentos que todavía describen prototipos ya evolucionados, sin convertir propuestas en funciones entregadas.
 
 ## Protocolo de continuidad
 
@@ -42,3 +41,39 @@ En cada sesión, leer este archivo, comprobar main y Actions actuales, conservar
 ## Progreso global
 
 Sin porcentaje recalculado: no existe en esta revisión una matriz ponderada que respalde un porcentaje global. El 70% citado en conversaciones anteriores es una estimación histórica, no una medición actual. Comunicar avance por hitos de release y evidencia verificable.
+
+## Consolidación adicional — 2026-10-16
+
+### Trabajo concluido en esta sesión
+
+- Corrección de sintaxis guardada en `378a6388974505059d7b1d3cc6640eda6d431d7e`.
+- [Fast Checks 38977578555](https://github.com/CmdOS-system/Nexus-os/actions/runs/38977578555): los cinco jobs finalizaron con success (Python 3.12, Python 3.13, smoke gráfico, validación estática y staging de instalador).
+- ISO Gate 38935133161: se inspeccionaron los pasos; build, checksum, GRUB, smoke UEFI y cargas de artefactos finalizaron con success. No se descargaron ni inspeccionaron los binarios en esta consolidación. El script actual exige marcadores Live, pila gráfica y sesión XFCE; no prueba calidad visual ni instalación.
+- `docs/build-and-test.md` actualizado con estas evidencias en `72ae1c5a3fe3123d1f678da2e4af66529802ee9c`.
+- PR #1 `Security hardening: strict BYOAI consent and safe file grants`: abierta, no integrada, head observado `eb35e7b879ca849b31e58d630a6f2ad9830ac052`.
+
+### Requisitos recuperados de los chats y contraste con el proyecto
+
+Se recuperó contexto de Acceso a GitHub, Nexus OS desarrollo autónomo y Avanzar Nexus OS hasta las 8. No se realizó una lectura exhaustiva de cada mensaje ni se obtuvo acceso directo a la configuración/instrucciones privadas del proyecto ChatGPT. La documentación del repositorio sí se leyó directamente.
+
+- Prioridad del usuario: avanzar autónomamente, investigar y resolver fallos con pruebas reales; comunicar progreso global y facilitar enlaces de ejecución.
+- Experiencia deseada: escritorio pulido, instalación sencilla, IA con voz y acciones del sistema, elección de proveedor y compatibilidad práctica Windows/macOS/Android. Esta visión no equivale a compatibilidad universal demostrada.
+- Compatibilidad Windows: aprovechar Wine/Proton/Bottles/Lutris/Winetricks/DXVK/VKD3D mediante integración Nexus; no reimplementar Wine. Exigir ejecución real de aplicaciones objetivo.
+- Investigación solicitada: Bottles, REA (github.com/morluto/rea), Chromium/ChromiumOS y compatibilidad PS5. Son líneas de investigación; no capacidades entregadas o certificadas.
+- Base de trabajo recuperada: Debian 13/live-build y XFCE; separar validación Live del instalador, IA, actualizaciones/recuperación y hardware.
+- `docs/INSTALLER-ARCHITECTURE.md` mantiene instalación bloqueada: planning de solo lectura, autorización por dispositivo y pruebas destructivas exclusivamente QCOW2 desechables.
+- `docs/NEXUS-HORIZON-DESIGN.md` contiene dirección visual y criterios de accesibilidad aún propuestos. El lanzador/panel existente y sus smoke tests no prueban que se cumpla toda esa propuesta.
+- Validar UEFI con firmware de solo lectura, estado de variables separado cuando aplique y segundo arranque del sistema instalado sin ISO. No confundir boot Live con persistencia instalada.
+- A/B, Secure Boot y dm-verity requieren pruebas de su cadena de confianza y recuperación; un marcador serial no certifica integridad.
+
+### Progreso por hitos a este corte
+
+| Hito | Evidencia y límite |
+| --- | --- |
+| ISO Live y readiness UEFI/XFCE | ISO Gate verde en 1027044; instalación no acreditada |
+| Regresión rápida del arreglo Horizon | Cinco jobs verdes en 378a638 |
+| Diseño visual completo y accesibilidad | Propuesta; aceptación completa pendiente |
+| Instalador persistente | Bloqueado por pruebas E2E de disco virtual y reinicio |
+| IA de extremo a extremo | Prototipos presentes; integración conectada pendiente de evidencia |
+| Compatibilidad Windows/hardware | Matriz de aplicaciones y equipos pendiente |
+| Actualización/recuperación y release | Gates independientes pendientes; sin certificación |
