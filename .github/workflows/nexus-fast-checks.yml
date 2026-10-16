@@ -54,6 +54,8 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 agent/tests/gui_smoke.py
       - name: Exercise Nexus Control Center widgets
         run: xvfb-run -a /usr/bin/python3 agent/tests/control_center_gui_smoke.py
+      - name: Exercise Nexus Horizon graphical launcher
+        run: xvfb-run -a /usr/bin/python3 agent/tests/horizon_gui_smoke.py
 
   image-staging:
     name: Installer runtime staging (no ISO)
