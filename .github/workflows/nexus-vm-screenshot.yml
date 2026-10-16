@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/nexus-vm-screenshot.yml'
       - 'image/capture-vm.py'
+      - 'image/diagnose-vm-serial.py'
 
 permissions:
   contents: read
@@ -22,7 +23,7 @@ jobs:
       - name: Install QEMU and UEFI firmware
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 ovmf
+          sudo apt-get install -y qemu-system-x86 ovmf python3-pil
       - name: Retrieve exact verified candidate
         run: |
           for attempt in $(seq 1 20); do
@@ -51,12 +52,30 @@ jobs:
           sha256sum "$iso" > nexus-vm-iso.sha256
           qemu-system-x86_64 -machine q35,accel=tcg -m 2048 -smp 2 -boot d \
             -drive if=pflash,format=raw,readonly=on,file="$firmware" \
-            -cdrom "$iso" -display none -vga std -serial file:nexus-vm-serial.log \
+            -cdrom "$iso" -display none -vga std -serial unix:/tmp/nexus-serial.sock,server=on,wait=off \
             -qmp unix:/tmp/nexus-capture.sock,server=on,wait=off \
             -monitor none -no-reboot -snapshot > nexus-vm-qemu.log 2>&1 &
           vm_pid=$!
           trap 'kill "$vm_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
+          python3 image/diagnose-vm-serial.py /tmp/nexus-serial.sock nexus-vm-serial.log > nexus-serial-client.log 2>&1 &
+          serial_pid=$!
+          trap 'kill "$vm_pid" "$serial_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
           python3 image/capture-vm.py /tmp/nexus-capture.sock nexus-vm-serial.log nexus-iso-desktop.png
+      - name: Reject blank visual evidence
+        run: |
+          /usr/bin/python3 - <<'PYCODE'
+          from PIL import Image
+          from pathlib import Path
+          paths = list(Path('.').glob('nexus-iso-desktop*.png'))
+          if len(paths) != 3:
+              raise SystemExit('Expected three guest screenshots')
+          for path in paths:
+              image = Image.open(path).convert('RGB')
+              visible = sum(max(pixel) > 20 for pixel in image.getdata()) / (image.width * image.height)
+              print(path, 'non-dark fraction', visible)
+              if visible < 0.01:
+                  raise SystemExit('Black framebuffer: desktop visual validation FAILED')
+          PYCODE
       - name: Preserve screenshot and boot evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,5 +85,6 @@ jobs:
             nexus-iso-desktop*.png
             nexus-vm-serial.log
             nexus-vm-qemu.log
+            nexus-serial-client.log
             nexus-vm-iso.sha256
           if-no-files-found: warn

@@ -21,7 +21,7 @@ def capture(socket_path, serial_path, output, timeout=240):
         time.sleep(1)
     else:
         raise RuntimeError("Guest readiness not observed; no desktop screenshot claimed")
-    time.sleep(5)
+    time.sleep(45)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(15)
         client.connect(str(socket_path))
