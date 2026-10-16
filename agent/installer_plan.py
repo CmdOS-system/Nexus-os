@@ -36,6 +36,8 @@ def plan_install(inventory: dict, target_path: str) -> InstallPlan:
         raise UnsafeTarget("invalid block-device inventory")
     if not isinstance(target_path, str) or not target_path.startswith("/dev/"):
         raise UnsafeTarget("an explicit /dev/ disk path is required")
+    if target_path != "/dev/" + target_path.removeprefix("/dev/").split("/")[-1] or target_path in ("/dev/.", "/dev/.."):
+        raise UnsafeTarget("target must be a canonical top-level device path")
     devices = inventory["blockdevices"]
     if not devices or any(not isinstance(d, dict) for d in devices):
         raise UnsafeTarget("invalid disk inventory")
