@@ -30,3 +30,14 @@ def capture_inventory(*, timeout: float = 10.0) -> dict:
     if not isinstance(inventory, dict) or not isinstance(inventory.get("blockdevices"), list):
         raise UnsafeTarget("invalid lsblk JSON inventory")
     return inventory
+
+
+def require_unchanged_inventory(previous: dict, current: dict) -> dict:
+    """Fail closed if a read-only inventory snapshot changed between UI steps."""
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        raise UnsafeTarget("disk inventory snapshot is invalid")
+    if not isinstance(previous.get("blockdevices"), list) or not isinstance(current.get("blockdevices"), list):
+        raise UnsafeTarget("disk inventory snapshot is invalid")
+    if previous != current:
+        raise UnsafeTarget("disk inventory changed; refresh and select the target again")
+    return current
