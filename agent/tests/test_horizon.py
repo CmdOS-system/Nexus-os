@@ -15,6 +15,7 @@ class HorizonTests(unittest.TestCase):
         self.assertEqual(horizon.matching_apps("control")[0][0], "Nexus Control Center")
         self.assertEqual(horizon.matching_apps("installation plan")[0][0], "Installation Preview")
         self.assertEqual(horizon.matching_apps("AI assistant")[0][0], "Nexus Agent")
+        self.assertEqual(horizon.matching_apps("AI assistant")[0][2], ("x-terminal-emulator", "-e", "/usr/local/bin/nexus-agent"))
         self.assertEqual(horizon.matching_apps("not-a-real-application"), [])
 
     def test_commands_are_fixed_argv_not_shell(self):
