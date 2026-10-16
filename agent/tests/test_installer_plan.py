@@ -77,6 +77,12 @@ class InstallerPlanTests(unittest.TestCase):
         with self.assertRaises(UnsafeTarget):
             plan_install(inventory, "/dev/vdb")
 
+    def test_rejects_malformed_children(self):
+        inventory = self.inventory()
+        inventory["blockdevices"][0]["children"] = "not-a-list"
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/vdb")
+
     def test_rejects_missing_child_path(self):
         inventory = self.inventory()
         del inventory["blockdevices"][0]["children"][0]["path"]
