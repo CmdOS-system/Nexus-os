@@ -36,7 +36,7 @@ class HorizonPanelSmoke(unittest.TestCase):
                 start.assert_called_once_with(command)
 
     def test_quick_action_failure_is_reported(self):
-        with patch.object(panel, "start_app", side_effect=FileNotFoundError), \\
+        with patch.object(panel, "start_app", side_effect=FileNotFoundError), \
              patch("tkinter.messagebox.showerror") as error:
             self.app.open_quick_app(("missing",))
         error.assert_called_once()
