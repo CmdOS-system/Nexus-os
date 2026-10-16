@@ -77,3 +77,9 @@ Se recuperó contexto de Acceso a GitHub, Nexus OS desarrollo autónomo y Avanza
 | IA de extremo a extremo | Prototipos presentes; integración conectada pendiente de evidencia |
 | Compatibilidad Windows/hardware | Matriz de aplicaciones y equipos pendiente |
 | Actualización/recuperación y release | Gates independientes pendientes; sin certificación |
+
+## Avances siguientes — seguridad y arranque de Agent
+
+- [PR #2](https://github.com/CmdOS-system/Nexus-os/pull/2), `08c66bcbee51bcb04d5cdb85f91c1f568ee03ba4`: consentimiento booleano y lectura acotada ligada a identidad del archivo. Se reprodujeron fallos previos. 177 unit tests y validación de imagen locales aprobados; los cinco jobs de [Fast Checks 38978238994](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978238994) también finalizaron con success. Continúa en borrador, sin integrar ni reconstruir ISO.
+- [PR #3](https://github.com/CmdOS-system/Nexus-os/pull/3), `0aef476a4def78051c487044826d894a78535869`: Agent toma el modelo local Ollama guardado en Control Center si no hay override explícito; rechaza configuración off/cloud/hybrid/inválida. 180 unit tests locales aprobados, sintaxis Python/shell y image/validate.sh correctos. Borrador independiente basado en main; CI y ejecución con modelo real/ISO pendientes.
+- Ambas propuestas recuperan partes concretas de PR #1 sin incorporar sus cambios históricos conflictivos. Revisar compatibilidad conjunta antes de integrar; no cerrar #1 mientras falten sus otros cambios.
