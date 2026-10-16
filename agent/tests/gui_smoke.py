@@ -27,7 +27,7 @@ def run():
         try:
             app.update_idletasks()
             assert app.winfo_exists()
-            assert app.choice["state"] == "readonly"
+            assert str(app.choice.cget("state")) == "readonly"
             assert "/dev/vdb" in app.choice["values"]
             app.target.set("/dev/vdb")
             app.review()
