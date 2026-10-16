@@ -67,8 +67,8 @@ def run():
             app.destroy()
 
     # An unsafe target must be rejected, and the previous selection invalidated.
-    with patch.object(module, "capture_inventory", return_value=INVENTORY), \\
-         patch.object(module, "plan_install", side_effect=module.UnsafeTarget("unsafe simulated disk")):
+    with (patch.object(module, "capture_inventory", return_value=INVENTORY),
+          patch.object(module, "plan_install", side_effect=module.UnsafeTarget("unsafe simulated disk"))):
         app = module.Preview()
         try:
             app.target.set("/dev/vdb")
