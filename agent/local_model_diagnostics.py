@@ -1,6 +1,6 @@
 """Read-only Ollama model availability probe; loopback only, no prompts or credentials."""
 import json
-from urllib.request import build_opener, HTTPRedirectHandler
+from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler
 from urllib.error import URLError, HTTPError
 
 OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"
@@ -11,7 +11,7 @@ class _NoRedirect(HTTPRedirectHandler):
 
 def _open_local_tags(timeout):
     # Do not follow a malicious local service redirect to the public internet.
-    opener = build_opener(_NoRedirect)
+    opener = build_opener(ProxyHandler({}), _NoRedirect)
     return opener.open(OLLAMA_TAGS_URL, timeout=timeout)
 
 def check_local_model(model: str, *, timeout: float = 2.0) -> tuple[bool, str]:
