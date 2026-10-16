@@ -49,12 +49,17 @@ class Preview(tk.Tk):
             self.devices = [item["path"] for item in report["disks"] if item["eligible"]]
             self.inventory = inventory
             self.choice.configure(values=self.devices)
-            lines = ["Disk readiness (read-only):"]
+            eligible_count = len(self.devices)
+            rejected_count = len(report["disks"]) - eligible_count
+            lines = [f"Disk readiness (read-only): {eligible_count} eligible, {rejected_count} rejected."]
             for item in report["disks"]:
                 status = "READY FOR PREVIEW" if item["eligible"] else "REJECTED"
                 detail = "" if item["eligible"] else f" — {item['reason']}"
                 lines.append(f"{item['path']}: {status}{detail}")
-            lines.append("\nOnly eligible disks are selectable. Review is read-only; no changes will be made.")
+            if not self.devices:
+                lines.append("\nNo eligible disks found. Selection is unavailable.")
+            else:
+                lines.append("\nOnly eligible disks are selectable. Review is read-only; no changes will be made.")
             self.show("\n".join(lines))
         except UnsafeTarget as exc:
             self.show(f"Disk inventory unavailable: {exc}")
