@@ -12,8 +12,10 @@ class AISettings:
     cloud_consent: bool = False
 
     def validate(self):
-        if self.mode not in _MODES:
+        if not isinstance(self.mode, str) or self.mode not in _MODES:
             raise ValueError("Invalid AI mode")
+        if type(self.cloud_consent) is not bool:
+            raise ValueError("Cloud consent must be a boolean")
         if self.mode == "off":
             if self.provider is not None or self.model is not None or self.cloud_consent:
                 raise ValueError("Disabled AI must not carry provider state")
@@ -22,7 +24,7 @@ class AISettings:
             raise ValueError("Provider is required")
         if not isinstance(self.model, str) or not self.model.strip():
             raise ValueError("Model is required")
-        if self.mode in ("cloud", "hybrid") and not self.cloud_consent:
+        if self.mode in ("cloud", "hybrid") and self.cloud_consent is not True:
             raise ValueError("Cloud use requires explicit consent")
         if self.mode == "local" and self.cloud_consent:
             raise ValueError("Local-only mode cannot enable cloud consent")
