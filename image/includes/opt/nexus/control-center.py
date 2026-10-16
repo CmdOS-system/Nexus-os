@@ -2,6 +2,7 @@
 """Nexus Control Center prototype using the shared validated AI settings model."""
 import sys
 import subprocess
+import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk, messagebox
@@ -13,6 +14,7 @@ from settings import AISettings
 from settings_store import load_settings, save_settings
 from config import provider_secret_ref
 from linux_secret_store import LinuxSecretStore
+from local_model_diagnostics import check_local_model
 
 CONFIG=Path.home()/".config/nexus/ai-settings.json"
 MODES=("off","local","cloud","hybrid")
@@ -38,7 +40,10 @@ class App(tk.Tk):
         ttk.Label(frame,text="Nexus AI",font=("",15,"bold")).pack(anchor="w")
         ttk.Label(frame,text="Choose how Nexus Agent may use AI. API keys are never stored here.").pack(anchor="w",pady=(4,8))
         ttk.Label(frame,textvariable=self.status).pack(anchor="w",pady=(0,4))
-        ttk.Label(frame,text="This describes settings only; it does not verify connectivity.",font=("",9)).pack(anchor="w",pady=(0,12))
+        ttk.Label(frame,text="This describes settings only; it does not verify connectivity.",font=("",9)).pack(anchor="w",pady=(0,6))
+        self.probe_result=tk.StringVar(value="Local model check has not run.")
+        ttk.Label(frame,textvariable=self.probe_result,wraplength=540).pack(anchor="w",pady=(0,6))
+        ttk.Button(frame,text="Check local Ollama model",command=self._check_local_model).pack(anchor="w",pady=(0,10))
         form=ttk.Frame(frame); form.pack(fill="x")
         ttk.Label(form,text="Mode").grid(row=0,column=0,sticky="w",pady=6)
         ttk.Combobox(form,textvariable=self.mode,values=MODES,state="readonly").grid(row=0,column=1,sticky="ew",pady=6)
@@ -64,6 +69,20 @@ class App(tk.Tk):
             "hybrid": "AI configuration: Hybrid — connection not verified",
         }
         self.status.set(descriptions.get(self.mode.get(), "AI configuration: Invalid mode"))
+
+    def _check_local_model(self):
+        if self.mode.get() != "local" or self.provider.get().strip().lower() != "ollama":
+            self.probe_result.set("Select Local mode and Ollama provider to run this check.")
+            return
+        model = self.model.get().strip()
+        self.probe_result.set("Checking local Ollama service (no prompts sent)…")
+        def worker():
+            available, detail = check_local_model(model)
+            try:
+                self.after(0, lambda: self.probe_result.set(("Ready: " if available else "Not ready: ") + detail))
+            except RuntimeError:
+                pass
+        threading.Thread(target=worker, daemon=True).start()
 
     def _open_installer_preview(self):
         preview = Path("/opt/nexus/installer-preview.py")
