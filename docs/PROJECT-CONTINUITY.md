@@ -108,3 +108,7 @@ PR #2 integrada mediante `342024e07163d9b0016579e9868cee76f712fa9f`; PR #3 integ
 ISO Gate 38978527786 finalizó con success en `98e23179b2feddbb4fc8e4ec6abb26c675f24c81`: build, checksum, GRUB, smoke UEFI/XFCE y artefactos aprobados. Sustituye los registros anteriores in_progress. Artefacto candidato 12080396980, `nexus-os-candidate-98e23179b2feddbb4fc8e4ec6abb26c675f24c81`, y diagnósticos 12080841033.
 
 El usuario solicitó captura del sistema de pruebas arrancado, no sólo el render Xvfb de Horizon. PR #5 añade captura QMP PNG tras marcadores Live/gráficos/XFCE, usando esa ISO exacta y verificando SHA256SUMS. Fast Checks 38979744178 aprobó sus cinco jobs. Ejecución de captura 38979740620 observada en recuperación del candidato; todavía no se ha validado una imagen. No confundir captura de framebuffer con pruebas de instalación o calidad visual.
+
+## Bloqueo visual Live descubierto — 2026-10-16
+
+Se generaron e inspeccionaron tres capturas REALES de la ISO en QEMU en run 38980101821, artefacto 12080767543: todas muestran pantalla negra (apenas puntero). La captura se ejecutó, pero el escritorio visual NO está validado. Los marcadores XFCE/services no bastan para acreditar UI utilizable. Priorizar diagnóstico de pantalla/VT, inicio de XFCE, DPMS y compositor antes de pulido visual o declarar escritorio listo. Ver `docs/bugs/live-iso-black-framebuffer-2026-10-16.md`. PR #5 sigue sin integrar. Primera ejecución de captura falló antes de QEMU; el segundo intento sí produjo los PNG.
