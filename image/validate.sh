@@ -15,6 +15,8 @@ CONTROL_CENTER="$ROOT/includes/opt/nexus/control-center.py"
 HORIZON="$ROOT/includes/opt/nexus/horizon.py"
 HORIZON_DESKTOP="$ROOT/includes/usr/share/applications/nexus-horizon.desktop"
 HORIZON_LAUNCHER="$ROOT/includes/usr/local/bin/nexus-horizon"
+HORIZON_PANEL="$ROOT/includes/opt/nexus/horizon-panel.py"
+HORIZON_PANEL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-horizon-panel.desktop"
 HORIZON_SHORTCUTS="$ROOT/includes/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
 CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desktop"
 INSTALLER_PREVIEW="$ROOT/includes/opt/nexus/installer-preview.py"
@@ -28,7 +30,7 @@ bash -n "$BOOT_HOOK"
 sh -n "$GRUB_HOOK"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -63,7 +65,8 @@ fi
 grep -q 'set timeout=3' "$BUILD"
 grep -q 'config/bootloaders/grub-pc/grub.cfg' "$BUILD"
 grep -q 'GRUB_TEMPLATE=' "$BUILD"
-python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW" "$HORIZON"
+python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW" "$HORIZON" "$HORIZON_PANEL"
+grep -q "^Name=Nexus Horizon Panel Preview$" "$HORIZON_PANEL_DESKTOP"
 grep -q "^Name=Nexus Horizon$" "$HORIZON_DESKTOP"
 grep -q "^Exec=/usr/local/bin/nexus-horizon$" "$HORIZON_DESKTOP"
 grep -q "Super&gt;space" "$HORIZON_SHORTCUTS"
