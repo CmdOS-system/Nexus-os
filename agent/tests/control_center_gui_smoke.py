@@ -35,6 +35,28 @@ class ControlCenterSmoke(unittest.TestCase):
             probe.assert_not_called()
         self.assertIn("Select Local mode", self.app.probe_result.get())
 
+    def test_installer_launches_with_fixed_interpreter_and_path(self):
+        with patch.object(module.Path, "is_file", return_value=True), \
+             patch.object(module.subprocess, "Popen") as spawn:
+            self.app._open_installer_preview()
+        args, kwargs = spawn.call_args
+        self.assertEqual(args[0], ["/usr/bin/python3", "/opt/nexus/installer-preview.py"])
+        self.assertIs(kwargs["stdin"], module.subprocess.DEVNULL)
+        self.assertTrue(kwargs["close_fds"])
+
+    def test_local_probe_reports_model_availability(self):
+        self.app.mode.set("local")
+        self.app.provider.set("ollama")
+        self.app.model.set("llama3")
+        with patch.object(module, "check_local_model", return_value=(True, "Local model is installed.")) as probe, \
+             patch.object(module.threading, "Thread") as thread:
+            self.app._check_local_model()
+            callback = thread.call_args.kwargs["target"]
+            with patch.object(self.app, "after", side_effect=lambda delay, fn: fn()):
+                callback()
+            probe.assert_called_once_with("llama3")
+        self.assertIn("Ready:", self.app.probe_result.get())
+
     def test_missing_installer_does_not_spawn_process(self):
         with patch.object(module.Path, "is_file", return_value=False), \
              patch.object(module.subprocess, "Popen") as spawn, \
