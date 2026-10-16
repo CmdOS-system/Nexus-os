@@ -58,9 +58,9 @@ class Preview(tk.Tk):
             return
         try:
             plan = plan_install(self.inventory, self.target.get())
-            self.show(f"Disk: {plan.path}\\nModel: {plan.model}\\nSerial: {plan.serial}\\nSize: {plan.size_bytes:,} bytes\\n\\n{plan.warning}\\n\\nInstallation is DISABLED in this preview.")
+            self.show(f"Disk: {plan.path}\nModel: {plan.model}\nSerial: {plan.serial}\nSize: {plan.size_bytes:,} bytes\n\n{plan.warning}\n\nInstallation is DISABLED in this preview.")
         except UnsafeTarget as exc:
-            self.show(f"Target rejected: {exc}\\n\\nNo disk changes were made.")
+            self.show(f"Target rejected: {exc}\n\nNo disk changes were made.")
 
 
 if __name__ == "__main__":
