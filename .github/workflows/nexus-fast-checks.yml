@@ -71,7 +71,7 @@ jobs:
           for module in installer_plan.py installer_inventory.py installer_preflight.py; do
             cp "agent/$module" /tmp/nexus-stage/opt/nexus/agent/
           done
-          PYTHONPATH=/tmp/nexus-stage/opt/nexus/agent python3 -c "import installer_plan, installer_inventory, installer_preflight; assert installer_preflight.inspect({\u0027blockdevices\u0027: []})[\u0027installation_enabled\u0027] is False"
+          PYTHONPATH=/tmp/nexus-stage/opt/nexus/agent python3 -c "import installer_plan, installer_inventory, installer_preflight; assert installer_preflight.inspect({'blockdevices': []})['installation_enabled'] is False"
           echo "Installer runtime staging checks passed without ISO rebuild"
 
   image-static:
