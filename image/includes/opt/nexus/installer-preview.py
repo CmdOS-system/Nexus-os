@@ -46,9 +46,10 @@ class Preview(tk.Tk):
         try:
             inventory = capture_inventory()
             report = inspect(inventory)
-            self.devices = [item["path"] for item in report["disks"] if item["eligible"]]
+            eligible = [item["path"] for item in report["disks"] if item["eligible"]]
+            self.devices = eligible
             self.inventory = inventory
-            self.choice.configure(values=self.devices)
+            self.choice.configure(values=eligible)
             eligible_count = len(self.devices)
             rejected_count = len(report["disks"]) - eligible_count
             lines = [f"Disk readiness (read-only): {eligible_count} eligible, {rejected_count} rejected."]
@@ -61,7 +62,11 @@ class Preview(tk.Tk):
             else:
                 lines.append("\nOnly eligible disks are selectable. Review is read-only; no changes will be made.")
             self.show("\n".join(lines))
-        except UnsafeTarget as exc:
+        except (UnsafeTarget, KeyError, TypeError, ValueError) as exc:
+            self.inventory = None
+            self.devices = []
+            self.target.set("")
+            self.choice.configure(values=[])
             self.show(f"Disk inventory unavailable: {exc}")
 
     def review(self):
