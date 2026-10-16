@@ -93,3 +93,12 @@ PR #2 integrada mediante `342024e07163d9b0016579e9868cee76f712fa9f`; PR #3 integ
 - [ISO Gate integrado 38978527786](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978527786): ejecución iniciada y observada in_progress para `98e23179b2feddbb4fc8e4ec6abb26c675f24c81`; aún no atribuir éxito ni nueva ISO verificada.
 - [Fast Checks integrado 38978527776](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978527776): observado pending al corte.
 - Siguiente paso: inspeccionar ambas ejecuciones integradas y sus artefactos; probar Agent con un modelo Ollama real. La prueba de modelo real no ha ocurrido en esta sesión.
+
+## Modelo real verificado — 2026-10-16
+
+- [Nexus Real AI Smoke 38978824081](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978824081): success para `53132df7ae4581cdb16f40c74625cd63b9e74b0d`. Se inspeccionaron los logs y se confirmó artefacto `nexus-real-ai-evidence` (ID 12080530920).
+- Ollama CPU con `qwen2.5:0.5b`, digest `a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67`; respuesta real del cliente: `READY`. CLI sin --model ni NEXUS_AI_MODEL, usando configuración local temporal guardada: `READY.`. Dos rutas completadas en 1.262 s dentro de la fase de inferencia; no es un benchmark ni incluye descarga/arranque.
+- Fast Checks [38978837017](https://github.com/CmdOS-system/Nexus-os/actions/runs/38978837017): success.
+- PR #4 integrada en `65de0b72a7078674588de35470cd2b5ea699c89c`. Workflow/probe quedan disponibles para repetir la prueba y registrar digests de modelo/runtime.
+- Este resultado reemplaza el pendiente genérico de conexión con modelo real para proveedor+CLI. Siguen pendientes empaquetado/ejecución en ISO, interfaz gráfica de conversación, voz y automatización del escritorio.
+- Main integrado Fast Checks 38978527776: los cinco jobs aprobados. ISO Gate 38978527786 todavía observado in_progress durante la construcción; no atribuirle éxito antes de consultar su resultado.
