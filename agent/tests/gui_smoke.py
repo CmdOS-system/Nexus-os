@@ -66,6 +66,20 @@ def run():
         finally:
             app.destroy()
 
+    # An unsafe target must be rejected, and the previous selection invalidated.
+    with patch.object(module, "capture_inventory", return_value=INVENTORY), \\
+         patch.object(module, "plan_install", side_effect=module.UnsafeTarget("unsafe simulated disk")):
+        app = module.Preview()
+        try:
+            app.target.set("/dev/vdb")
+            app.review()
+            assert not app.target.get()
+            assert not app.choice["values"]
+            assert "Target rejected" in app.result.get("1.0", "end")
+            assert "No disk changes were made" in app.result.get("1.0", "end")
+        finally:
+            app.destroy()
+
     print("Nexus installer GUI smoke passed (no disk writes).")
 
 
