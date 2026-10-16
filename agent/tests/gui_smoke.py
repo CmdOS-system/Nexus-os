@@ -53,6 +53,11 @@ def run():
             output = app.result.get("1.0", "end")
             assert "/dev/vdb: REJECTED" in output
             assert "mounted" in output
+            assert "/dev/vdb" not in app.choice["values"]
+            app.target.set("/dev/vdb")  # Programmatic injection must not bypass UI eligibility.
+            app.review()
+            assert not app.target.get()
+            assert "Target rejected" in app.result.get("1.0", "end")
         finally:
             app.destroy()
 
