@@ -22,11 +22,24 @@ class InstallPlan:
 
 
 def _descendants(device: dict) -> list[dict]:
-    result = [device]
-    for child in device.get("children") or []:
-        if not isinstance(child, dict):
+    """Iteratively traverse a bounded tree, rejecting cycles and shared nodes."""
+    result = []
+    stack = [device]
+    seen = set()
+    while stack:
+        entry = stack.pop()
+        if not isinstance(entry, dict) or id(entry) in seen:
+            raise UnsafeTarget("invalid or cyclic partition inventory")
+        seen.add(id(entry))
+        result.append(entry)
+        if len(result) > 4096:
+            raise UnsafeTarget("device inventory exceeds safe limits")
+        children = entry.get("children", [])
+        if children is None:
+            raise UnsafeTarget("device children topology unknown")
+        if not isinstance(children, list):
             raise UnsafeTarget("invalid partition inventory")
-        result.extend(_descendants(child))
+        stack.extend(children)
     return result
 
 
