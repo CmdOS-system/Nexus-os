@@ -56,6 +56,8 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 agent/tests/control_center_gui_smoke.py
       - name: Exercise Nexus Horizon graphical launcher
         run: xvfb-run -a /usr/bin/python3 agent/tests/horizon_gui_smoke.py
+      - name: Exercise Nexus Horizon panel preview
+        run: xvfb-run -a /usr/bin/python3 agent/tests/horizon_panel_gui_smoke.py
       - name: Capture real Nexus Horizon screenshot
         run: xvfb-run -a -s "-screen 0 1024x768x24" /usr/bin/python3 agent/tests/horizon_screenshot.py
       - name: Publish Nexus Horizon screenshot
