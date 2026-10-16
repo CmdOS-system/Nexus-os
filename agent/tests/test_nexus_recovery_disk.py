@@ -52,7 +52,9 @@ class RecoveryDiskTests(unittest.TestCase):
             p = self.disk(d)
             write_slot(p, "A", b"known-good")
             with open(p, "r+b") as f:
-                f.seek(100)
+                # Corrupt the SHA-256-protected payload, not unused slot padding.
+                from nexus_recovery_disk import MAGIC
+                f.seek(len(MAGIC) + 8 + 32)
                 f.write(b"X")
             with self.assertRaises(ValueError):
                 read_slot(p, "A")
