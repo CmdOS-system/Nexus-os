@@ -64,6 +64,16 @@ def run():
         finally:
             app.destroy()
 
+    # Malformed inventory must fail closed and discard any stale selection.
+    with patch.object(module, "capture_inventory", return_value={"blockdevices": [None]}):
+        app = module.Preview()
+        try:
+            assert not app.choice["values"]
+            assert not app.target.get()
+            assert "Disk inventory unavailable" in app.result.get("1.0", "end")
+        finally:
+            app.destroy()
+
     # Inventory collection failure must not expose stale targets.
     with patch.object(module, "capture_inventory", side_effect=module.UnsafeTarget("simulated lsblk failure")):
         app = module.Preview()
