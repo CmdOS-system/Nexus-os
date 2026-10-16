@@ -62,6 +62,12 @@ def plan_install(inventory: dict, target_path: str) -> InstallPlan:
         raise UnsafeTarget("invalid or missing device path")
     if len(paths) != len(set(paths)):
         raise UnsafeTarget("duplicate device path")
+    # Any active mount in the inventory must have an unambiguous parent chain.
+    # Unknown mount data is never interpreted as a safe, unmounted device.
+    for entry in all_entries:
+        mounts = entry.get("mountpoints")
+        if not isinstance(mounts, list):
+            raise UnsafeTarget("mount status unknown in device inventory")
     # A mountpoint on the target disk or any child makes the disk unsafe.
     for entry in _descendants(disk):
         mounts = entry.get("mountpoints")
