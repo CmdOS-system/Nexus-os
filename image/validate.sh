@@ -60,6 +60,11 @@ grep -q 'config/bootloaders/grub-pc/grub.cfg' "$BUILD"
 grep -q 'GRUB_TEMPLATE=' "$BUILD"
 python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW"
 grep -q "^Name=Nexus Installation Preview$" "$INSTALLER_DESKTOP"
+grep -q "^Exec=python3 /opt/nexus/installer-preview.py$" "$INSTALLER_DESKTOP"
+grep -q "from installer_inventory import capture_inventory" "$INSTALLER_PREVIEW"
+grep -q "from installer_plan import plan_install" "$INSTALLER_PREVIEW"
+grep -q "Installation is DISABLED in this preview" "$INSTALLER_PREVIEW"
+grep -q "installer_plan.py installer_inventory.py" "$BUILD"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
   grep -q -- "$flag" "$BUILD"
