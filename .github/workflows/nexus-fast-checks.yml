@@ -67,6 +67,7 @@ jobs:
           grep -q "from installer_preflight import inspect" image/includes/opt/nexus/installer-preview.py
           grep -q "installer_preflight.py" image/build.sh
           grep -q "Open installation preview (read-only)" image/includes/opt/nexus/control-center.py
+          grep -q "AI status: Cloud" image/includes/opt/nexus/control-center.py
           grep -q "subprocess.Popen" image/includes/opt/nexus/control-center.py
           mkdir -p /tmp/nexus-stage/opt/nexus/agent
           cp image/includes/opt/nexus/installer-preview.py /tmp/nexus-stage/opt/nexus/
