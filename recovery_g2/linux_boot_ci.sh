@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p build/linux-boot/rootfs/{bin,dev,proc,sys}
+# Keep the CI initramfs independent of stale artifacts from prior builds.
+rm -f build/linux-boot/rootfs/bin/sh build/linux-boot/initramfs.cpio.gz
 kernel="$(find /boot -maxdepth 1 -type f -name 'vmlinuz-*-generic' | sort -V | tail -1)"
 if [[ -z "$kernel" ]]; then echo "No installed Linux kernel" >&2; exit 1; fi
 # Ubuntu runner kernel packages may restrict /boot/vmlinuz access to root.
