@@ -29,6 +29,7 @@ def run():
             assert app.winfo_exists()
             assert str(app.choice.cget("state")) == "readonly"
             assert "/dev/vdb" in app.choice["values"]
+            assert "/dev/vdb: READY FOR PREVIEW" in app.result.get("1.0", "end")
             app.target.set("/dev/vdb")
             app.review()
             assert "Installation is DISABLED" in app.result.get("1.0", "end")
@@ -44,6 +45,17 @@ def run():
             assert "inventory changed" in app.result.get("1.0", "end")
         finally:
             app.destroy()
+    # A mounted disk must be visible as rejected with its reason, not silently omitted.
+    mounted = {**INVENTORY["blockdevices"][0], "mountpoints": ["/mnt/test"]}
+    with patch.object(module, "capture_inventory", return_value={"blockdevices": [mounted]}):
+        app = module.Preview()
+        try:
+            output = app.result.get("1.0", "end")
+            assert "/dev/vdb: REJECTED" in output
+            assert "mounted" in output
+        finally:
+            app.destroy()
+
     # Inventory collection failure must not expose stale targets.
     with patch.object(module, "capture_inventory", side_effect=module.UnsafeTarget("simulated lsblk failure")):
         app = module.Preview()
