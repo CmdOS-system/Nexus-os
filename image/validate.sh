@@ -13,6 +13,8 @@ GRUB_HOOK="$ROOT/hooks/020-unattended-grub.hook.binary"
 BOOT_MARKER="$ROOT/includes/usr/local/libexec/nexus-boot-ready"
 CONTROL_CENTER="$ROOT/includes/opt/nexus/control-center.py"
 CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desktop"
+INSTALLER_PREVIEW="$ROOT/includes/opt/nexus/installer-preview.py"
+INSTALLER_DESKTOP="$ROOT/includes/usr/share/applications/nexus-installer-preview.desktop"
 
 bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
@@ -21,7 +23,7 @@ bash -n "$BOOT_HOOK"
 sh -n "$GRUB_HOOK"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -56,13 +58,14 @@ fi
 grep -q 'set timeout=3' "$BUILD"
 grep -q 'config/bootloaders/grub-pc/grub.cfg' "$BUILD"
 grep -q 'GRUB_TEMPLATE=' "$BUILD"
-python3 -m py_compile "$CONTROL_CENTER"
+python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW"
+grep -q "^Name=Nexus Installation Preview$" "$INSTALLER_DESKTOP"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
   grep -q -- "$flag" "$BUILD"
 done
 
-for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py; do
+for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py installer_plan.py installer_inventory.py; do
   test -s "$PROJECT_ROOT/agent/$module" || { echo "Missing Nexus Agent runtime module: $module" >&2; exit 1; }
   python3 -m py_compile "$PROJECT_ROOT/agent/$module"
 done
