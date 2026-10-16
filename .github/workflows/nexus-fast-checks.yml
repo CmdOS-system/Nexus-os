@@ -1,0 +1,54 @@
+name: Nexus Fast Checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - "image/**"
+      - "verify.sh"
+      - ".github/workflows/nexus-fast-checks.yml"
+  pull_request:
+    paths:
+      - "agent/**"
+      - "image/**"
+      - "verify.sh"
+      - ".github/workflows/nexus-fast-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-fast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    name: Python tests ${{ matrix.python-version }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile agent modules
+        run: python -m compileall -q agent
+      - name: Run unit tests
+        run: python -m unittest discover -s agent/tests -p 'test_*.py' -v
+
+  image-static:
+    name: Image static validation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate image sources
+        run: bash image/validate.sh
+      - name: Check shell syntax
+        run: |
+          bash -n image/build.sh image/validate.sh verify.sh
+          sh -n image/hooks/020-unattended-grub.hook.binary
