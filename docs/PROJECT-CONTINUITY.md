@@ -118,3 +118,13 @@ Se generaron e inspeccionaron tres capturas REALES de la ISO en QEMU en run 3898
 El run 38980833818 terminó con success. Se inspeccionaron imágenes reales de la misma ISO (checksum sin cambios): escritorio XFCE y menú Applications visibles. La captura ahora espera 45 s tras readiness y rechaza PNG casi negros. PR #5 integrada en 6ac50336d246903606b89c4c5a706ea88f6e48c0; Fast Checks 38980839173 aprobó. Las imágenes anteriores negras apuntan a captura demasiado temprana; causa exacta de la demora pendiente. No afirmar reparación de la ISO, ya que no fue modificada. Alt-F2 no mostró el diálogo en la tercera imagen; esa acción no está validada.
 
 Estado: arranque Live, sesión y salida visual básica comprobados; diseño Horizon completo, interacción de todas las apps, IA dentro de ISO, instalación/persistencia y compatibilidad Windows/PS5 siguen pendientes. Próximo paso: capturar y ejercitar Nexus Control Center/Horizon dentro de la ISO y mejorar la condición de readiness basada en UI visible.
+
+
+## Diagnóstico gráfico repetido y siguiente interacción — 2026-10-16
+
+- PR #6: https://github.com/CmdOS-system/Nexus-os/pull/6. Sigue en borrador; no integrada.
+- Captura Live 38982257876: success en `23e2412bed066906214a7a77f10a853d4fde131a`, artefacto `12082011087`, ZIP SHA256 `d69244e3abcff6c08595537c3c3934e3c7a38aa9f8ba1dccf6813a5453773cca`. Descargado e inspeccionado el registro y la captura tras Alt-F2; se ve XFCE, sin diálogo Alt-F2 visible.
+- Esperar al marcador XFCE antes del diagnóstico eliminó los anteriores errores de autorización/display en este registro: xrandr devuelve Virtual-1 conectado a 1280x800; xwininfo devuelve panel, escritorio y ventanas XFCE. No atribuir este resultado a una modificación de la ISO ni a una solución de todas las interacciones.
+- Fast Checks 38982260992: cinco jobs success para el ajuste de diagnóstico. Fast Checks 38982642570: success para `e3d58916cda6982c4ca22bae3b367fb3435ed021`, que también añade un intento Super+Espacio y cuarta captura de Horizon.
+- Captura extendida 38982639554: observada in_progress al registrar esta nota. Falta inspeccionar `nexus-iso-desktop-horizon.png`; un PNG no negro no demuestra por sí solo que se abrió Horizon.
+- Siguiente paso concreto: inspeccionar el artefacto de 38982639554, confirmar visualmente el lanzador o diagnosticar el atajo; integrar PR #6 cuando termine la validación del head vigente.
