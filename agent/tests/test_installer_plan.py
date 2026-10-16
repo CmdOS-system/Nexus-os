@@ -89,6 +89,19 @@ class InstallerPlanTests(unittest.TestCase):
         with self.assertRaises(UnsafeTarget):
             plan_install(inventory, "/dev/vdb")
 
+    def test_rejects_cyclic_inventory(self):
+        inventory = self.inventory()
+        disk = inventory["blockdevices"][0]
+        disk["children"][0]["children"] = [disk]
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/vdb")
+
+    def test_rejects_unknown_child_topology(self):
+        inventory = self.inventory()
+        inventory["blockdevices"][0]["children"] = None
+        with self.assertRaises(UnsafeTarget):
+            plan_install(inventory, "/dev/vdb")
+
     def test_rejects_missing_child_path(self):
         inventory = self.inventory()
         del inventory["blockdevices"][0]["children"][0]["path"]
