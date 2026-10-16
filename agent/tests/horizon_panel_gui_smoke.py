@@ -28,6 +28,19 @@ class HorizonPanelSmoke(unittest.TestCase):
             self.app.open_launcher()
         start.assert_called_once_with()
 
+    def test_quick_actions_use_fixed_argv(self):
+        self.assertEqual([name for name, _ in panel.QUICK_APPS], ["Files", "Terminal", "Settings"])
+        for _, command in panel.QUICK_APPS:
+            with self.subTest(command=command), patch.object(panel, "start_app") as start:
+                self.app.open_quick_app(command)
+                start.assert_called_once_with(command)
+
+    def test_quick_action_failure_is_reported(self):
+        with patch.object(panel, "start_app", side_effect=FileNotFoundError), \\
+             patch("tkinter.messagebox.showerror") as error:
+            self.app.open_quick_app(("missing",))
+        error.assert_called_once()
+
     def test_launcher_failure_is_reported(self):
         with patch.object(panel, "start_launcher", side_effect=FileNotFoundError), \
              patch("tkinter.messagebox.showerror") as error:
