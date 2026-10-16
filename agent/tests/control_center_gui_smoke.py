@@ -57,6 +57,17 @@ class ControlCenterSmoke(unittest.TestCase):
             probe.assert_called_once_with("llama3")
         self.assertIn("Ready:", self.app.probe_result.get())
 
+    def test_stale_model_probe_cannot_overwrite_new_selection(self):
+        self.app.mode.set("local")
+        self.app.provider.set("ollama")
+        self.app.model.set("old-model")
+        old_generation = self.app._probe_generation
+        self.app.model.set("new-model")
+        self.app._display_probe_result(old_generation, True, "old model available")
+        self.assertNotIn("old model available", self.app.probe_result.get())
+        self.app._display_probe_result(self.app._probe_generation, True, "new model available")
+        self.assertIn("new model available", self.app.probe_result.get())
+
     def test_missing_installer_does_not_spawn_process(self):
         with patch.object(module.Path, "is_file", return_value=False), \
              patch.object(module.subprocess, "Popen") as spawn, \
