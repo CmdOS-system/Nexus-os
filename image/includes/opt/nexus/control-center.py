@@ -28,7 +28,10 @@ class App(tk.Tk):
         self.provider=tk.StringVar(); self.model=tk.StringVar()
         self.consent=tk.BooleanVar(value=False); self.api_key=tk.StringVar()
         self.status=tk.StringVar(value="AI configuration: Off")
+        self._probe_generation=0
         self.mode.trace_add("write",self._update_status)
+        self.provider.trace_add("write",self._invalidate_probe)
+        self.model.trace_add("write",self._invalidate_probe)
         self._build(); self._load()
         self._update_status()
 
@@ -61,7 +64,13 @@ class App(tk.Tk):
         ttk.Label(frame,text="Installation is disabled. You can inspect disks and review a plan safely.").pack(anchor="w",pady=(4,8))
         ttk.Button(frame,text="Open installation preview (read-only)",command=self._open_installer_preview).pack(anchor="w")
 
+    def _invalidate_probe(self, *_):
+        self._probe_generation += 1
+        if hasattr(self, "probe_result"):
+            self.probe_result.set("Model selection changed. Run the local check again.")
+
     def _update_status(self, *_):
+        self._invalidate_probe()
         descriptions = {
             "off": "AI configuration: Off — AI requests disabled by configuration",
             "local": "AI configuration: Local — model availability not verified",
@@ -75,14 +84,21 @@ class App(tk.Tk):
             self.probe_result.set("Select Local mode and Ollama provider to run this check.")
             return
         model = self.model.get().strip()
+        self._probe_generation += 1
+        generation = self._probe_generation
         self.probe_result.set("Checking local Ollama service (no prompts sent)…")
         def worker():
             available, detail = check_local_model(model)
             try:
-                self.after(0, lambda: self.probe_result.set(("Ready: " if available else "Not ready: ") + detail))
+                self.after(0, lambda: self._display_probe_result(generation, available, detail))
             except RuntimeError:
                 pass
         threading.Thread(target=worker, daemon=True).start()
+
+    def _display_probe_result(self, generation, available, detail):
+        if generation != self._probe_generation:
+            return
+        self.probe_result.set(("Ready: " if available else "Not ready: ") + detail)
 
     def _open_installer_preview(self):
         preview = Path("/opt/nexus/installer-preview.py")
