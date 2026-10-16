@@ -6,7 +6,7 @@ from pathlib import Path
 from tkinter import ttk, messagebox
 
 sys.path.insert(0, str(Path("/opt/nexus/agent")))
-from installer_inventory import capture_inventory
+from installer_inventory import capture_inventory, require_unchanged_inventory
 from installer_plan import plan_install, UnsafeTarget
 
 
@@ -59,16 +59,14 @@ class Preview(tk.Tk):
         try:
             # Re-enumerate before previewing: disk topology may have changed since Refresh.
             current_inventory = capture_inventory()
-            if current_inventory != self.inventory:
-                self.inventory = None
-                self.devices = []
-                self.target.set("")
-                self.choice.configure(values=[])
-                self.show("Disk inventory changed. Refresh and select the target again. No disk changes were made.")
-                return
+            require_unchanged_inventory(self.inventory, current_inventory)
             plan = plan_install(current_inventory, self.target.get())
             self.show(f"Disk: {plan.path}\nModel: {plan.model}\nSerial: {plan.serial}\nSize: {plan.size_bytes:,} bytes\n\n{plan.warning}\n\nInstallation is DISABLED in this preview.")
         except UnsafeTarget as exc:
+            self.inventory = None
+            self.devices = []
+            self.target.set("")
+            self.choice.configure(values=[])
             self.show(f"Target rejected: {exc}\n\nNo disk changes were made.")
 
 
