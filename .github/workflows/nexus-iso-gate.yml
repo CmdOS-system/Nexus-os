@@ -8,6 +8,7 @@ on:
       - "agent/**"
       - "image/**"
       - "verify.sh"
+      - "docs/**"
       - ".github/workflows/nexus-iso-gate.yml"
 
 permissions:
