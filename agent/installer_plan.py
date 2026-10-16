@@ -74,6 +74,11 @@ def plan_install(inventory: dict, target_path: str) -> InstallPlan:
         mounts = entry.get("mountpoints")
         if not isinstance(mounts, list):
             raise UnsafeTarget("mount status unknown in device inventory")
+    # Complex stacked devices can have shared parents or hidden consumers.
+    # Reject them until an independent topology resolver is implemented.
+    for entry in _descendants(disk):
+        if entry.get("type") not in ("disk", "part"):
+            raise UnsafeTarget("unsupported stacked or mapped device topology")
     # A mountpoint on the target disk or any child makes the disk unsafe.
     for entry in _descendants(disk):
         mounts = entry.get("mountpoints")
