@@ -55,6 +55,14 @@ def plan_install(inventory: dict, target_path: str) -> InstallPlan:
         raise UnsafeTarget("disk must have a stable nonempty serial")
     if sum(d.get("serial") == serial for d in devices) != 1:
         raise UnsafeTarget("duplicate disk serial")
+    # Reject ambiguous inventory paths anywhere in the device tree.
+    all_entries = [entry for root in devices for entry in _descendants(root)]
+    paths = [entry.get("path") for entry in all_entries]
+    if any(not isinstance(path, str) or not path.startswith("/dev/") for path in paths):
+        raise UnsafeTarget("invalid or missing device path")
+    if len(paths) != len(set(paths)):
+        raise UnsafeTarget("duplicate device path")
+    # A mountpoint on the target disk or any child makes the disk unsafe.
     for entry in _descendants(disk):
         mounts = entry.get("mountpoints")
         if mounts is None:
