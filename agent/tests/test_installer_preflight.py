@@ -23,7 +23,7 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(report["mode"], "read-only")
         self.assertTrue(report["target_eligible"])
         self.assertEqual([d["path"] for d in report["disks"]], ["/dev/vdb", "/dev/vdc"])
-        self.assertFalse(report["disks"][1]["eligible"])
+        self.assertFalse(next(d for d in report["disks"] if d["path"] == "/dev/does-not-exist")["eligible"])
         self.assertIn("mounted", report["disks"][1]["reason"])
 
     def test_missing_target_rejected(self):
