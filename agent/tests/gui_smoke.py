@@ -44,6 +44,28 @@ def run():
             assert "inventory changed" in app.result.get("1.0", "end")
         finally:
             app.destroy()
+    # Inventory collection failure must not expose stale targets.
+    with patch.object(module, "capture_inventory", side_effect=module.UnsafeTarget("simulated lsblk failure")):
+        app = module.Preview()
+        try:
+            assert not app.choice["values"]
+            assert not app.target.get()
+            assert "Disk inventory unavailable" in app.result.get("1.0", "end")
+        finally:
+            app.destroy()
+
+    # A previously selected disk must be cleared after refresh fails.
+    with patch.object(module, "capture_inventory", side_effect=[INVENTORY, module.UnsafeTarget("device disappeared")]):
+        app = module.Preview()
+        try:
+            app.target.set("/dev/vdb")
+            app.refresh()
+            assert not app.target.get()
+            assert not app.choice["values"]
+            assert "Disk inventory unavailable" in app.result.get("1.0", "end")
+        finally:
+            app.destroy()
+
     print("Nexus installer GUI smoke passed (no disk writes).")
 
 
