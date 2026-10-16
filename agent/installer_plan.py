@@ -60,8 +60,13 @@ def plan_install(inventory: dict, target_path: str) -> InstallPlan:
     disk = matches[0]
     if disk.get("type") != "disk":
         raise UnsafeTarget("only whole disks may be selected")
-    if disk.get("ro") not in (False, 0) or disk.get("rm") not in (False, 0):
-        raise UnsafeTarget("read-only or removable disk rejected")
+    # Python considers 0.0 == False and 0j == False; do not accept those
+    # malformed lsblk flags as proof that a target is writable and fixed.
+    def safe_zero_flag(value):
+        return type(value) in (bool, int) and value == 0
+
+    if not safe_zero_flag(disk.get("ro")) or not safe_zero_flag(disk.get("rm")):
+        raise UnsafeTarget("read-only, removable or invalid disk flags rejected")
     size = disk.get("size")
     if type(size) is not int or size < 16 * 1024**3:
         raise UnsafeTarget("disk must be at least 16 GiB with an integer byte size")
