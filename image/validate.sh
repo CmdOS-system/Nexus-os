@@ -12,6 +12,8 @@ BOOT_HOOK="$ROOT/hooks/010-enable-nexus-boot-ready.hook.chroot"
 GRUB_HOOK="$ROOT/hooks/020-unattended-grub.hook.binary"
 BOOT_MARKER="$ROOT/includes/usr/local/libexec/nexus-boot-ready"
 CONTROL_CENTER="$ROOT/includes/opt/nexus/control-center.py"
+HORIZON="$ROOT/includes/opt/nexus/horizon.py"
+HORIZON_DESKTOP="$ROOT/includes/usr/share/applications/nexus-horizon.desktop"
 CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desktop"
 INSTALLER_PREVIEW="$ROOT/includes/opt/nexus/installer-preview.py"
 INSTALLER_DESKTOP="$ROOT/includes/usr/share/applications/nexus-installer-preview.desktop"
@@ -23,7 +25,7 @@ bash -n "$BOOT_HOOK"
 sh -n "$GRUB_HOOK"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -58,7 +60,9 @@ fi
 grep -q 'set timeout=3' "$BUILD"
 grep -q 'config/bootloaders/grub-pc/grub.cfg' "$BUILD"
 grep -q 'GRUB_TEMPLATE=' "$BUILD"
-python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW"
+python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW" "$HORIZON"
+grep -q "^Name=Nexus Horizon$" "$HORIZON_DESKTOP"
+grep -q "^Exec=/usr/bin/python3 /opt/nexus/horizon.py$" "$HORIZON_DESKTOP"
 grep -q "^Name=Nexus Installation Preview$" "$INSTALLER_DESKTOP"
 grep -q "^Exec=python3 /opt/nexus/installer-preview.py$" "$INSTALLER_DESKTOP"
 grep -q "from installer_inventory import capture_inventory" "$INSTALLER_PREVIEW"
