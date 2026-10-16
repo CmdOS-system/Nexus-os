@@ -72,11 +72,12 @@ jobs:
           grep -q "AI configuration: Cloud" image/includes/opt/nexus/control-center.py
           grep -q "subprocess.Popen" image/includes/opt/nexus/control-center.py
           mkdir -p /tmp/nexus-stage/opt/nexus/agent
-          cp image/includes/opt/nexus/installer-preview.py /tmp/nexus-stage/opt/nexus/
-          for module in installer_plan.py installer_inventory.py installer_preflight.py; do
+          cp image/includes/opt/nexus/installer-preview.py image/includes/opt/nexus/control-center.py /tmp/nexus-stage/opt/nexus/
+          for module in installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py settings.py settings_store.py config.py linux_secret_store.py secret_store.py; do
             cp "agent/$module" /tmp/nexus-stage/opt/nexus/agent/
           done
-          PYTHONPATH=/tmp/nexus-stage/opt/nexus/agent python3 -c "import installer_plan, installer_inventory, installer_preflight; assert installer_preflight.inspect({'blockdevices': []})['installation_enabled'] is False"
+          PYTHONPATH=/tmp/nexus-stage/opt/nexus/agent python3 -c "import installer_plan, installer_inventory, installer_preflight, local_model_diagnostics, settings, settings_store, config, linux_secret_store; assert installer_preflight.inspect({'blockdevices': []})['installation_enabled'] is False"
+          python3 -m py_compile /tmp/nexus-stage/opt/nexus/control-center.py /tmp/nexus-stage/opt/nexus/installer-preview.py
           echo "Installer runtime staging checks passed without ISO rebuild"
 
   image-static:
