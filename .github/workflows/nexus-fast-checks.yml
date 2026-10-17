@@ -24,6 +24,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  xfce-shortcut:
+    name: XFCE first-session shortcut regression
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install real XFCE shortcut provider and virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xfce4-settings dbus-x11 xvfb xauth
+      - name: Reproduce original reset and verify retained Horizon default
+        run: |
+          shortcuts=image/includes/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
+          sed 's/name="default"/name="custom"/' "$shortcuts" > /tmp/nexus-original-shortcuts.xml
+          dbus-run-session -- xvfb-run -a bash agent/tests/xfce_shortcut_session_smoke.sh /tmp/nexus-original-shortcuts.xml missing
+          dbus-run-session -- xvfb-run -a bash agent/tests/xfce_shortcut_session_smoke.sh "$shortcuts" present
+
   python-tests:
     name: Python tests ${{ matrix.python-version }}
     runs-on: ubuntu-24.04
