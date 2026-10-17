@@ -404,3 +404,10 @@ Quince pruebas locales aprobadas: preparación previa, fallo de inicialización 
 PR #29 integradafad9f10eafc99d531b72bd656bf48b1b5d97424d. Fast Checks39076129040, Native Desktop39076128989 y Wine Lab39076124206 aprobados. Artefacto12117470710 descargado, notepad-remove-result.txt y notepad-removed.png revisados: No conserva instalación; aplicación activa rechaza retirada; tras cerrar, perfil verificable aparece en papelera real y acceso Nexus desaparece; registro7-Zip sin cambios. También pasan instalación, menú, MIME y edición/guardado. Nueva preparación explícita Wine validada en laboratorio; comportamiento lento Live aún pendiente.
 
 Nueva ISO Gate39076397453 iniciada (fuente fad9f10e). Captura posterior debe demostrar ambos programas dentro del Live; si falla, revisar NEXUS_WINE_INIT_BEGIN/END, NEXUS_PACKAGE_INSTALL_BEGIN y log exportado antes de proponer otra corrección. No declarar arreglada la captura39074859209 solo por aumentar presupuestos. Global≈38%.
+
+
+## Live de dos aplicaciones: diagnóstico del 17/10
+
+Captura39077637721 (ISO Gate39076397453, fuente fad9f10e) falló, artefacto12118320662 descargado e inspeccionado.7-Zip alcanza PREPARED, OPEN y MENU_PASS en esta ISO mixta. Notepad++ completa wineboot y setup sin error, registra instalación, pero no aparece su título en xwininfo12s después de abrir. No es el timeout de instalación anterior ni demuestra todavía fallo permanente del programa.
+
+Se propone esperar ventana real hasta120s en lugar de dormir12s: error temprano si proceso sale no cero, y diagnóstico de procesos/ventanas si vence el límite. Se conserva el clic del botón y la misma ruta launch del asistente. Misma comprobación para apertura desde menú. Tres verificaciones locales del helper aprobadas (ventana tardía, salida7, timeout con diagnóstico). Falta ejecutar de nuevo en la misma ISO; no reconstruir imagen solo por cambio del probe. Global≈38% sin incremento.
