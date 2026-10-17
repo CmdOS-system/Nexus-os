@@ -298,3 +298,10 @@ Windows pasa25->50 como implementación parcial/laboratorio; global33.75≈34 % 
 PR #21 feat/graphical-app-installer-prototype: agent/app_installer.py y pruebas. Selección/verificación del 7-Zip26.04x64 aprobado sin ejecutar; botón de confirmación -> perfil Wine por usuario -> progreso -> Abrir. Cuatro tests locales y sintaxis correctos. WineGUI real se prueba en workflow Nexus Windows Application Lab; consultar head vigente de #21. Aún sin menú/asociación MIME ni ISO, sin preparación automática de Wine, sin APK/Linux/desinstalación/cancelación en este corte.
 
 No anunciar flujo general con un clic terminado. Mantener global≈34, Windows50 (laboratorio), Android0 e instaladorcomún0 hasta ejecución gráfica inspeccionada. Próxima acción: resultado GUI y screenshot nexus-install-7zip.png del head #21; resolver fallos con ese laboratorio antes de empaquetar.
+
+
+## Prototipo gráfico de instalación verificado — 2026-10-17
+
+PR #21 integrada02d6bdb4672a742b0968ff5b75bdd1d535499941. GUIWineLab39053538833 success para8d3c970; FastChecks39053586940 success para cf04e70 (mismo código más docs). Artefacto12108338331 descargado; gui-assistant-result.txt confirma selección sin ejecución/prefijo, botón Instalar completado y botón Abrir produjo ventana7-Zip. Captura de app revisada, 7-Zip tapa gran parte del asistente; no presentarla como diseño completo del instalador. Es Debian/Wine/Xvfb, no ISO, ni reinicio OS.
+
+Asistente común0->25 como prototipo limitado; global35.75≈36 %. Windows50, Android0, Linux0. Próxima implementación prioritaria: asociación del archivo y acceso gráfico con empaquetado, comprobar importación real en staging y preparar Wine gráficamente; luego desinstalación y expansión de formatos. No prometer APK/Linux soportados ni incluir cualquier EXE en la whitelist de 7-Zip. Releer ONE-CLICK-APPLICATIONS.md y app-installer-prototype.md antes de ampliar.
