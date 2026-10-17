@@ -21,7 +21,7 @@ class HorizonPanelSmoke(unittest.TestCase):
         self.assertEqual(self.app.title(), "Nexus Horizon Panel")
         self.assertTrue(self.app.clock.get())
         self.assertEqual(self.app.winfo_height(), 48)
-        self.assertNotEqual(self.app.attributes("-topmost"), 1)
+        self.assertIn(self.app.attributes("-alpha"), (0.95, 1.0))
 
     def test_launcher_command(self):
         with patch.object(panel, "start_launcher") as start:

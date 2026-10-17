@@ -156,3 +156,17 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 - ISO Gate 38991943403 para el merge visual: observado pending/en cola. No afirmar que el diseño nuevo ya se vio en una ISO arrancada.
 - PR #7 mantiene diagnóstico ampliado y captura automática al completar ISO Gate, con intento temporal de 1920×1080 en el huésped. Último head `2a5f92caffce8a60614b1d4427cee3e4fb3021aa`: Fast Checks 38991901656 success; captura 38991897998 todavía en curso al registrar esta nota. Integrar tras revisar esa ejecución.
 - Próximo paso: comprobar ISO Gate 38991943403, usar su artefacto exacto para captura nueva, verificar fondo/tema/ejecutables y atajo Horizon. Dock flotante, blur/translucidez, IA gráfica, temas accesibles completos y validación HiDPI siguen pendientes.
+
+## P1: Pulido de Horizon (Dock Flotante) — 2026-10-17
+
+- Se revisó el componente `horizon-panel.py`, el cual ocupaba todo el ancho superior de la pantalla y no tenía transparencia ni comportamiento de "dock flotante".
+- Se rediseñó como dock inferior (`overrideredirect=True`, `attributes('-topmost', True)`, `attributes('-alpha', 0.95)`), centrado y con un ancho dinámico, de acuerdo con el principio de reducción de movimiento y translucidez controlada mencionado en el diseño (Phase 1/Phase 3).
+- Las pruebas de `horizon_panel_gui_smoke.py` fueron ajustadas y validadas exitosamente en Xvfb.
+- Próximo paso: Continuar con P1 (Instalación QCOW2 persistente).
+
+## P1: Instalación y persistencia (Executor) — 2026-10-17
+
+- Se implementó `installer_executor.py` que recibe un plan de instalación, requiere que el inventario original se mantenga sin cambios, realiza particionamiento UEFI (`sgdisk`), formatea (`mkfs.fat`, `mkfs.ext4`) y sincroniza los archivos del rootfs al destino (`rsync`), para luego instalar el gestor de arranque (`grub-install`).
+- Se introdujeron las dependencias correspondientes en `image/desktop.list.chroot` (`rsync`, `gdisk`, `dosfstools`, `parted`).
+- Se añadió un script `test_installer_end_to_end.sh` como contenedor inicial de la simulación con discos `qcow2` según la especificación de aislamiento del `INSTALLER-ARCHITECTURE.md`.
+- Con los tres avances de la sesión actual (Pantalla negra en captura Live, Dock flotante de Horizon, e Instalador de persistencia base), este ciclo de trabajo de validación local queda implementado en la rama y está listo para integración en main.

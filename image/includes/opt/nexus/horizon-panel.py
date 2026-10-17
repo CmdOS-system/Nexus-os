@@ -26,7 +26,10 @@ class HorizonPanel(tk.Tk):
         self.title("Nexus Horizon Panel")
         self.configure(bg=PANEL_BG)
         self.resizable(False, False)
-        # Preview mode: do not cover maximized apps or override XFCE panel.
+        # Floating dock at the bottom of the screen
+        self.overrideredirect(True)
+        self.attributes('-topmost', True)
+        self.attributes('-alpha', 0.95)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self._position()
         tk.Button(self, text="◈  NEXUS", bg=PANEL_BG, fg=ACCENT, activebackground="#202d41",
@@ -43,8 +46,13 @@ class HorizonPanel(tk.Tk):
         self._tick()
 
     def _position(self):
-        width = min(1000, self.winfo_screenwidth())
-        self.geometry(f"{width}x48+0+0")
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        width = min(720, screen_width - 48)
+        height = 48
+        x = (screen_width - width) // 2
+        y = screen_height - height - 12
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def _tick(self):
         self.clock.set(datetime.datetime.now().strftime("%a %d %b  %H:%M"))

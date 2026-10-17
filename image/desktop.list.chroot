@@ -10,3 +10,7 @@ arc-theme
 papirus-icon-theme
 fonts-inter
 librsvg2-common
+rsync
+gdisk
+dosfstools
+parted
