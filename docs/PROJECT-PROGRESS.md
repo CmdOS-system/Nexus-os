@@ -4,7 +4,7 @@ Corte vigente: 2026-10-17. Método de seguimiento solicitado por el usuario. **E
 
 ## Cálculo y criterios
 
-Cada módulo tiene peso según su relevancia/esfuerzo previsto. Los pesos son una decisión de planificación inicial, no mediciones de horas. Suman 100. Avance global = suma(peso × avance del módulo) / 100. Redondear el resultado solo al mostrarlo: 27.50 % -> aproximadamente 28 %.
+Cada módulo tiene peso según su relevancia/esfuerzo previsto. Los pesos son una decisión de planificación inicial, no mediciones de horas. Suman 100. Avance global = suma(peso × avance del módulo) / 100. Redondear el resultado solo al mostrarlo: 33.75 % -> aproximadamente 34 %.
 
 Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alcance/investigación/diseño concreto, con posibles piezas preliminares; 50 % = implementación parcial y pruebas de componentes; 75 % = flujo principal validado en el sistema objetivo, faltando aceptación completa; 100 % = criterios del módulo satisfechos con evidencia. Para módulos amplios, no ascender por un único componente aprobado. El porcentaje es aproximado y revisable.
 
@@ -16,7 +16,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 | Voz | 2 | 0 % | Sin reconocimiento y síntesis E2E probados. |
 | Acciones de IA en el sistema | 4 | 25 % | Broker/permisos y piezas preliminares; automatización visible y verificable pendiente. |
 | Instalador y persistencia | 12 | 25 % | Plan, preflight y preview; instalación ejecutada y arranque sin ISO pendientes. |
-| Aplicaciones Windows | 25 | 25 % | Arquitectura/inspección PE; falta instalar y ejecutar aplicaciones objetivo con Wine/Proton. |
+| Aplicaciones Windows | 25 | 50 % | 7-Zip Windows x64 instalado y usado en laboratorio Debian/Wine; asistente Nexus, más apps y persistencia OS pendientes. |
 | Aplicaciones Android/APK | 15 | 0 % | Prioridad alta; runtime e integración gráfica todavía no probados. |
 | Asistente de instalación con un clic | 8 | 0 % | Flujo común APK/Windows/Linux especificado; sin implementación verificada. |
 | Paquetes y aplicaciones Linux | 3 | 0 % | Integración gráfica .deb/Flatpak/AppImage pendiente de aceptación. |
@@ -28,7 +28,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 
 ## Resultado vigente — Windows, Android e instalación gráfica
 
-**Avance global estimado: 27.50 %, mostrado como aproximadamente 28 %.** No afirmar que el 28 % de las funciones está terminado: el cálculo acredita también etapas de diseño e implementación parcial según la escala anterior.
+**Avance global estimado: 33.75 %, mostrado como aproximadamente 34 %.** No afirmar que el 34 % de las funciones está terminado: el cálculo acredita también etapas de diseño e implementación parcial según la escala anterior.
 
 ## Actualización
 
@@ -38,7 +38,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 - En respuestas de estado mostrar barra y porcentaje global aproximado, más los módulos que cambiaron. Mostrar tabla completa cuando el usuario la pida o cambie el alcance.
 - No incluir puertas piratas o evasión de DRM en el alcance; TV/radio se refieren a fuentes autorizadas.
 
-Ejemplo de presentación: Avance global estimado ≈28 %; completado para release todavía no. Barra gráfica de diez segmentos es solo representación redondeada del cálculo.
+Ejemplo de presentación: Avance global estimado ≈34 %; completado para release todavía no. Barra gráfica de diez segmentos es solo representación redondeada del cálculo.
 
 
 ## Reponderación solicitada: Windows primero
@@ -49,3 +49,8 @@ El corte inicial del 17/10 daba 40.75 % (≈41 %) con Windows al 10 % del peso. 
 ## Ampliación vigente: Android y abrir/instalar sin terminal
 
 Usuario confirma APK, Windows y Linux con asistente gráfico como prioridad central. Android se separa de macOS y se añaden instalador común y formatos Linux. Nuevos módulos mantienen 0 % conservador hasta integración verificable. Pesos actuales suman 100 y dan 27.50 % -> ≈28 %. Corte previo Windows-first: 35.75 % -> ≈36 %. La baja es ampliación/reponderación de alcance; no hubo pérdida de trabajo ni avance técnico causado por documentación. Plan: ONE-CLICK-APPLICATIONS.md. Windows25+Android15+asistente8+Linux3 suman 51 % del peso; instalación del OS añade 12 %.
+
+
+## Incremento verificado: primera aplicación Windows real
+
+2026-10-17: Windows25 -> Windows50 en la escala de implementación parcial/laboratorio. Run 39052936193 y artefacto 12107549425 inspeccionados; PR #20 integrada f727d825. 7-Zip Windows 26.04 x64 instala, crea ZIP correcto, reabre tras reinicio Wine y muestra GUI en Debian 13. Pendientes integración Nexus/ISO, reboot instalado y aplicaciones difíciles. Con peso25, contribución aumenta 6.25 puntos: global27.50 ->33.75 (≈34 %). No significa 50 % del catálogo Windows compatible. Ver WINDOWS-COMPATIBILITY-MATRIX.md.
