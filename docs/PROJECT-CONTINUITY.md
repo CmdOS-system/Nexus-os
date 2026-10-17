@@ -156,3 +156,13 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 - ISO Gate 38991943403 para el merge visual: observado pending/en cola. No afirmar que el diseño nuevo ya se vio en una ISO arrancada.
 - PR #7 mantiene diagnóstico ampliado y captura automática al completar ISO Gate, con intento temporal de 1920×1080 en el huésped. Último head `2a5f92caffce8a60614b1d4427cee3e4fb3021aa`: Fast Checks 38991901656 success; captura 38991897998 todavía en curso al registrar esta nota. Integrar tras revisar esa ejecución.
 - Próximo paso: comprobar ISO Gate 38991943403, usar su artefacto exacto para captura nueva, verificar fondo/tema/ejecutables y atajo Horizon. Dock flotante, blur/translucidez, IA gráfica, temas accesibles completos y validación HiDPI siguen pendientes.
+
+
+## Revalidación directa — 2026-10-17 (Bogotá)
+
+- ISO Gate 38991943403 confirmado success: construcción, checksum, GRUB y smoke UEFI. Candidato a2582a2c05d826a15e4c7a4f71503889d0b4eb69, artefacto 12086460150. Sustituye su estado pendiente anterior.
+- Captura automática de ese candidato 38993534964 terminó failure en Reject blank visual evidence. La descarga verificó checksum; QEMU produjo cinco capturas. La primera tuvo fracción no oscura 0.000045814 y las otras entre 0.070 y 0.509. No omitir esta comprobación para volver verde el workflow.
+- Se descargó artefacto 12085274775 y se inspeccionó nexus-iso-desktop-horizon-direct.png: muestra Application Finder, fondo XFCE en región 1280x800 y negro en el resto del framebuffer 1920x1080. NO muestra Horizon ni aurora. Los logs confirman wrapper 0755 y atajo Super+Espacio configurado; los arreglos anteriores existen, pero la apertura no queda validada. No atribuir todavía causa a latencia, composición o configuración.
+- PR #10 confirmada integrada en e95def969b8a9897b00624e7888a19e478d5ad93. Native Desktop Smoke 38993555945 y Fast Checks 38993555911: success en ese SHA. Es sesión XFCE/Xvfb aislada, no ISO.
+- Siguiente trabajo: instrumentar la sesión Live con estado de autostart/appearance y preferencias xfconf; ejecutar el wrapper desde la sesión gráfica con stdout/stderr y código de salida, identificar ventana Horizon, esperar repintado tras xrandr antes de captura. Conservar capturas iniciales fallidas y criterios de rechazo. Repetir con el mismo candidato exacto; no reconstruir sin una causa que requiera cambiar imagen.
+- Progreso global: nueva ISO construida y UEFI aprobado; apariencia y lanzamiento Horizon Live bloqueados. Instalación persistente, IA en ISO/voz, Windows y recuperación instalada siguen pendientes.
