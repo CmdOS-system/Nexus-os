@@ -261,3 +261,10 @@ Escritorio: captura Full HD nativa 39051320346 todavía en curso al corte; no re
 ## Porcentajes por módulo solicitados — 2026-10-17
 
 El usuario pide porcentaje global y por cada función, incluyendo nuevas funciones. Sustituye la presentación solo por colores. Leer docs/PROJECT-PROGRESS.md: escala estimada 0/25/50/75/100 y pesos explícitos que suman 100; primer corte 40.75 %, mostrado ≈41 %. Es estimación de gestión que incluye diseño/implementación parcial, no porcentaje de funcionalidades acabadas ni certificación. Los pesos son juicio inicial de planificación, no horas medidas. Mostrar siempre porcentaje global aproximado; añadir/reponderar filas ante nuevo alcance y explicar si baja el total. No subir avances por estados CI sin verificar ni por documentación repetida. Cortes anteriores sin porcentaje siguen siendo registros históricos.
+
+
+## Prioridad central ratificada: aplicaciones Windows — 2026-10-17
+
+Leer docs/WINDOWS-FIRST-ROADMAP.md antes de elegir la siguiente tarea. El usuario confirma Windows como objetivo central de Nexus; no retrasar el laboratorio Wine esperando acabados estéticos, TV/radio o voz. Trabajar instalación/persistencia como habilitador. Orden: laboratorio Debian/Wine -> aplicación real sencilla -> aplicación difícil del usuario con tarea útil -> asistente Nexus/prefijos -> prueba persistente en VM -> ampliar matriz. Investigación/ingeniería inversa para interoperabilidad con permisos, fuentes primarias y componentes abiertos; no prometer universalidad.
+
+Nueva ponderación PROJECT-PROGRESS.md: Windows 30 %, instalación 15 %; global estimado 35.75 % -> ≈36 %, frente al ≈41 % histórico por distinta ponderación. Avances de módulo no cambiaron. Windows sigue 25 % de diseño/piezas preliminares, sin una aplicación real acreditada. Siguiente incremento exige ejecución comprobada. Captura Full HD sigue como tarea acotada de escritorio; no consumir todo el proyecto en pulido visual.
