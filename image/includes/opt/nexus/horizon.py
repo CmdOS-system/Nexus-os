@@ -3,6 +3,7 @@
 import subprocess
 import tkinter as tk
 from tkinter import font as tkfont
+from tkinter import ttk
 
 BG, SURFACE, RAISED, EDGE = '#0b1220', '#151f31', '#202f46', '#2b3c55'
 TEXT, MUTED, ACCENT = '#f4f7fc', '#b9c5d8', '#70dcf5'
@@ -110,7 +111,13 @@ class Horizon(tk.Tk):
         area.pack(fill='both', expand=True, padx=24)
         self.scroll = tk.Canvas(area, bg=BG, bd=0, highlightthickness=0, yscrollincrement=28)
         self.scroll.pack(side='left', fill='both', expand=True)
-        scrollbar = tk.Scrollbar(area, orient='vertical', command=self.scroll.yview, width=10)
+        style = ttk.Style(self)
+        style.theme_use('clam')
+        style.configure('Horizon.Vertical.TScrollbar', background=EDGE, troughcolor=BG,
+                        bordercolor=BG, arrowcolor=MUTED, lightcolor=EDGE, darkcolor=EDGE, arrowsize=10)
+        style.map('Horizon.Vertical.TScrollbar', background=[('active', RAISED)])
+        scrollbar = ttk.Scrollbar(area, orient='vertical', command=self.scroll.yview,
+                                  style='Horizon.Vertical.TScrollbar')
         scrollbar.pack(side='right', fill='y')
         self.scroll.configure(yscrollcommand=scrollbar.set)
         self.list_frame = tk.Frame(self.scroll, bg=BG)
