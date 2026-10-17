@@ -12,7 +12,7 @@ import time
 
 
 def collect(socket_path, log_path, full_hd=False):
-    deadline = time.monotonic() + 420
+    deadline = time.monotonic() + 600
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         while True:
             try:
@@ -85,7 +85,28 @@ def collect(socket_path, log_path, full_hd=False):
         )
         client.sendall(command.encode())
         wait_for("NEXUS_DIAG_END", 45)
-        print("Read-only guest desktop diagnostics collected", flush=True)
+        print("Initial guest desktop diagnostics collected", flush=True)
+        # Wait until keyboard screenshots finish; diagnostic launch must not
+        # contaminate evidence of the actual shortcut/direct-key attempts.
+        signal = log_path.with_suffix(".keys-done")
+        while not signal.exists():
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Keyboard capture completion absent")
+            time.sleep(0.2)
+        probe = (
+            "printf '\\nNEXUS_HORIZON_PROBE_BEGIN\\n'; "
+            "xfconf-query -c xsettings -lv; xfconf-query -c xfce4-desktop -lv; "
+            "ls -l /usr/local/libexec/nexus-horizon-appearance; "
+            "cat /etc/xdg/autostart/*nexus* /home/nexus/.config/autostart/*nexus* 2>/dev/null; "
+            "timeout 20s /usr/local/bin/nexus-horizon >/tmp/nexus-horizon-probe.log 2>&1 & probe_pid=$!; "
+            "sleep 10; xwininfo -root -tree; printf 'NEXUS_HORIZON_PROBE_%s\\n' READY; sleep 10; wait \"$probe_pid\"; probe_rc=$?; "
+            "printf 'Horizon bounded probe exit=%s (124 means timeout)\\n' \"$probe_rc\"; "
+            "cat /tmp/nexus-horizon-probe.log; "
+            "printf '\\nNEXUS_HORIZON_PROBE_%s\\n' END\n"
+        )
+        client.sendall(probe.encode())
+        wait_for("NEXUS_HORIZON_PROBE_END", 60)
+        print("Bounded Horizon launch diagnostics collected", flush=True)
         thread.join(timeout=max(0, deadline - time.monotonic()))
 
 
