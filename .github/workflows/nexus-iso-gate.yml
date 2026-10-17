@@ -23,7 +23,10 @@ concurrency:
   queue: max
 
 jobs:
+  desktop-preflight:
+    uses: ./.github/workflows/nexus-native-desktop.yml
   build-and-boot:
+    needs: desktop-preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
