@@ -1,7 +1,8 @@
 """Collect diagnostics through the disposable Live guest's serial login.
 
 Uses the image's public default Live credentials, never host credentials.
-No physical disks, system configuration changes, or persistent guest writes.
+No physical disks or persistent guest writes. Optional Full HD mode changes
+only the disposable guest display for screenshots.
 """
 import argparse
 from pathlib import Path
@@ -10,7 +11,7 @@ import threading
 import time
 
 
-def collect(socket_path, log_path):
+def collect(socket_path, log_path, full_hd=False):
     deadline = time.monotonic() + 420
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         while True:
@@ -62,6 +63,10 @@ def collect(socket_path, log_path):
         wait_for("NEXUS_XFCE_SESSION_READY_V1")
         time.sleep(10)
         # Fixed read-only diagnostic commands, executed only inside the test guest.
+        mode_command = (
+            "output=$(xrandr --current | awk '$2 == \"connected\" {print $1; exit}'); "
+            "if [ -n \"$output\" ]; then xrandr --output \"$output\" --mode 1920x1080; fi; "
+        ) if full_hd else ""
         command = (
             "printf '\\nNEXUS_DIAG_BEGIN\\n'; "
             "id; ps -eo user,pid,args; loginctl list-sessions --no-pager; "
@@ -70,6 +75,11 @@ def collect(socket_path, log_path):
             "sudo -n tail -n 100 /var/log/lightdm/lightdm.log; "
             "sudo -n tail -n 100 /var/log/Xorg.0.log; "
             "export DISPLAY=:0 XAUTHORITY=/home/nexus/.Xauthority; "
+            + mode_command +
+            "printf '\\nNEXUS_SHORTCUT_CONFIG\\n'; "
+            "xfconf-query -c xfce4-keyboard-shortcuts -lv; "
+            "ls -l /usr/local/bin/nexus-horizon /opt/nexus/horizon.py; "
+            "cat /home/nexus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml; "
             "xrandr --current; xset q; xprop -root _NET_SUPPORTING_WM_CHECK _NET_CLIENT_LIST; "
             "xwininfo -root -tree; printf '\\nNEXUS_DIAG_%s\\n' END\n"
         )
@@ -83,5 +93,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("socket", type=Path)
     parser.add_argument("log", type=Path)
+    parser.add_argument("--full-hd", action="store_true")
     args = parser.parse_args()
-    collect(args.socket, args.log)
+    collect(args.socket, args.log, full_hd=args.full_hd)

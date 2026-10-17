@@ -47,9 +47,9 @@ def capture(socket_path, serial_path, output, timeout=240):
             def screenshot(path):
                 command("screendump", {"filename": str(path.resolve()), "format": "png"})
 
-            def key(*codes):
+            def key(*codes, settle=10):
                 command("send-key", {"keys": [{"type": "qcode", "data": code} for code in codes]})
-                time.sleep(2)
+                time.sleep(settle)
 
             command("qmp_capabilities", {})
             screenshot(output)
@@ -63,6 +63,15 @@ def capture(socket_path, serial_path, output, timeout=240):
             # TCG guests may need additional time to start Python/Tk.
             time.sleep(8)
             screenshot(output.with_name(output.stem + "-horizon.png"))
+            # Separate shortcut wiring from launching the packaged executable.
+            # Only a fixed command is typed; no user text or shell is evaluated.
+            key("esc")
+            key("esc")
+            key("alt", "f2")
+            for code in ("n", "e", "x", "u", "s", "minus", "h", "o", "r", "i", "z", "o", "n"):
+                key(code, settle=0.1)
+            key("ret", settle=15)
+            screenshot(output.with_name(output.stem + "-horizon-direct.png"))
     if not output.is_file() or output.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
         raise RuntimeError("No valid PNG framebuffer captured")
     print(f"Actual guest framebuffer captured: {output}")

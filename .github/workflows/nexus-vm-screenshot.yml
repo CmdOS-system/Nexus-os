@@ -2,6 +2,9 @@ name: Nexus ISO Desktop Capture
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: [Nexus ISO Gate]
+    types: [completed]
   push:
     paths:
       - '.github/workflows/nexus-vm-screenshot.yml'
@@ -14,10 +17,13 @@ permissions:
 
 jobs:
   capture-verified-iso:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
+      ISO_RUN_ID: ${{ github.event.workflow_run.id || '38978527786' }}
+      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || '98e23179b2feddbb4fc8e4ec6abb26c675f24c81' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install QEMU and UEFI firmware
@@ -27,7 +33,7 @@ jobs:
       - name: Retrieve exact verified candidate
         run: |
           for attempt in $(seq 1 20); do
-            if gh run download 38978527786 --repo CmdOS-system/Nexus-os --name nexus-os-candidate-98e23179b2feddbb4fc8e4ec6abb26c675f24c81 --dir candidate; then
+            if gh run download "$ISO_RUN_ID" --repo CmdOS-system/Nexus-os --name "nexus-os-candidate-$ISO_SOURCE_SHA" --dir candidate; then
               checksums=$(find candidate -name SHA256SUMS -print -quit)
               test -n "$checksums"
               cd "$(dirname "$checksums")"
@@ -57,7 +63,7 @@ jobs:
             -monitor none -no-reboot -snapshot > nexus-vm-qemu.log 2>&1 &
           vm_pid=$!
           trap 'kill "$vm_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
-          python3 image/diagnose-vm-serial.py /tmp/nexus-serial.sock nexus-vm-serial.log > nexus-serial-client.log 2>&1 &
+          python3 image/diagnose-vm-serial.py /tmp/nexus-serial.sock nexus-vm-serial.log --full-hd > nexus-serial-client.log 2>&1 &
           serial_pid=$!
           trap 'kill "$vm_pid" "$serial_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
           python3 image/capture-vm.py /tmp/nexus-capture.sock nexus-vm-serial.log nexus-iso-desktop.png
@@ -67,8 +73,8 @@ jobs:
           from PIL import Image
           from pathlib import Path
           paths = list(Path('.').glob('nexus-iso-desktop*.png'))
-          if len(paths) != 4:
-              raise SystemExit('Expected four guest screenshots, including the Horizon shortcut attempt')
+          if len(paths) != 5:
+              raise SystemExit('Expected five guest screenshots, including shortcut and direct launch attempts')
           for path in paths:
               image = Image.open(path).convert('RGB')
               visible = sum(max(pixel) > 20 for pixel in image.getdata()) / (image.width * image.height)
