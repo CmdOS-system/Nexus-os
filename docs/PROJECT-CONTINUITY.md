@@ -233,3 +233,10 @@ ISO Gate 39048872619 de a6997fb ya success; captura automática 39049935491 toda
 Captura 39049935491 finalizó failure en criterio visual, como corresponde al defecto restante. Artefacto 12107931180 descargado e inspeccionado: PNG inicial muestra aurora real en 1280x800 dentro de framebuffer 1920x1080, con negro a derecha/abajo. #16 sí consiguió crear rutas monitorVirtual-1/workspace0..3/last-image y renderizar aurora; esto sustituye el pendiente genérico de fondo que no aparecía. Cobertura completa y comportamiento tras RandR todavía NO aprobados.
 
 Prueba siguiente en test/live-repaint-reload: mismo candidato a6997fb, cinco imágenes de base intactas, luego xfdesktop --reload documentado y sexta imagen del probe. Busca comprobar recuperación de repintado sin reconstrucción. Un eventual éxito tras intervención no acredita comportamiento automático del sistema. Python/shell local aprobados, ejecución pendiente. Fuente: https://docs.xfce.org/xfce/xfdesktop/command-line . No desactivar la validación por regiones negras para convertir el fallo en éxito.
+
+
+## Investigación Nexus TV solicitada — 2026-10-17
+
+Ver docs/research/nexus-tv-feasibility-2026-10-17.md: fuentes primarias, propuesta Kodi/IPTV Simple + Tvheadend opcional + broker de IA, alternativa libmpv y servicios DRM por vías oficiales. Investigación documental guardada, sin implementación/reproducción probada. Falta identificar SuperTV exacto; la ficha com.supertv.yapp no permite deducir que sea la aplicación del usuario ni sus derechos de contenido. No se descargó ni analizó un APK. Sin puerta pirata ni evasión de DRM/pagos; interoperabilidad solo con fuentes y accesos autorizados.
+
+Este trabajo no sustituye el bloqueo de cobertura Live ni requiere nueva ISO. Próximo TV: identificar app, elegir fuente propia/autorizada y prototipo aislado antes de empaquetado. Escritorio: revisar prueba test/live-repaint-reload sobre el candidato existente.
