@@ -10,6 +10,7 @@ on:
       - '.github/workflows/nexus-vm-screenshot.yml'
       - 'image/capture-vm.py'
       - 'image/diagnose-vm-serial.py'
+      - 'image/check-desktop-coverage.py'
 
 permissions:
   contents: read
@@ -82,6 +83,7 @@ jobs:
               if visible < 0.01:
                   raise SystemExit('Black framebuffer: desktop visual validation FAILED')
           PYCODE
+          /usr/bin/python3 image/check-desktop-coverage.py nexus-iso-desktop*.png
       - name: Preserve screenshot and boot evidence
         if: always()
         uses: actions/upload-artifact@v4
