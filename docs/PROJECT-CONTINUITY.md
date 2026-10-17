@@ -397,3 +397,10 @@ Se separa wineboot --init (300s, después de confirmar) de ejecución del paquet
 Se añade Desinstalar con confirmación (No predeterminado). Espera cierre del wineserver del perfil y rechaza si sigue activo; no mata la aplicación. Retira acceso Nexus y mueve perfil completo a papelera GIO. Conserva acceso dentro del perfil movido; restaura el acceso original si falla el traslado. Bloqueo de operación fuera del perfil evita dejar un lock al restaurarlo de papelera. No borra permanentemente ni purga cachés de otras aplicaciones. Se desactiva winemenubuilder para que nuevas instalaciones no creen accesos paralelos fuera de Nexus. Restaurar archivos desde papelera no implica restablecer automáticamente todos los accesos.
 
 Quince pruebas locales aprobadas: preparación previa, fallo de inicialización no ejecuta paquete, cancelación/rechazo de operación activa cubiertos en GUI lab propuesto, fallo papelera restaura menú y otro perfil intacto. E2E de retirada y nueva ISO pendientes. Global≈38%, Windows50%, instalador50%, APK0%.
+
+
+### Retirada a papelera confirmada en laboratorio
+
+PR #29 integradafad9f10eafc99d531b72bd656bf48b1b5d97424d. Fast Checks39076129040, Native Desktop39076128989 y Wine Lab39076124206 aprobados. Artefacto12117470710 descargado, notepad-remove-result.txt y notepad-removed.png revisados: No conserva instalación; aplicación activa rechaza retirada; tras cerrar, perfil verificable aparece en papelera real y acceso Nexus desaparece; registro7-Zip sin cambios. También pasan instalación, menú, MIME y edición/guardado. Nueva preparación explícita Wine validada en laboratorio; comportamiento lento Live aún pendiente.
+
+Nueva ISO Gate39076397453 iniciada (fuente fad9f10e). Captura posterior debe demostrar ambos programas dentro del Live; si falla, revisar NEXUS_WINE_INIT_BEGIN/END, NEXUS_PACKAGE_INSTALL_BEGIN y log exportado antes de proponer otra corrección. No declarar arreglada la captura39074859209 solo por aumentar presupuestos. Global≈38%.
