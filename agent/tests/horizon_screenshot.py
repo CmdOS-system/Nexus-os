@@ -15,7 +15,7 @@ spec.loader.exec_module(module)
 
 app = module.Horizon()
 try:
-    app.geometry("900x690+30+30")
+    app.geometry("1040x820+440+130")
     app.update()
     app.after(500, app.quit)
     app.mainloop()
@@ -23,7 +23,9 @@ try:
     app.focus_force()
     app.update()
     output = ROOT / "nexus-horizon-preview.png"
-    ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).save(output)
+    bounds = (app.winfo_rootx(), app.winfo_rooty(),
+              app.winfo_rootx() + app.winfo_width(), app.winfo_rooty() + app.winfo_height())
+    ImageGrab.grab(bbox=bounds, xdisplay=os.environ["DISPLAY"]).save(output)
     assert output.stat().st_size > 10000, "Screenshot is unexpectedly small"
     print(f"Horizon screenshot captured: {output} ({output.stat().st_size} bytes)")
 finally:

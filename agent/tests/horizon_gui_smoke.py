@@ -37,5 +37,24 @@ class HorizonSmoke(unittest.TestCase):
             self.app.open_app(("missing-command",))
         self.assertIn("unavailable", self.app.feedback.get())
 
+    def test_keyboard_opens_focused_card_instead_of_first_result(self):
+        self.app.update()
+        self.app._app_buttons[3].focus_force()
+        self.app.update()
+        with patch.object(horizon, "launch") as launch:
+            self.app.launch_first()
+        launch.assert_called_once_with(("xfce4-settings-manager",))
+
+    def test_small_window_keeps_last_application_reachable(self):
+        self.app.geometry("560x460")
+        self.app.update()
+        self.app.scroll.yview_moveto(1)
+        self.app.update()
+        last = self.app._app_buttons[-1]
+        self.assertGreater(last.winfo_rooty() + last.winfo_height(), self.app.scroll.winfo_rooty())
+        self.assertLessEqual(last.winfo_rooty(), self.app.scroll.winfo_rooty() + self.app.scroll.winfo_height())
+        for card in self.app.list_frame.winfo_children():
+            self.assertLessEqual(card.winfo_x() + card.winfo_width(), self.app.list_frame.winfo_width())
+
 if __name__ == "__main__":
     unittest.main()
