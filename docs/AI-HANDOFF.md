@@ -28,11 +28,19 @@ Distribución Linux propia, fácil de instalar y usar, escritorio Horizon cuidad
 | Recuperación | Modelos A/B, metadatos y simulaciones | Rollback instalado y cadena de confianza pendientes |
 | Compatibilidad | Inspección PE y arquitectura; investigación Bottles, REA, Chromium y PS5 | No hay ejecución Windows ni juego PS5 demostrados |
 
-Las pruebas locales históricas llegaron a 184 unitarias; no atribuir ese resultado automáticamente al main actual. PR #9 registró seis comprobaciones aprobadas en 38991844855. La consulta de workflows por el SHA de merge a2582a2 devolvió lista vacía en esta sesión: no se ha confirmado aquí el desenlace del ISO Gate 38991943403. Comprobar esa ejecución y las posteriores directamente.
+## Estado vigente — 2026-10-17, 11:37 Bogotá
+
+Este corte sustituye los pendientes antiguos de la tabla anterior:
+- Live Horizon y Super+Espacio confirmados visualmente en captura QEMU 39041523768; no repetir diagnóstico de permisos/atajo ya resuelto sin nueva regresión.
+- ISO Gate 39048872619 success para a6997fb5356e71e70242fe71e545ab1c8d510b78, con recuperación de rutas del fondo (#16). Captura automática 39049935491 todavía en ejecución al corte; consultar su resultado y artefacto antes de cambiar runtime o reconstruir.
+- Captura anterior 39043287407 mostraba XFCE parcial/negro, por lo que #13 no bastó. #16 crea claves por workspace desde GDK/EWMH si faltan. No declarar el fondo Live arreglado sin nuevas imágenes.
+- #11 y #14 integradas: seis imágenes, probe de ejecución independiente, sincronización con diagnóstico y rechazo de regiones negras. Un fallo del control de cobertura sobre el candidato viejo es esperado.
+- #17 integrada b720aba: preflight Debian Trixie/xfdesktop 4.20.1 antes del build, no Ubuntu. Run 39049627191 y Fast Checks 39049627176 success; artefacto 12107346535 inspeccionado. Aurora coincide en 100 % de muestras y se ve completa en sesión Debian/Xvfb. Es contenedor como root, no LightDM/ISO.
+- Consultar docs/desktop-validation-strategy.md. Antes de reconstruir, reproducir causa en la capa correspondiente y usar el mismo candidato cuando no cambie runtime. No sustituir calidad visual con claves xfconf, mocks o marcadores de servicios.
 
 ## Pendientes ordenados y criterios de aceptación
 
-1. **P0: escritorio nuevo dentro de ISO.** Consultar ISO Gate 38991943403 y ejecuciones posteriores; identificar SHA candidato, checksum y artefacto exactos. Descargar y revisar capturas automáticas. Confirmar fondo, tema, iconos, Inter, permisos ejecutables, Super+Espacio y lanzamiento directo. Probar búsqueda, selección, apertura/cierre y Control Center. Guardar imágenes y logs asociados al SHA. Si falla, reproducir y corregir la causa antes de ampliar diseño.
+1. **P0: escritorio nuevo dentro de ISO.** Consultar primero captura 39049935491 del candidato aprobado en ISO Gate 39048872619; si ya terminó, inspeccionar sus artefactos antes de otras acciones; identificar SHA candidato, checksum y artefacto exactos. Descargar y revisar capturas automáticas. Confirmar fondo, tema, iconos, Inter, permisos ejecutables, Super+Espacio y lanzamiento directo. Probar búsqueda, selección, apertura/cierre y Control Center. Guardar imágenes y logs asociados al SHA. Si falla, reproducir y corregir la causa antes de ampliar diseño.
 2. **P1: pulido Horizon.** Dock flotante y superficies/translucidez moderadas compatibles con la pila elegida; escalas 100/150/200 %, pantallas pequeñas, teclado, contraste, rendimiento y reducción de movimiento. Aceptar mediante capturas del sistema real y pruebas de interacción, no solo mockups.
 3. **P1: instalación y persistencia.** Revisar INSTALLER-ARCHITECTURE.md y release-gates.md; implementar y probar exclusivamente con QCOW2 desechable. Instalar, apagar, retirar ISO, arrancar por UEFI desde disco, crear datos, reiniciar y demostrar persistencia. Registrar particiones, logs y checksum. No tocar discos físicos o EFI del host.
 4. **P1: IA en sistema.** Repetir proveedor/CLI real dentro de ISO o sistema instalado; configurar modelo guardado, verificar privacidad y errores. Después conversación gráfica, voz, cancelación y acciones autorizadas con auditoría. No guardar claves en git/logs.
