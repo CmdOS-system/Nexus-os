@@ -72,6 +72,14 @@ def capture(socket_path, serial_path, output, timeout=240):
                 key(code, settle=0.1)
             key("ret", settle=15)
             screenshot(output.with_name(output.stem + "-horizon-direct.png"))
+    serial_path.with_suffix(".keys-done").touch()
+    probe_deadline = time.monotonic() + 75
+    while time.monotonic() < probe_deadline:
+        if "NEXUS_HORIZON_PROBE_END" in serial_path.read_text(errors="replace"):
+            break
+        time.sleep(1)
+    else:
+        raise RuntimeError("Post-keyboard Horizon launch diagnostics did not complete")
     if not output.is_file() or output.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
         raise RuntimeError("No valid PNG framebuffer captured")
     print(f"Actual guest framebuffer captured: {output}")
