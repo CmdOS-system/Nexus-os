@@ -153,3 +153,8 @@ Avance: instalador común25→50 por componentes integrados y flujo parcial vali
 ## Acceso a 7-Zip desde el menú — 2026-10-17
 
 Tras instalar correctamente, Nexus Install registra atómicamente nexus-7zip.desktop en el directorio de aplicaciones del usuario (XDG_DATA_HOME absoluto o ~/.local/share). Exec fijo llama al runtime empaquetado con --open-installed: vuelve a verificar instalación y lanza7-Zip directamente. Si no puede abrir, muestra el error en el asistente; no se añaden nombres de archivos descargados al comando. El registro no ejecuta nada. Ocho unit tests locales aprobados; se amplía Wine Lab para validar .desktop, cerrar asistente/Wine y abrir desde GIO con ventana7-Zip real. CI pendiente; no equivale a clic físico en el menú de XFCE ni está incluido en ISO791625cd. Global≈38%, instalador50%, Windows50%, APK0%. Siguiente: revisar laboratorio, integrar y agrupar próxima ISO con cambios funcionales para evitar reconstrucciones por cada ajuste.
+
+
+### Resultado confirmado del acceso de aplicación
+
+PR #26 integrada652059f6c14eae6b52c72f9817a6b834a6ba6030. Fast Checks39067681676 y Windows Lab39067679141 aprobados. Artefacto12113773411 descargado, menu-launch-result.txt y 7zip-menu-launch.png revisados: acceso .desktop válido abre7-Zip directamente después de cerrar asistente/Wine, sin ventana del instalador. Sustituye el estado CI pendiente anterior. Verificación en Debian/Xvfb mediante GIO; sigue pendiente el clic físico en menúXFCE y nueva ISO con PR #25/#26. No reconstruir la imagen por documentación: agrupar próxima entrega funcional. Global≈38%, Windows50%, instalador50%, Android0%.
