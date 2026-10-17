@@ -187,3 +187,10 @@ PR #11 ampliada con sexta captura horizon-probe tras inventario de ventanas, ant
 ## Sincronización de captura — 2026-10-17
 
 Fast Checks 39041543483 finalizó success para db66883393a4f7259fa289f240ee23010e71c7b2. Captura 39041523768 seguía en progreso al corte. Se identificó carrera en el harness: capture-vm esperaba XFCE+45 segundos, mientras diagnose-vm podía seguir ejecutando xrandr concurrentemente. En 9779277 la captura exige además NEXUS_DIAG_END antes de la espera de repintado. No se afirma que esta carrera sea la causa única ni que la corrección repare el renderizado. Python compile y diff local correctos; nuevo QEMU pendiente. Se conservan las seis capturas y rechazo de negro. Siguiente acción: revisar ambos runs y el PNG horizon-probe; no integrar PR #11 como arreglo visual sin inspección.
+
+
+## Horizon visible y atajo confirmado en Live — 2026-10-17
+
+Run 39041523768 success para f5d257f; artefacto 12104561411 descargado y PNG inspeccionados. nexus-iso-desktop-horizon.png muestra Nexus Horizon después de Super+Espacio; nexus-iso-desktop-horizon-probe.png también muestra el lanzador durante ejecución acotada. Sustituye el pendiente de apertura visual y atajo para este candidato a2582a2. No acredita interacción completa con todas las apps. Sigue fondo XFCE en área 1280x800 con zona negra en framebuffer 1920x1080; aurora NO validada. El control de no-negro es insuficiente para detectar esa cobertura parcial y no acredita calidad visual.
+
+Evidencia: https://github.com/CmdOS-system/Nexus-os/actions/runs/39041523768/artifacts/12104561411 . No confundir este success con corrección del fondo (#13) ni sincronización posterior 9779277, que no están en ese head. Fast Checks 39041669629 success para 4de73ae. Próximo: comprobar captura 39041654332 y CI nativo de #13; conservar criterio de aceptación de cobertura completa y aurora visible antes de declarar escritorio terminado.
