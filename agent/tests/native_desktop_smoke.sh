@@ -24,7 +24,8 @@ xfconf-query -c xfce4-desktop -lv > native-desktop-evidence/backdrop.txt
 xfconf-query -c xsettings -lv > native-desktop-evidence/appearance.txt
 grep -q /usr/share/backgrounds/nexus/horizon-aurora.svg native-desktop-evidence/backdrop.txt
 # A subsequent login must preserve a user's new wallpaper selection.
-property=$(xfconf-query -c xfce4-desktop -l | sed -n '\|^/backdrop/.*/last-image$|p' | head -1)
+property=$(xfconf-query -c xfce4-desktop -l | sed -n '\|^/backdrop/.*/workspace[0-9][0-9]*/last-image$|p' | head -1)
+test -n "$property"
 xfconf-query -c xfce4-desktop -p "$property" -s /tmp/user-selected-wallpaper.svg
 /bin/sh image/includes/usr/local/libexec/nexus-horizon-appearance
 test "$(xfconf-query -c xfce4-desktop -p "$property")" = /tmp/user-selected-wallpaper.svg

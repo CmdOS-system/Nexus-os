@@ -12,7 +12,6 @@ on:
       - "image/includes/**"
       - "image/boot-smoke.sh"
       - "image/verify-artifact.sh"
-      - ".github/workflows/nexus-iso-gate.yml"
 
 permissions:
   contents: read
@@ -23,7 +22,10 @@ concurrency:
   queue: max
 
 jobs:
+  desktop-preflight:
+    uses: ./.github/workflows/nexus-native-desktop.yml
   build-and-boot:
+    needs: desktop-preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

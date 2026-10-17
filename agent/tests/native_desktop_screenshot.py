@@ -2,7 +2,7 @@
 import importlib.util
 import os
 from pathlib import Path
-from PIL import ImageGrab
+from PIL import Image, ImageGrab
 
 root = Path(__file__).resolve().parents[2]
 source = root / 'image/includes/opt/nexus/horizon.py'
@@ -18,7 +18,15 @@ try:
     app.update()
     image = ImageGrab.grab(xdisplay=os.environ['DISPLAY']).convert('RGB')
     assert image.size == (1920, 1080), image.size
-    # Sample the desktop, outside the launcher, to reject an unloaded/black background.
+    image.save(root / 'native-desktop-evidence/native-xfce-session.png')
+    # Verify the intended wallpaper, not merely a nonblack/default background.
+    expected = Image.open(root / 'native-desktop-evidence/expected-aurora.png').convert('RGB')
+    points = [(x, y) for x in range(200, 400, 20) for y in range(120, 960, 20)]
+    matches = sum(max(abs(a-b) for a, b in zip(image.getpixel(p), expected.getpixel(p))) <= 25 for p in points)
+    ratio = matches / len(points)
+    (root / 'native-desktop-evidence/wallpaper-match.txt').write_text(f'Aurora pixel match: {ratio:.3f}\n')
+    assert ratio >= 0.90, f'Expected aurora did not render: pixel match {ratio:.3f}'
+    # Also reject an unloaded/black background.
     samples = {image.getpixel((x, y)) for x in range(40, 400, 20) for y in range(100, 1000, 20)}
     assert len(samples) > 30, 'Native wallpaper did not render as expected'
     image.save(root / 'native-desktop-evidence/native-xfce-session.png')
