@@ -137,3 +137,16 @@ Estado: arranque Live, sesión y salida visual básica comprobados; diseño Hori
 - PR #6 integrada en `b5a7ac744855dc414e67d43b60e53dd1bc89c080`, tras Fast Checks 38982642570 y captura extendida aprobados. Sustituye su estado de borrador registrado arriba.
 - Próximo bloqueo: distinguir latencia de Alt-F2/Escape/Super+Espacio frente a configuración efectiva del atajo en el huésped. Consultar xfconf y archivos/ejecutables Horizon dentro de la ISO; separar cada interacción con esperas verificables. No declarar el lanzador validado hasta verlo y comprobar su respuesta.
 - Progreso global: Live visible y diagnósticos de sesión útiles; proveedor+CLI de IA real ya verificados fuera de ISO. Persisten gates independientes de Horizon Live, instalación/persistencia, IA dentro de ISO/voz y compatibilidad Windows.
+
+
+## Horizon: recuperación del diseño y cambios concretos — 2026-10-16 (Bogotá)
+
+Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Apple/macOS, GNOME, Material y KDE para crear identidad propia, superficies oscuras, luz ambiental, dock flotante, IA contextual, nitidez y acabados. La captura XFCE anterior no cumplía esa dirección. No tratar conceptos Chromium o capturas Xvfb como escritorio ISO final.
+
+- PR #8 integrada en `55b310012021ac60883c0b76d21e7c87fd4b0fcd`: el atajo se siembra en commands/default. La prueba real de xfsettingsd reprodujo pérdida con la configuración antigua y conservación con la nueva, manteniendo Alt-F2. Seis checks success en 38991434581. El primer intento de prueba falló porque el daemon activado por D-Bus no recibía el XDG_CONFIG_HOME temporal; se corrigió el aislamiento antes de interpretar el resultado.
+- Captura diagnóstica 38991201713, artefacto 12085591583, success: el registro de la ISO antigua muestra `/usr/local/bin/nexus-horizon` sin permiso de ejecución (0644), y la quinta captura queda en App Finder con nexus-horizon escrito. No era solo una cuestión de latencia.
+- PR #9 integrada en `a2582a2c05d826a15e4c7a4f71503889d0b4eb69`: fondo SVG aurora 3840×2160, tema Arc-Dark, iconos Papirus-Dark, Inter, defaults nativos de GTK/XFWM y fondo inicial por monitor; lanzador nativo con tarjetas adaptables, iconos vectoriales, búsqueda y foco visibles, scroll y selección por teclado. Se corrigen modos ejecutables de Nexus Horizon y Agent y se validan en image/validate.sh.
+- Seis checks success en 38991844855 para head `d380fc4705f86b9eead473fc6c4a810325d8ef18`; captura del lanzador descargada e inspeccionada. Es una ventana Tk real en Xvfb, recortada a 1040×820 sobre una sesión 1920×1080; NO es captura de la ISO nueva.
+- ISO Gate 38991943403 para el merge visual: observado pending/en cola. No afirmar que el diseño nuevo ya se vio en una ISO arrancada.
+- PR #7 mantiene diagnóstico ampliado y captura automática al completar ISO Gate, con intento temporal de 1920×1080 en el huésped. Último head `2a5f92caffce8a60614b1d4427cee3e4fb3021aa`: Fast Checks 38991901656 success; captura 38991897998 todavía en curso al registrar esta nota. Integrar tras revisar esa ejecución.
+- Próximo paso: comprobar ISO Gate 38991943403, usar su artefacto exacto para captura nueva, verificar fondo/tema/ejecutables y atajo Horizon. Dock flotante, blur/translucidez, IA gráfica, temas accesibles completos y validación HiDPI siguen pendientes.
