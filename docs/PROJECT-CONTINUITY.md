@@ -203,3 +203,10 @@ PR #14 propone rechazar cobertura parcial; prueba local rechazó baseline defect
 ## Topología Live confirmada y recuperación propuesta — 2026-10-17
 
 Diagnóstico 39044057903 success y Fast Checks 39044076378 success para 2c1da29. Artefacto 12105745314 descargado: xfdesktop 4.20.1, GDK Virtual-1 y cuatro workspaces EWMH; solo claves heredadas y migración=1, inicializador diferido. PR #16 propone crear claves modernas desde topología real cuando falten, con dependencias explícitas. Shell/Python y regresión controlada de topología pasaron; CI nativo y nueva ISO pendientes. No se ha resuelto aún el fondo Live ni la cobertura negra. PR #15 sigue como diagnóstico no integrado; #14 sigue como criterio de cobertura no integrado. Próximo: validar #16 en sesión nativa, luego candidato ISO y capturas; conservar preferencia posterior del usuario.
+
+
+## Recuperación de topología integrada — 2026-10-17
+
+PR #16 integrada a6997fb5356e71e70242fe71e545ab1c8d510b78 tras Native Desktop Smoke 39048640275 y Fast Checks 39048640373 success para ae883c4. Esperar el nuevo ISO Gate de a6997fb y posterior captura; la sesión nativa no sustituye aceptación Live. PR #14 incorpora criterio de regiones casi negras: el fallo sobre el candidato viejo es esperado porque contiene cobertura parcial observada. Consultar estado de integración de #14 en GitHub. No debilitar umbral para volver verde un defecto real.
+
+Siguiente acción: identificar run ISO de a6997fb, verificar candidato y SHA256, inspeccionar captura automática con criterio de cobertura completo. La recuperación crea claves por workspace si EWMH/GDK son válidos, pero fondo/repintado siguen sin acreditarse en nueva ISO. Progreso Live/Horizon/atajo sin cambios; instalación persistente, IA en ISO/voz y Windows pendientes.
