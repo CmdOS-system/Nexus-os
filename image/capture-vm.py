@@ -85,6 +85,8 @@ def capture(socket_path, serial_path, output, timeout=240):
             screenshot(output.with_name(output.stem + "-horizon-probe.png"))
             for marker, suffix in (("NEXUS_WINDOWS_ISO_PREPARED", "-windows-prepared"),
                                    ("NEXUS_WINDOWS_ISO_OPEN", "-windows-open"),
+                                   ("NEXUS_NOTEPAD_ISO_PREPARED", "-notepad-prepared"),
+                                   ("NEXUS_NOTEPAD_ISO_OPEN", "-notepad-open"),
                                    ("NEXUS_WINDOWS_ISO_PASS", None)):
                 until = time.monotonic() + 400
                 while time.monotonic() < until:

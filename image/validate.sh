@@ -110,3 +110,7 @@ echo "Nexus OS image source checks passed"
 test -s "$ROOT/includes/usr/share/applications/nexus-app-install.desktop"
 grep -qx 'Exec=/usr/bin/python3 /opt/nexus/agent/app_installer.py %f' "$ROOT/includes/usr/share/applications/nexus-app-install.desktop"
 grep -qx 'application/vnd.microsoft.portable-executable=nexus-app-install.desktop;' "$ROOT/includes/etc/skel/.config/mimeapps.list"
+
+test -s "$ROOT/hooks/030-wine-multiarch.hook.chroot"
+sh -n "$ROOT/hooks/030-wine-multiarch.hook.chroot"
+grep -q '030-wine-multiarch.hook.chroot' "$BUILD"
