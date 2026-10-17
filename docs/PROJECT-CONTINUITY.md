@@ -175,3 +175,12 @@ Se descargó artefacto 12104561411 de captura QEMU 39041523768 (success, harness
 El fondo sigue siendo XFCE en área 1280x800 y hay negro en parte del framebuffer 1920x1080. Aurora/cobertura completa no aprobadas; un run verde solo confirma los criterios implementados. PR #11 conserva diagnóstico y sincronización de captura; PR #13 propone esperar claves de backdrop por workspace en vez de finalizar sobre claves heredadas, con CI nativo y validación ISO pendientes. Ambas propuestas siguen sin integrar al corte.
 
 Evidencia real: https://github.com/CmdOS-system/Nexus-os/actions/runs/39041523768/artifacts/12104561411 . Fast Checks 39041669629 success para 4de73ae. Próximo paso: inspeccionar captura sincronizada 39041654332 y resultado nativo 39041856873, resolver fondo/repintado y después reconstruir y validar candidato que incluya la corrección. Progreso: Live UEFI + Horizon visible y atajo confirmados; instalación persistente, IA en ISO/voz, Windows y recuperación instalada pendientes.
+
+
+## Cambios preparados para integración — 2026-10-17
+
+PR #11: probe acotado de 20 segundos posterior a cinco capturas, salida/código y ventanas; sexta captura separada, señal de sincronización y espera NEXUS_DIAG_END antes de imagen inicial. Captura 39041654332 success en 9779277; PNG inicial inspeccionado: aún fondo XFCE parcial con negro, por lo que la sincronización no arregló el render. Artefacto 12104700554. Fast Checks 39042032070 success en 1d246e6. Es mejora de diagnóstico, no aceptación visual completa.
+
+PR #13: aceptar únicamente backdrop por workspace y esperar hasta 60 s; evitar marcar éxito sobre propiedades heredadas. Prueba controlada local pasó con listado heredado seguido de workspace, sin escrituras prematuras y conservando preferencias posteriores. Native Desktop Smoke 39041856873 y Fast Checks 39041856816 success en e04c2fb. Falta nueva ISO y prueba Live: no declarar fondo reparado en el candidato anterior.
+
+Ambos cambios listos para revisión/integración; comprobar estado actual de PR. Próximo: construir candidato con #13 y capturar con #11; revisar aurora y cobertura 1920x1080. Mantener fallo visual documentado incluso si los workflows pasan. Documentación primaria: https://github.com/xfce-mirror/xfdesktop/blob/xfce-4.20/common/xfdesktop-common.c y https://docs.xfce.org/xfce/xfconf/xfconf-query .
