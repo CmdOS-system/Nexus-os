@@ -322,3 +322,8 @@ Estado: asistente, entrada de menú, asociaciones para perfiles nuevos y paquete
 ## Bloqueo de preflight ISO corregido — 2026-10-17
 
 ISO Gate39062372682 no produjo ISO: verify.sh rechazó las llamadas Tk app.confirm.invoke() y app.open_button.invoke() del E2E gráfico como si fueran la API antigua del broker. No fue un fallo de Wine ni de arranque. Se sustituye grep genérico por análisis AST: solo se permiten esas dos llamadas sin argumentos en tests/windows_installer_gui_smoke.py; se siguen rechazando otras llamadas invoke e imports from secrets, incluso con espacios. Dos tests de regresión cubren seis casos. Fast Checks ejecuta ahora el mismo scanner, evitando descubrir este bloqueo recién al construir. verify.sh y los scripts del scanner disparan ISO Gate cuando cambian. Pendiente CI y nueva construcción; porcentaje global permanece≈36%.
+
+
+## Prueba Windows dentro de ISO preparada — 2026-10-17
+
+Se extiende captura QEMU para comprobar el runtime empaquetado de Nexus Install dentro del Live, con 4GB RAM, hash oficial fijado, nombre EXE con espacios, consulta MIME, selección sin prefijo, confirmación gráfica programática y apertura real7-Zip. Se conservan dos capturas adicionales del framebuffer (preparado y aplicación abierta) y marcadores seriales; se exige PASS. El probe se transfiere únicamente al invitado temporal después de las capturas Horizon; no cambia la ISO ni se instala en el producto. No representa un clic físico en Thunar ni persistencia tras reinicio. Implementación compilada; ejecución E2E pendiente de ISO Gate39064997881. No elevar porcentajes hasta revisar resultado y capturas. Global≈36%, Windows50%, instalador25%, Android0%.

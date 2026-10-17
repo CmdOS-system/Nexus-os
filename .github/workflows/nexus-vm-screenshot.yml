@@ -6,9 +6,11 @@ on:
     workflows: [Nexus ISO Gate]
     types: [completed]
   push:
+    branches: [main]
     paths:
       - '.github/workflows/nexus-vm-screenshot.yml'
       - 'image/capture-vm.py'
+      - 'image/windows-guest-probe.py'
       - 'image/diagnose-vm-serial.py'
       - 'image/check-desktop-coverage.py'
 
@@ -20,11 +22,11 @@ jobs:
   capture-verified-iso:
     if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
-      ISO_RUN_ID: ${{ github.event.workflow_run.id || '39048872619' }}
-      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || 'a6997fb5356e71e70242fe71e545ab1c8d510b78' }}
+      ISO_RUN_ID: ${{ github.event.workflow_run.id || '39064997881' }}
+      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || '791625cd119717fa5195a51477a70c00e6a90e65' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install QEMU and UEFI firmware
@@ -57,7 +59,7 @@ jobs:
           test -n "$firmware" || { echo "No readable UEFI firmware" >&2; exit 1; }
           echo "Firmware: $firmware"
           sha256sum "$iso" > nexus-vm-iso.sha256
-          qemu-system-x86_64 -machine q35,accel=tcg -m 2048 -smp 2 -boot d \
+          qemu-system-x86_64 -machine q35,accel=tcg -m 4096 -smp 2 -boot d \
             -drive if=pflash,format=raw,readonly=on,file="$firmware" \
             -cdrom "$iso" -display none -vga none -device VGA,edid=on,xres=1920,yres=1080 -serial unix:/tmp/nexus-serial.sock,server=on,wait=off \
             -qmp unix:/tmp/nexus-capture.sock,server=on,wait=off \
@@ -74,8 +76,8 @@ jobs:
           from PIL import Image
           from pathlib import Path
           paths = list(Path('.').glob('nexus-iso-desktop*.png'))
-          if len(paths) != 6:
-              raise SystemExit('Expected six guest screenshots, including the separate bounded launch probe')
+          if len(paths) != 8:
+              raise SystemExit('Expected eight guest screenshots, including Windows verification and application')
           for path in paths:
               image = Image.open(path).convert('RGB')
               if image.size != (1920, 1080):
