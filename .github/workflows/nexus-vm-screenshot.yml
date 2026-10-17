@@ -22,8 +22,8 @@ jobs:
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
-      ISO_RUN_ID: ${{ github.event.workflow_run.id || '38978527786' }}
-      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || '98e23179b2feddbb4fc8e4ec6abb26c675f24c81' }}
+      ISO_RUN_ID: ${{ github.event.workflow_run.id || '38991943403' }}
+      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || 'a2582a2c05d826a15e4c7a4f71503889d0b4eb69' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install QEMU and UEFI firmware
