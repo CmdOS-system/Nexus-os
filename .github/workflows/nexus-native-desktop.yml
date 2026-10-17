@@ -1,0 +1,34 @@
+name: Nexus Native Desktop Smoke
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/nexus-native-desktop.yml'
+      - 'agent/tests/native_desktop_*'
+  pull_request:
+    paths:
+      - 'image/includes/**'
+      - 'agent/tests/native_desktop_*'
+      - '.github/workflows/nexus-native-desktop.yml'
+permissions:
+  contents: read
+jobs:
+  native-session:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native desktop and packaged appearance dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xfce4-session xfdesktop4 xfce4-panel xfwm4 xfce4-settings dbus-x11 xvfb xauth python3-tk python3-pil arc-theme papirus-icon-theme fonts-inter librsvg2-common
+          sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg /usr/share/backgrounds/nexus/horizon-aurora.svg
+      - name: Exercise real XFCE appearance and capture the session
+        run: dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' bash agent/tests/native_desktop_smoke.sh
+      - name: Preserve native session evidence (not an ISO boot)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-native-session-evidence
+          path: native-desktop-evidence/
+          if-no-files-found: warn
