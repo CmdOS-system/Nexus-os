@@ -37,3 +37,12 @@ Avance: instalador común25→50 por componentes integrados y flujo parcial vali
 ## Segunda aplicación Windows: Notepad++ — 2026-10-17
 
 Se añade laboratorio real para Notepad++8.9.8.1 x64, instalador de https://github.com/notepad-plus-plus/notepad-plus-plus/releases/tag/v8.9.8.1 con SHA25626f3bcced788fadbac4e7e577b430ea2ce6060cf3bcad993ef4612ecd7d743da (digest del asset oficial). Manual primario https://github.com/notepad-plus-plus/npp-usermanual/blob/master/content/docs/command-prompt.md: /S y /noUpdater documentados. El probe instala sin root en prefijo descartable, abre un archivo cuyo nombre tiene espacios, enfoca la ventana real, escribe con teclado y guarda; verifica bytes del archivo y conserva captura/logs. CI pendiente. No añadir Notepad++ al catálogo gráfico aprobado ni afirmar soporte dentro de ISO hasta validar e implementar su adaptador. Global≈38%, Windows50%.
+
+
+### Notepad++ confirmado en laboratorio
+
+PR #27 integrada170cfd9e2515cd388c50efa72b2782b5b56f2de1. Windows Lab39068787928 y Fast Checks39068790547 aprobados. Artefacto12114811229 descargado y revisado: Notepad++8.9.8.1 x64 instalado, archivo Nexus sample.txt abierto, texto escrito por teclado y guardado con Ctrl+S; contenido exacto verificado. Captura y muestra guardadas en docs/evidence/2026-10-17/notepad-edit-save.png y notepad-saved-sample.txt.
+
+Primer intento39068603099 falló con syswow64/ntdll.dll ausentes: el laboratorio solo tenía Wine64. Se habilitó i386 y wine32:i386 junto a Wine64 según README Debian Wine10; se repitieron7-Zip/asistente/reapertura/menú/MIME y también aprobaron. La configuración mixta está probada en laboratorio, aún no en imagen. Manual primario: https://sources.debian.org/src/wine/10.0~repack-6/debian/README.debian .
+
+Siguiente prioridad concreta: integrar segundo paquete en Nexus Install (identificación por hash y perfil separado) y preparar motor mixto automáticamente en próxima ISO, con prueba de ambos. No marcar Notepad++ como instalable desde asistente actual: solo7-Zip está integrado. No demuestra plugins, impresión, actualizaciones, hardware o persistencia. Global≈38%, Windows50%, instalador50%, APK0%.
