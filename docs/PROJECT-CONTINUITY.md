@@ -173,3 +173,12 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 PR #11, test/live-horizon-launch-diagnostics: añade señal de finalización de las cinco capturas de teclado, luego prueba del wrapper limitada a 20 segundos con stdout/stderr, estado de salida y árbol de ventanas. Recoge preferencias xfconf y autostart sin ejecutar el inicializador de apariencia. El lanzamiento diagnóstico ocurre después de las capturas para no acreditar falsamente el atajo. El candidato manual se fija ahora en a2582a2 / ISO Gate 38991943403. No modifica la ISO ni elimina rechazo de imágenes negras.
 
 Validación local: compilación Python y sintaxis bash del comando generado; comprobación de salto de línea terminal y expansión de PID. PR en borrador, pendiente de CI y ejecución QEMU. Próximo paso: revisar Actions del head vigente de PR #11, descargar logs y distinguir error de ejecución del wrapper, preferencias/autostart y repintado. No declarar arreglado Horizon Live.
+
+
+## Resultado del probe y documentación revisada — 2026-10-17
+
+Run 39040527570 completó captura/probe, pero falló rechazo de framebuffer negro; no es éxito visual. Artefacto 12103877628 descargado: el árbol X durante el lanzamiento acotado contiene ventana Nexus Horizon 880x720; salida del wrapper vacía y código 124 esperado al agotar timeout. Esto acredita creación de ventana por ejecución directa en Live, no atajo, interacción o calidad visual. xfconf registra Arc-Dark, Papirus-Dark, Inter 11 y rutas aurora. Configuración de wallpaper no demuestra renderizado efectivo.
+
+Documentación primaria revisada: https://docs.xfce.org/xfce/xfconf/xfconf-query (consulta/listado y propagación de ajustes) y https://docs.xfce.org/xfce/xfce4-session/preferences (autostart y restauración de sesiones). Mantener separados configuración, ejecución y píxeles observados.
+
+PR #11 ampliada con sexta captura horizon-probe tras inventario de ventanas, antes del vencimiento del proceso. Las cinco capturas previas conservan orden y rechazo de negro. Compilación Python, sintaxis bash generada y diff local aprobados; ejecución nueva pendiente. Próximo paso: revisar artefacto del head f5d257f y la captura del probe; comprobar si aurora se repinta tras cambio de resolución sin modificar preferencias para ocultar el fallo.
