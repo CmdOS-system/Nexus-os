@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'agent/tests/windows_7zip_lab.sh'
+      - 'agent/tests/windows_notepad_lab.py'
       - 'agent/app_installer.py'
       - 'agent/tests/windows_installer_gui_smoke.py'
       - 'agent/tests/windows_file_association_smoke.py'
@@ -25,8 +26,9 @@ jobs:
     steps:
       - name: Install Debian Wine and test display
         run: |
+          dpkg --add-architecture i386
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates curl wine wine64 fonts-wine xvfb xauth x11-utils python3 python3-pil python3-tk desktop-file-utils shared-mime-info xdg-utils libglib2.0-bin dbus-x11 file
+          apt-get install -y --no-install-recommends git ca-certificates curl wine wine64 wine32:i386 fonts-wine xvfb xauth x11-utils python3 python3-pil python3-tk desktop-file-utils shared-mime-info xdg-utils libglib2.0-bin dbus-x11 file xdotool
           useradd --create-home nexuslab
       - uses: actions/checkout@v4
       - name: Install and exercise actual Windows 7-Zip as an unprivileged user
@@ -46,6 +48,9 @@ jobs:
           desktop-file-validate /usr/share/applications/nexus-app-install.desktop
           update-desktop-database /usr/share/applications
           runuser -u nexuslab -- dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' python3 agent/tests/windows_file_association_smoke.py
+      - name: Install Notepad++ and edit/save through actual Windows GUI
+        run: |
+          runuser -u nexuslab -- xvfb-run -a -s '-screen 0 1280x800x24' python3 agent/tests/windows_notepad_lab.py
       - name: Preserve real Windows application evidence
         if: always()
         uses: actions/upload-artifact@v4
