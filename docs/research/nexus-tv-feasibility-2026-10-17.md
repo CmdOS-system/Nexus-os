@@ -49,3 +49,10 @@ Para interoperabilidad: identificar producto y titular, revisar documentación/A
 6. Cada proveedor DRM por separado en vía oficial; documentar restricciones. Después voz, accesibilidad y empaquetado opcional Nexus.
 
 Pendientes: identificar SuperTV exacto, seleccionar una fuente de prueba con derechos documentados, validar disponibilidad de paquetes Debian y licencias de componentes, prototipo reproductor y matriz de aceptación. No se han verificado emisiones comerciales ni licencias de contenido por la mera lectura de documentación.
+
+
+## Disponibilidad de paquetes verificada — 2026-10-17
+
+Catálogo oficial Trixie: kodi 2:21.2+dfsg-4 (https://packages.debian.org/trixie/kodi) y kodi-pvr-iptvsimple 21.10.2+ds-1 (https://packages.debian.org/trixie/kodi-pvr-iptvsimple). Disponibilidad de metadatos no equivale a instalación o reproducción probada. La consulta de tvheadend en ese catálogo devolvió error; no asumir disponibilidad en repositorio Debian ni añadir repositorios externos sin verificar distribución, firma y mantenimiento.
+
+Prototipo siguiente recomendado: entorno Debian desechable, instalar Kodi+cliente desde paquetes de la misma distribución, generar clip propio con FFmpeg, reproducirlo y verificar posición/duración/pausa por API oficial local. Después introducir un único origen de emisión autorizado y EPG de prueba. Mantener cambios fuera de la ISO hasta pasar reproducción real. No configurar catálogos desconocidos ni usar ingeniería inversa para obtener emisiones.
