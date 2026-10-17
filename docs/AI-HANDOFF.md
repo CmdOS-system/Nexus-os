@@ -181,3 +181,8 @@ Nexus Install reconoce por hash7-Zip26.04 x64 y Notepad++8.9.8.1 x64 sin confiar
 Se amplía Wine GUI Lab para instalar Notepad++ desde el propio asistente y abrirlo desde su acceso sin alterar registro7-Zip. CI pendiente. Se prepara hook chroot030 para habilitar i386 y wine32:i386 al construir la ISO (sin comandos del usuario). Se amplía prueba Live a ambos programas y acciones de menú, con10 capturas y6GBRAM de laboratorio. Captura automática solo después de ISO Gate exitoso; ejecución manual exige id/SHA del candidato exacto para evitar intentar una imagen antigua.
 
 Fuentes: manual Debian Live de hooks https://live-team.pages.debian.net/live-manual/html/live-manual/customizing-contents.en y README Debian Wine10 https://sources.debian.org/src/wine/10.0~repack-6/debian/README.debian . Pendiente revisar GUI lab, integrar, construir una sola nueva ISO y revisar capturas/markers. ISO791625cd anterior solo acredita7-Zip y no incluye este catálogo ni runtime mixto. Global≈38%, Windows50%, instalador50%, APK0%; no elevar por código pendiente de validación.
+
+
+### Integración gráfica de Notepad++ validada
+
+PR #28 integrada4b3565acff56842f1f51f369125507b858379d47. Fast Checks39073201045 aprobó6jobs; Wine Lab39073199395 aprobó instalación gráfica, Abrir y acceso de menú para ambos programas, registro7-Zip sin cambios, MIME y edición/guardadoNotepad++. Artefacto12115259388 descargado, notepad-assistant-result.txt y captura nexus-notepad-install.png revisados. Sustituye CI pendiente de la nota anterior. Nueva ISO Gate39073455863 iniciada con runtime mixto y catálogo de ambos programas; aún pendiente construcción/captura Live. La ISO anterior no acredita estos cambios. Global≈38%.
