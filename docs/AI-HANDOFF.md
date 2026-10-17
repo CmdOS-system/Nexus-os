@@ -98,3 +98,10 @@ Usuario exige descargar, abrir archivo y usar asistente gráfico para instalar a
 Android ahora prioridad alta separada de macOS. Waydroid candidato, no integrado: necesita resolver Wayland frente al XFCE/X11 actual, Binder/GPU y ABI ARM/x86_64. Investigar código abierto/interoperabilidad; no copiar emuladores propietarios ni eludir controles. Windows sigue central; TV/radio y pulido avanzado secundarios. Trabajo siguiente: laboratorio Windows real y requisitos Android antes de empaquetado.
 
 PROJECT-PROGRESS.md reponderado por alcance nuevo: ≈28 % global estimado (27.50), frente a ≈36 % del corte anterior. Mismos avances técnicos; Android/asistente/Linux nuevo mantienen 0 % conservador. Explicar reducción por alcance, no regresión. Mostrar porcentaje/barra en cada respuesta de estado.
+
+
+## Prototipo gráfico de instalación verificado — 2026-10-17
+
+PR #21 integrada02d6bdb4672a742b0968ff5b75bdd1d535499941. GUIWineLab39053538833 success para8d3c970; FastChecks39053586940 success para cf04e70 (mismo código más docs). Artefacto12108338331 descargado; gui-assistant-result.txt confirma selección sin ejecución/prefijo, botón Instalar completado y botón Abrir produjo ventana7-Zip. Captura de app revisada, 7-Zip tapa gran parte del asistente; no presentarla como diseño completo del instalador. Es Debian/Wine/Xvfb, no ISO, ni reinicio OS.
+
+Asistente común0->25 como prototipo limitado; global35.75≈36 %. Windows50, Android0, Linux0. Próxima implementación prioritaria: asociación del archivo y acceso gráfico con empaquetado, comprobar importación real en staging y preparar Wine gráficamente; luego desinstalación y expansión de formatos. No prometer APK/Linux soportados ni incluir cualquier EXE en la whitelist de 7-Zip. Releer ONE-CLICK-APPLICATIONS.md y app-installer-prototype.md antes de ampliar.
