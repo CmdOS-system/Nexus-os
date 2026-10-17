@@ -291,3 +291,10 @@ PR #20, test/windows-7zip-real-app: laboratorio Debian Trixie con Wine, instalad
 PR #20 integrada f727d8256ae4bfbe8f0c18dbdd911b16357ec65a. Windows Application Lab 39052936193 y Fast Checks 39052939320 success para 3ce90a2. Artefacto 12107549425 descargado, logs y GUI revisados: instalador 7-Zip 26.04 x64 oficial con hash, creación ZIP por ejecutable Windows y contenido verificado, reapertura tras reiniciar Wine10 en Debian13 y GUI 7zFM visible. NO prueba en ISO, reboot de OS ni compresión mediante clics. Matriz WINDOWS-COMPATIBILITY-MATRIX.md creada.
 
 Windows pasa25->50 como implementación parcial/laboratorio; global33.75≈34 % con mismos pesos, Android/asistente0. Próximo trabajo prioritario: asistente gráfico para una instalación Windows conocida y verificada, luego Nexus instalado y app difícil del usuario. No extrapolar 7-Zip a todo Windows. Mantener APK como prioridad alta con requisitos Wayland/Binder separados.
+
+
+## Asistente gráfico Windows en desarrollo — 2026-10-17
+
+PR #21 feat/graphical-app-installer-prototype: agent/app_installer.py y pruebas. Selección/verificación del 7-Zip26.04x64 aprobado sin ejecutar; botón de confirmación -> perfil Wine por usuario -> progreso -> Abrir. Cuatro tests locales y sintaxis correctos. WineGUI real se prueba en workflow Nexus Windows Application Lab; consultar head vigente de #21. Aún sin menú/asociación MIME ni ISO, sin preparación automática de Wine, sin APK/Linux/desinstalación/cancelación en este corte.
+
+No anunciar flujo general con un clic terminado. Mantener global≈34, Windows50 (laboratorio), Android0 e instaladorcomún0 hasta ejecución gráfica inspeccionada. Próxima acción: resultado GUI y screenshot nexus-install-7zip.png del head #21; resolver fallos con ese laboratorio antes de empaquetar.
