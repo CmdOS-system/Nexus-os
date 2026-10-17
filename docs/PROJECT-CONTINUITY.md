@@ -166,3 +166,10 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 - PR #10 confirmada integrada en e95def969b8a9897b00624e7888a19e478d5ad93. Native Desktop Smoke 38993555945 y Fast Checks 38993555911: success en ese SHA. Es sesión XFCE/Xvfb aislada, no ISO.
 - Siguiente trabajo: instrumentar la sesión Live con estado de autostart/appearance y preferencias xfconf; ejecutar el wrapper desde la sesión gráfica con stdout/stderr y código de salida, identificar ventana Horizon, esperar repintado tras xrandr antes de captura. Conservar capturas iniciales fallidas y criterios de rechazo. Repetir con el mismo candidato exacto; no reconstruir sin una causa que requiera cambiar imagen.
 - Progreso global: nueva ISO construida y UEFI aprobado; apariencia y lanzamiento Horizon Live bloqueados. Instalación persistente, IA en ISO/voz, Windows y recuperación instalada siguen pendientes.
+
+
+## Corrección propuesta de inicialización del fondo — 2026-10-17
+
+PR #13, fix/horizon-workspace-wallpaper, cambio 9ce963e: el inicializador aceptaba last-image heredados sin workspace y escribía el marcador de finalización. El probe real solo mostró monitor0/monitor1 sin workspace. El código primario XFCE 4.20 common/xfdesktop-common.c migra esos ajustes a /monitor.../workspace.../; fuente consultada: https://github.com/xfce-mirror/xfdesktop/blob/xfce-4.20/common/xfdesktop-common.c . Ahora solo acepta rutas por workspace y espera hasta 60 segundos. No reescribe preferencias tras completar correctamente.
+
+Prueba local controlada pasó: primer listado solo heredado no produjo escritura; segundo listado con workspace produjo escritura en la ruta moderna; segunda ejecución no modificó preferencias. Sintaxis sh aprobada. No equivale a reproducción de toda la sesión Live. Falta CI de escritorio nativo, revisión de interacción con la migración y nueva ISO antes de declarar solucionado el fondo. La PR sigue en borrador. PR #11 conserva diagnóstico/captura del candidato previo; revisar sus resultados sin confundirlos con ISO que incluya #13.
