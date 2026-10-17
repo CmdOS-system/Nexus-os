@@ -182,3 +182,8 @@ Run 39040527570 completó captura/probe, pero falló rechazo de framebuffer negr
 Documentación primaria revisada: https://docs.xfce.org/xfce/xfconf/xfconf-query (consulta/listado y propagación de ajustes) y https://docs.xfce.org/xfce/xfce4-session/preferences (autostart y restauración de sesiones). Mantener separados configuración, ejecución y píxeles observados.
 
 PR #11 ampliada con sexta captura horizon-probe tras inventario de ventanas, antes del vencimiento del proceso. Las cinco capturas previas conservan orden y rechazo de negro. Compilación Python, sintaxis bash generada y diff local aprobados; ejecución nueva pendiente. Próximo paso: revisar artefacto del head f5d257f y la captura del probe; comprobar si aurora se repinta tras cambio de resolución sin modificar preferencias para ocultar el fallo.
+
+
+## Sincronización de captura — 2026-10-17
+
+Fast Checks 39041543483 finalizó success para db66883393a4f7259fa289f240ee23010e71c7b2. Captura 39041523768 seguía en progreso al corte. Se identificó carrera en el harness: capture-vm esperaba XFCE+45 segundos, mientras diagnose-vm podía seguir ejecutando xrandr concurrentemente. En 9779277 la captura exige además NEXUS_DIAG_END antes de la espera de repintado. No se afirma que esta carrera sea la causa única ni que la corrección repare el renderizado. Python compile y diff local correctos; nuevo QEMU pendiente. Se conservan las seis capturas y rechazo de negro. Siguiente acción: revisar ambos runs y el PNG horizon-probe; no integrar PR #11 como arreglo visual sin inspección.
