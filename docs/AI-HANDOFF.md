@@ -172,3 +172,12 @@ PR #27 integrada170cfd9e2515cd388c50efa72b2782b5b56f2de1. Windows Lab39068787928
 Primer intento39068603099 falló con syswow64/ntdll.dll ausentes: el laboratorio solo tenía Wine64. Se habilitó i386 y wine32:i386 junto a Wine64 según README Debian Wine10; se repitieron7-Zip/asistente/reapertura/menú/MIME y también aprobaron. La configuración mixta está probada en laboratorio, aún no en imagen. Manual primario: https://sources.debian.org/src/wine/10.0~repack-6/debian/README.debian .
 
 Siguiente prioridad concreta: integrar segundo paquete en Nexus Install (identificación por hash y perfil separado) y preparar motor mixto automáticamente en próxima ISO, con prueba de ambos. No marcar Notepad++ como instalable desde asistente actual: solo7-Zip está integrado. No demuestra plugins, impresión, actualizaciones, hardware o persistencia. Global≈38%, Windows50%, instalador50%, APK0%.
+
+
+## Catálogo gráfico de dos aplicaciones y siguiente ISO — 2026-10-17
+
+Nexus Install reconoce por hash7-Zip26.04 x64 y Notepad++8.9.8.1 x64 sin confiar en el nombre del archivo. Elige perfil, binario, argumentos y entrada de menú propios; --application permite abrir el programa correcto. Registro local de instalación y nueva verificación del binario siguen activos. El selector bloquea Abrir mientras se identifica el paquete, y cancelar/cerrar el asistente limpia su temporizador Tk. Diez unit tests locales aprobados, incluidos perfiles separados, selección sin ejecución y acceso específico Notepad++.
+
+Se amplía Wine GUI Lab para instalar Notepad++ desde el propio asistente y abrirlo desde su acceso sin alterar registro7-Zip. CI pendiente. Se prepara hook chroot030 para habilitar i386 y wine32:i386 al construir la ISO (sin comandos del usuario). Se amplía prueba Live a ambos programas y acciones de menú, con10 capturas y6GBRAM de laboratorio. Captura automática solo después de ISO Gate exitoso; ejecución manual exige id/SHA del candidato exacto para evitar intentar una imagen antigua.
+
+Fuentes: manual Debian Live de hooks https://live-team.pages.debian.net/live-manual/html/live-manual/customizing-contents.en y README Debian Wine10 https://sources.debian.org/src/wine/10.0~repack-6/debian/README.debian . Pendiente revisar GUI lab, integrar, construir una sola nueva ISO y revisar capturas/markers. ISO791625cd anterior solo acredita7-Zip y no incluye este catálogo ni runtime mixto. Global≈38%, Windows50%, instalador50%, APK0%; no elevar por código pendiente de validación.

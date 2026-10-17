@@ -35,6 +35,8 @@ cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot
 mkdir -p config/hooks/live
 cp "$ROOT/hooks/010-enable-nexus-boot-ready.hook.chroot" config/hooks/live/
 chmod 0755 config/hooks/live/010-enable-nexus-boot-ready.hook.chroot
+cp "$ROOT/hooks/030-wine-multiarch.hook.chroot" config/hooks/live/
+chmod 0755 config/hooks/live/030-wine-multiarch.hook.chroot
 
 
 mkdir -p config/includes.chroot

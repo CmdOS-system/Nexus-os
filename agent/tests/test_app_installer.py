@@ -115,6 +115,51 @@ class InstallerTests(unittest.TestCase):
             installer.return_value.close.assert_called_once_with()
             app.assert_not_called()
 
+    def test_notepad_selection_preserves_separate_7zip_profile(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(module.Path, 'home', return_value=Path(directory)), patch.object(module.shutil, 'which', return_value='/usr/bin/wine'):
+            seven = module.Installer()
+            seven.binary().parent.mkdir(parents=True)
+            seven.binary().write_bytes(b'seven fixture')
+            seven.record_installation()
+            seven_root = seven.root
+            seven.close()
+            source = Path(directory) / 'arbitrary filename.exe'
+            source.write_bytes(b'notepad fixture')
+            specs = module.package_specs()
+            specs['notepadpp']['sha256'] = hashlib.sha256(source.read_bytes()).hexdigest()
+            with patch.object(module, 'package_specs', return_value=specs), patch.object(module.subprocess, 'run') as run:
+                service = module.Installer()
+                try:
+                    service.prepare(source)
+                    self.assertEqual(service.package_id, 'notepadpp')
+                    self.assertNotEqual(service.root, seven_root)
+                    self.assertTrue(service.ready)
+                    self.assertFalse((service.root / 'prefix').exists())
+                    run.assert_not_called()
+                    restored = module.Installer()
+                    try:
+                        self.assertTrue(restored.installed)
+                        self.assertEqual(restored.root, seven_root)
+                    finally:
+                        restored.close()
+                finally:
+                    service.close()
+
+    def test_notepad_receipt_and_menu_are_application_specific(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(module.os.environ, {'XDG_DATA_HOME': directory + '/data'}):
+            service = module.Installer(Path(directory) / 'npp', package_id='notepadpp')
+            try:
+                service.binary().parent.mkdir(parents=True)
+                service.binary().write_bytes(b'notepad executable fixture')
+                service.record_installation()
+                self.assertTrue(service.has_verified_installation())
+                service.register_menu_entry()
+                self.assertEqual(service.menu_entry().name, 'nexus-notepadpp.desktop')
+                self.assertIn('--application notepadpp', service.menu_entry().read_text())
+                self.assertIn('Notepad++ (Windows)', service.menu_entry().read_text())
+            finally:
+                service.close()
+
     def test_symlink_input_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
