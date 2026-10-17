@@ -12,7 +12,6 @@ on:
       - "image/includes/**"
       - "image/boot-smoke.sh"
       - "image/verify-artifact.sh"
-      - ".github/workflows/nexus-iso-gate.yml"
 
 permissions:
   contents: read
