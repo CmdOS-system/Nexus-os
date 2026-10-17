@@ -168,8 +168,19 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 - Progreso global: nueva ISO construida y UEFI aprobado; apariencia y lanzamiento Horizon Live bloqueados. Instalación persistente, IA en ISO/voz, Windows y recuperación instalada siguen pendientes.
 
 
-## Corrección propuesta de inicialización del fondo — 2026-10-17
+## Hito confirmado: Horizon visible mediante atajo en ISO — 2026-10-17
 
-PR #13, fix/horizon-workspace-wallpaper, cambio 9ce963e: el inicializador aceptaba last-image heredados sin workspace y escribía el marcador de finalización. El probe real solo mostró monitor0/monitor1 sin workspace. El código primario XFCE 4.20 common/xfdesktop-common.c migra esos ajustes a /monitor.../workspace.../; fuente consultada: https://github.com/xfce-mirror/xfdesktop/blob/xfce-4.20/common/xfdesktop-common.c . Ahora solo acepta rutas por workspace y espera hasta 60 segundos. No reescribe preferencias tras completar correctamente.
+Se descargó artefacto 12104561411 de captura QEMU 39041523768 (success, harness f5d257f85cb3a80938b27ec121368f393e7ff653, candidato ISO a2582a2). Inspección visual: nexus-iso-desktop-horizon.png muestra el lanzador Horizon tras Super+Espacio; horizon-probe.png lo muestra también por ejecución directa. Esto sustituye el pendiente de apertura y atajo para ese candidato, sin acreditar todavía todas sus interacciones.
 
-Prueba local controlada pasó: primer listado solo heredado no produjo escritura; segundo listado con workspace produjo escritura en la ruta moderna; segunda ejecución no modificó preferencias. Sintaxis sh aprobada. No equivale a reproducción de toda la sesión Live. Falta CI de escritorio nativo, revisión de interacción con la migración y nueva ISO antes de declarar solucionado el fondo. La PR sigue en borrador. PR #11 conserva diagnóstico/captura del candidato previo; revisar sus resultados sin confundirlos con ISO que incluya #13.
+El fondo sigue siendo XFCE en área 1280x800 y hay negro en parte del framebuffer 1920x1080. Aurora/cobertura completa no aprobadas; un run verde solo confirma los criterios implementados. PR #11 conserva diagnóstico y sincronización de captura; PR #13 propone esperar claves de backdrop por workspace en vez de finalizar sobre claves heredadas, con CI nativo y validación ISO pendientes. Ambas propuestas siguen sin integrar al corte.
+
+Evidencia real: https://github.com/CmdOS-system/Nexus-os/actions/runs/39041523768/artifacts/12104561411 . Fast Checks 39041669629 success para 4de73ae. Próximo paso: inspeccionar captura sincronizada 39041654332 y resultado nativo 39041856873, resolver fondo/repintado y después reconstruir y validar candidato que incluya la corrección. Progreso: Live UEFI + Horizon visible y atajo confirmados; instalación persistente, IA en ISO/voz, Windows y recuperación instalada pendientes.
+
+
+## Cambios preparados para integración — 2026-10-17
+
+PR #11: probe acotado de 20 segundos posterior a cinco capturas, salida/código y ventanas; sexta captura separada, señal de sincronización y espera NEXUS_DIAG_END antes de imagen inicial. Captura 39041654332 success en 9779277; PNG inicial inspeccionado: aún fondo XFCE parcial con negro, por lo que la sincronización no arregló el render. Artefacto 12104700554. Fast Checks 39042032070 success en 1d246e6. Es mejora de diagnóstico, no aceptación visual completa.
+
+PR #13: aceptar únicamente backdrop por workspace y esperar hasta 60 s; evitar marcar éxito sobre propiedades heredadas. Prueba controlada local pasó con listado heredado seguido de workspace, sin escrituras prematuras y conservando preferencias posteriores. Native Desktop Smoke 39041856873 y Fast Checks 39041856816 success en e04c2fb. Falta nueva ISO y prueba Live: no declarar fondo reparado en el candidato anterior.
+
+Ambos cambios listos para revisión/integración; comprobar estado actual de PR. Próximo: construir candidato con #13 y capturar con #11; revisar aurora y cobertura 1920x1080. Mantener fallo visual documentado incluso si los workflows pasan. Documentación primaria: https://github.com/xfce-mirror/xfdesktop/blob/xfce-4.20/common/xfdesktop-common.c y https://docs.xfce.org/xfce/xfconf/xfconf-query .
