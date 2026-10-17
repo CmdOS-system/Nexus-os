@@ -1,0 +1,55 @@
+"""Real GUI install flow, isolated Debian user. Never attach to an active desktop."""
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from PIL import ImageGrab
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app_installer import App, Installer
+
+
+def wait_until(app, condition, seconds=200):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        app.update()
+        if condition():
+            return
+        time.sleep(0.1)
+    raise AssertionError('GUI did not reach expected state: ' + app.status.get())
+
+
+with tempfile.TemporaryDirectory(prefix='nexus-gui-lab-') as directory:
+    root = Path(directory)
+    setup = root / '7zip Windows installer.exe'
+    with urllib.request.urlopen('https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe', timeout=60) as response:
+        payload = response.read(32 * 1024 * 1024 + 1)
+    assert len(payload) <= 32 * 1024 * 1024
+    setup.write_bytes(payload)
+    service = Installer(root / 'application')
+    app = App(service)
+    try:
+        app.select_path(setup)
+        wait_until(app, lambda: not app.busy)
+        assert service.ready, app.status.get()
+        assert not service.installed
+        assert not (service.root / 'prefix').exists(), 'Selecting must not execute the installer'
+        app.confirm.invoke()
+        wait_until(app, lambda: not app.busy)
+        assert service.installed, app.status.get()
+        app.open_button.invoke()
+        app.update()
+        time.sleep(8)
+        windows = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
+        assert '7-Zip' in windows
+        assert 'Nexus Install' in windows
+        Path('windows-evidence/gui-assistant-windows.txt').write_text(windows)
+        ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save('windows-evidence/nexus-install-7zip.png')
+        Path('windows-evidence/gui-assistant-result.txt').write_text('PASS: selection verified without execution; graphical confirmation installed; graphical Open created 7-Zip window. No OS reboot or general-format acceptance.\n')
+    finally:
+        if app.busy:
+            wait_until(app, lambda: not app.busy)
+        subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
+        app.request_close()
