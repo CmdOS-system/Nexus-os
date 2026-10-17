@@ -277,3 +277,10 @@ Usuario exige descargar, abrir archivo y usar asistente gráfico para instalar a
 Android ahora prioridad alta separada de macOS. Waydroid candidato, no integrado: necesita resolver Wayland frente al XFCE/X11 actual, Binder/GPU y ABI ARM/x86_64. Investigar código abierto/interoperabilidad; no copiar emuladores propietarios ni eludir controles. Windows sigue central; TV/radio y pulido avanzado secundarios. Trabajo siguiente: laboratorio Windows real y requisitos Android antes de empaquetado.
 
 PROJECT-PROGRESS.md reponderado por alcance nuevo: ≈28 % global estimado (27.50), frente a ≈36 % del corte anterior. Mismos avances técnicos; Android/asistente/Linux nuevo mantienen 0 % conservador. Explicar reducción por alcance, no regresión. Mostrar porcentaje/barra en cada respuesta de estado.
+
+
+## Full HD Live aprobado; laboratorio Windows iniciado — 2026-10-17
+
+Captura 39051320346 success en baf5918: artefacto 12107933545 descargado y nexus-iso-desktop-horizon.png inspeccionado, aurora y Horizon cubren 1920x1080 sin el negro anterior. Se valida arranque Full HD con EDID nativo; NO se valida resize dinámico. #19 integrada para conservar esta configuración de laboratorio; comprobar SHA de merge en GitHub. No cambió la ISO a6997fb. Diseño completo/accesibilidad aún pendientes, módulo Horizon mantiene 50 % conservador.
+
+PR #20, test/windows-7zip-real-app: laboratorio Debian Trixie con Wine, instalador Windows 7-Zip 26.04 x64 oficial y SHA256 upstream d54bf805f9f3704d1e8db2fa3498ae7ef2df0312b40b558e7c71c734430a665d. Prueba instalación, ZIP con contenido verificado independientemente, reinicio Wine y ventana GUI con captura, sin privilegios. Shell local correcto; ejecución real pendiente. No equivale a instalador gráfico Nexus ni persistencia tras reboot OS. No subir Windows25/global≈28 hasta evidencias verificadas. Próximo trabajo prioritario: resultados PR #20 y primera aplicación real, después integración gráfica y APK conforme ONE-CLICK-APPLICATIONS.md.
