@@ -166,3 +166,10 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 - PR #10 confirmada integrada en e95def969b8a9897b00624e7888a19e478d5ad93. Native Desktop Smoke 38993555945 y Fast Checks 38993555911: success en ese SHA. Es sesión XFCE/Xvfb aislada, no ISO.
 - Siguiente trabajo: instrumentar la sesión Live con estado de autostart/appearance y preferencias xfconf; ejecutar el wrapper desde la sesión gráfica con stdout/stderr y código de salida, identificar ventana Horizon, esperar repintado tras xrandr antes de captura. Conservar capturas iniciales fallidas y criterios de rechazo. Repetir con el mismo candidato exacto; no reconstruir sin una causa que requiera cambiar imagen.
 - Progreso global: nueva ISO construida y UEFI aprobado; apariencia y lanzamiento Horizon Live bloqueados. Instalación persistente, IA en ISO/voz, Windows y recuperación instalada siguen pendientes.
+
+
+## Instrumentación Live preparada — 2026-10-17
+
+PR #11, test/live-horizon-launch-diagnostics: añade señal de finalización de las cinco capturas de teclado, luego prueba del wrapper limitada a 20 segundos con stdout/stderr, estado de salida y árbol de ventanas. Recoge preferencias xfconf y autostart sin ejecutar el inicializador de apariencia. El lanzamiento diagnóstico ocurre después de las capturas para no acreditar falsamente el atajo. El candidato manual se fija ahora en a2582a2 / ISO Gate 38991943403. No modifica la ISO ni elimina rechazo de imágenes negras.
+
+Validación local: compilación Python y sintaxis bash del comando generado; comprobación de salto de línea terminal y expansión de PID. PR en borrador, pendiente de CI y ejecución QEMU. Próximo paso: revisar Actions del head vigente de PR #11, descargar logs y distinguir error de ejecución del wrapper, preferencias/autostart y repintado. No declarar arreglado Horizon Live.
