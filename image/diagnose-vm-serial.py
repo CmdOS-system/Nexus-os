@@ -99,7 +99,7 @@ def collect(socket_path, log_path, full_hd=False):
             "ls -l /usr/local/libexec/nexus-horizon-appearance; "
             "cat /etc/xdg/autostart/*nexus* /home/nexus/.config/autostart/*nexus* 2>/dev/null; "
             "timeout 20s /usr/local/bin/nexus-horizon >/tmp/nexus-horizon-probe.log 2>&1 & probe_pid=$!; "
-            "sleep 10; xwininfo -root -tree; wait \"$probe_pid\"; probe_rc=$?; "
+            "sleep 10; xwininfo -root -tree; printf 'NEXUS_HORIZON_PROBE_%s\\n' READY; sleep 10; wait \"$probe_pid\"; probe_rc=$?; "
             "printf 'Horizon bounded probe exit=%s (124 means timeout)\\n' \"$probe_rc\"; "
             "cat /tmp/nexus-horizon-probe.log; "
             "printf '\\nNEXUS_HORIZON_PROBE_%s\\n' END\n"
