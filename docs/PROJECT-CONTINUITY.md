@@ -210,3 +210,10 @@ Diagnóstico 39044057903 success y Fast Checks 39044076378 success para 2c1da29.
 PR #16 integrada a6997fb5356e71e70242fe71e545ab1c8d510b78 tras Native Desktop Smoke 39048640275 y Fast Checks 39048640373 success para ae883c4. Esperar el nuevo ISO Gate de a6997fb y posterior captura; la sesión nativa no sustituye aceptación Live. PR #14 incorpora criterio de regiones casi negras: el fallo sobre el candidato viejo es esperado porque contiene cobertura parcial observada. Consultar estado de integración de #14 en GitHub. No debilitar umbral para volver verde un defecto real.
 
 Siguiente acción: identificar run ISO de a6997fb, verificar candidato y SHA256, inspeccionar captura automática con criterio de cobertura completo. La recuperación crea claves por workspace si EWMH/GDK son válidos, pero fondo/repintado siguen sin acreditarse en nueva ISO. Progreso Live/Horizon/atajo sin cambios; instalación persistente, IA en ISO/voz y Windows pendientes.
+
+
+## Cambio del método de trabajo solicitado por el usuario — 2026-10-17
+
+Evitar el ciclo de corregir/reconstruir sin reproducir causa. PR #17 propone reemplazar preflight Ubuntu por Debian Trixie (como ISO), incluir desktop-base, registrar versiones y comparar píxeles con SVG aurora, además de probar conservación de ruta workspace. ISO Gate dependerá de ese preflight antes de construir. Documentado en docs/desktop-validation-strategy.md de la rama test/debian-desktop-before-iso. Es solución al vacío de validación entre entornos, no reparación gráfica demostrada. CI objetivo 39049597928 en curso; no integrar hasta inspeccionar resultado.
+
+ISO Gate 39048872619 de #16 todavía en build al corte. PR #14 ya detectó la cobertura parcial en el candidato viejo mediante fallo esperado 39048894867. Siguiente: resolver primero el resultado del preflight Debian, después usar una sola ISO con criterio de aurora/cobertura real. No anunciar el fondo arreglado por aprobar sintaxis, mocks o configuración xfconf.
