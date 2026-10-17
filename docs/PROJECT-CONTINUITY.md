@@ -339,3 +339,12 @@ Seis unit tests locales aprobados (incluyen reapertura sin ejecución automátic
 ### Resultado confirmado de reapertura
 
 PR #25 integrada1ba09e059fb9f3492bd17fd90d4239c2be6f8082. Fast Checks39066414257 y Windows Lab39066411933 aprobados. Artefacto12113303078 descargado, resultado y captura nexus-install-reopened.png revisados: cerrar asistente y Wine, reconstruir desde registro local y abrir7-Zip sin seleccionar instalador funciona en Debian/Xvfb. Sustituye el estado E2E pendiente de la nota anterior. No demuestra reinicio del OS ni aparece en ISO791625cd. ISO Gate39064997881 sí aprobó construcción y arranque UEFI de esa imagen anterior; su captura39066298801 continúa pendiente de resultado. Global≈36%.
+
+
+## Flujo Windows confirmado dentro de Nexus Live — 2026-10-17
+
+ISO Gate39064997881 aprobado (fuente791625cd119717fa5195a51477a70c00e6a90e65). Captura39066298801 aprobada; artefacto12113313508 descargado y revisado. SHA256 ISO: eb480efef282fa109f1f5eb35d609aa77656f8b0269bff7485c444d02b544520. El asistente empaquetado verifica el instalador oficial7-Zip26.04 x64, no crea prefijo antes de confirmar, instala mediante su botón y abre ventana7-Zip real. Marcadores NEXUS_WINDOWS_ISO_PREPARED/OPEN/PASS presentes. Ocho capturas1920x1080 pasan controles de cobertura; dos capturas clave guardadas en docs/evidence/2026-10-17/.
+
+Alcance exacto: máquina QEMU/UEFI Live descartable, confirmación del botón programática, un paquete Windows; consulta MIME aprobada. No afirmar clic físico en Thunar, persistencia tras reinicio, compatibilidad general o certificación. La reapertura del asistente implementada en PR #25 se probó aparte en Debian/Wine y es posterior a esta ISO.
+
+Avance: instalador común25→50 por componentes integrados y flujo parcial validado en ISO, junto con MIME y reapertura probados en laboratorio. Sigue sin APK/Linux, desinstalación o aceptación completa; no corresponde75%. Windows permanece50 por amplitud del módulo. Peso8 añade2 puntos:35.75→37.75≈38% global. Siguiente entrega funcional: acceso a la aplicación instalada desde el menú, manejo de desinstalación y ampliar matriz Windows; priorizar Android y Linux después de estabilizar este flujo.

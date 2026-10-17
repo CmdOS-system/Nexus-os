@@ -4,7 +4,7 @@ Corte vigente: 2026-10-17. Método de seguimiento solicitado por el usuario. **E
 
 ## Cálculo y criterios
 
-Cada módulo tiene peso según su relevancia/esfuerzo previsto. Los pesos son una decisión de planificación inicial, no mediciones de horas. Suman 100. Avance global = suma(peso × avance del módulo) / 100. Redondear el resultado solo al mostrarlo: 35.75 % -> aproximadamente 36 %.
+Cada módulo tiene peso según su relevancia/esfuerzo previsto. Los pesos son una decisión de planificación inicial, no mediciones de horas. Suman 100. Avance global = suma(peso × avance del módulo) / 100. Redondear el resultado solo al mostrarlo: 37.75 % -> aproximadamente 38 %.
 
 Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alcance/investigación/diseño concreto, con posibles piezas preliminares; 50 % = implementación parcial y pruebas de componentes; 75 % = flujo principal validado en el sistema objetivo, faltando aceptación completa; 100 % = criterios del módulo satisfechos con evidencia. Para módulos amplios, no ascender por un único componente aprobado. El porcentaje es aproximado y revisable.
 
@@ -18,7 +18,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 | Instalador y persistencia | 12 | 25 % | Plan, preflight y preview; instalación ejecutada y arranque sin ISO pendientes. |
 | Aplicaciones Windows | 25 | 50 % | 7-Zip Windows x64 instalado y usado en laboratorio Debian/Wine; asistente Nexus, más apps y persistencia OS pendientes. |
 | Aplicaciones Android/APK | 15 | 0 % | Prioridad alta; runtime e integración gráfica todavía no probados. |
-| Asistente de instalación con un clic | 8 | 25 % | Prototipo gráfico 7-Zip probado con Wine; asociación Descargas, preparación del motor, desinstalación y otros formatos pendientes. |
+| Asistente de instalación con un clic | 8 | 50 % | 7-Zip verificado, instalado y abierto desde asistente empaquetado en ISO; MIME y reapertura probados en laboratorio. APK/Linux, desinstalación y aceptación completa pendientes. |
 | Paquetes y aplicaciones Linux | 3 | 0 % | Integración gráfica .deb/Flatpak/AppImage pendiente de aceptación. |
 | Compatibilidad macOS | 1 | 0 % | Alcance futuro independiente de Android. |
 | Actualizaciones y recuperación | 4 | 50 % | Modelos y simulaciones probadas; actualización/rollback instalado pendientes. |
@@ -28,7 +28,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 
 ## Resultado vigente — Windows, Android e instalación gráfica
 
-**Avance global estimado: 35.75 %, mostrado como aproximadamente 36 %.** No afirmar que el 36 % de las funciones está terminado: el cálculo acredita también etapas de diseño e implementación parcial según la escala anterior.
+**Avance global estimado: 37.75 %, mostrado como aproximadamente 38 %.** No afirmar que el 38 % de las funciones está terminado: el cálculo acredita también etapas de diseño e implementación parcial según la escala anterior.
 
 ## Actualización
 
@@ -59,3 +59,12 @@ Usuario confirma APK, Windows y Linux con asistente gráfico como prioridad cent
 ## Incremento verificado: asistente gráfico limitado
 
 2026-10-17: instalador común0->25 por primer prototipo restringido con prueba real de selección sin ejecución, confirmación, instalación y apertura. Run39053538833, artefacto12108338331 revisado; Fast Checks39053586940 aprobado. No equivale al flujo completo APK/EXE/Linux ni integración en ISO. Con peso8 añade2 puntos:33.75->35.75≈36 %. Windows sigue50; Android y paquetes Linux0. No confundir este ≈36 % con un corte antiguo que tenía otros pesos.
+
+
+## Flujo Windows confirmado dentro de Nexus Live — 2026-10-17
+
+ISO Gate39064997881 aprobado (fuente791625cd119717fa5195a51477a70c00e6a90e65). Captura39066298801 aprobada; artefacto12113313508 descargado y revisado. SHA256 ISO: eb480efef282fa109f1f5eb35d609aa77656f8b0269bff7485c444d02b544520. El asistente empaquetado verifica el instalador oficial7-Zip26.04 x64, no crea prefijo antes de confirmar, instala mediante su botón y abre ventana7-Zip real. Marcadores NEXUS_WINDOWS_ISO_PREPARED/OPEN/PASS presentes. Ocho capturas1920x1080 pasan controles de cobertura; dos capturas clave guardadas en docs/evidence/2026-10-17/.
+
+Alcance exacto: máquina QEMU/UEFI Live descartable, confirmación del botón programática, un paquete Windows; consulta MIME aprobada. No afirmar clic físico en Thunar, persistencia tras reinicio, compatibilidad general o certificación. La reapertura del asistente implementada en PR #25 se probó aparte en Debian/Wine y es posterior a esta ISO.
+
+Avance: instalador común25→50 por componentes integrados y flujo parcial validado en ISO, junto con MIME y reapertura probados en laboratorio. Sigue sin APK/Linux, desinstalación o aceptación completa; no corresponde75%. Windows permanece50 por amplitud del módulo. Peso8 añade2 puntos:35.75→37.75≈38% global. Siguiente entrega funcional: acceso a la aplicación instalada desde el menú, manejo de desinstalación y ampliar matriz Windows; priorizar Android y Linux después de estabilizar este flujo.
