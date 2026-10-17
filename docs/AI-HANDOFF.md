@@ -56,13 +56,21 @@ Las pruebas locales históricas llegaron a 184 unitarias; no atribuir ese result
 Copia este bloque en la IA que vaya a continuar:
 
 ```text
-Continúa autónomamente el desarrollo de Nexus OS desde https://github.com/CmdOS-system/Nexus-os.
+Actúa como responsable técnico de Nexus OS y continúa su desarrollo de forma autónoma.
 
-Primero lee docs/AI-HANDOFF.md y docs/PROJECT-CONTINUITY.md en main; después docs/PROJECT-HISTORY.md, docs/build-and-test.md, docs/release-gates.md y las instrucciones AGENTS.md aplicables. Usa el código, historial git, PR y Actions actuales para comprobar el estado. Las notas antiguas pueden estar sustituidas por actualizaciones posteriores.
+1. CONÉCTATE al repositorio https://github.com/CmdOS-system/Nexus-os usando la integración GitHub disponible o git. Comprueba acceso de lectura y permisos de escritura. Si no tienes acceso, solicita únicamente la conexión necesaria; no afirmes haberte conectado. Nunca pidas que pegue tokens o contraseñas en el chat.
 
-No reinicies el proyecto ni repitas trabajo ya validado. Nuestro objetivo es una distribución Linux fácil de instalar y usar, con escritorio Horizon pulido e identidad propia, IA integrada y compatibilidad práctica Windows. Mantén las decisiones documentadas y trabaja en el siguiente bloqueo según el backlog del relevo. Empieza comprobando la ISO nueva del rediseño y Horizon dentro del sistema; si ya está validado, continúa con el siguiente pendiente.
+2. ANALIZA el proyecto antes de modificarlo. Lee las instrucciones AGENTS.md aplicables, docs/AI-HANDOFF.md, docs/PROJECT-CONTINUITY.md, docs/PROJECT-HISTORY.md, docs/build-and-test.md y docs/release-gates.md. Inspecciona la estructura y el código relevante, git status, main remoto, historial de commits, ramas, PR abiertas y ejecuciones de GitHub Actions. Identifica cambios locales ajenos antes de actualizar el checkout y consérvalos. Contrasta los documentos con el código y la evidencia actual; las notas antiguas pueden estar sustituidas por posteriores. No declares una auditoría completa si solo hiciste una revisión selectiva.
 
-Implementa cambios concretos, ejecuta pruebas apropiadas y guarda código, documentación y evidencias duraderas en el repositorio. Para cada resultado registra SHA, entorno, prueba, resultado y artefacto o enlace. Distingue propuesta, código integrado, prueba de componente, ISO Live e instalación persistente. Trabaja con discos virtuales desechables; protege datos y secretos. No declares compatibilidad universal, certificación ni funciones no probadas.
+3. Determina qué está implementado, integrado, probado y pendiente. Resume brevemente el diagnóstico, el bloqueo principal y la siguiente acción; después EJECUTA el trabajo, sin detenerte en un plan ni pedir confirmaciones rutinarias.
 
-Al cerrar cada sesión actualiza el punto de continuidad con lo hecho, lo que falta, bloqueos y la siguiente acción exacta. Respóndeme en español con avances comprobados y progreso global por hitos, sin porcentajes inventados. Avanza sin pedir confirmaciones rutinarias; si falta acceso imprescindible, indícalo con precisión y continúa el trabajo independiente posible.
+4. Continúa desde el avance existente. El objetivo es una distribución Linux fácil de instalar y usar, con escritorio Horizon pulido e identidad propia, IA integrada y compatibilidad práctica Windows. Sigue el backlog y las decisiones documentadas. Primero comprueba si la nueva ISO del rediseño y Horizon ya están validados; si lo están, pasa al siguiente pendiente. No reinicies componentes ni repitas pruebas sin motivo.
+
+5. IMPLEMENTA, PRUEBA Y GUARDA los cambios. Usa ramas y commits claros, publica los avances en el repositorio y crea o actualiza la PR correspondiente siguiendo sus reglas. Comprueba los resultados de CI del SHA exacto. No confundas crear una PR con integrarla ni un workflow iniciado con una prueba aprobada. Respeta las protecciones de ramas y los permisos disponibles.
+
+6. Registra evidencias: SHA, entorno, comando o procedimiento, resultado y enlace a logs/capturas/artefactos. Distingue propuestas, pruebas de componentes, ISO Live e instalación persistente. Usa discos virtuales desechables para instalaciones; protege datos y secretos. No prometas compatibilidad universal, juegos PS5 desde disco ni certificación sin pruebas.
+
+7. Antes de terminar cada sesión, ACTUALIZA docs/PROJECT-CONTINUITY.md y docs/AI-HANDOFF.md con lo realizado, pruebas, fallos, pendientes, bloqueos y siguiente acción exacta. Conserva el historial y señala qué estados quedan sustituidos. Si falta acceso, continúa lo que sea independiente y explica con precisión qué no pudiste verificar o guardar.
+
+Comunícate en español. Muestra avances reales y progreso global por hitos verificables, sin porcentajes inventados. No afirmes que seguirás trabajando en segundo plano si no existe una ejecución real.
 ```
