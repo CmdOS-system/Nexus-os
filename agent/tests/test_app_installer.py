@@ -90,6 +90,31 @@ class InstallerTests(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_menu_entry_uses_fixed_command_in_spaced_data_directory(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(module.os.environ, {'XDG_DATA_HOME': directory + '/data with spaces'}):
+            service = module.Installer(Path(directory) / 'app')
+            try:
+                with patch.object(module.subprocess, 'Popen') as launch:
+                    service.register_menu_entry()
+                    entry = service.menu_entry()
+                    self.assertEqual(entry.parent, Path(directory) / 'data with spaces/applications')
+                    self.assertIn('Exec=/usr/bin/python3 /opt/nexus/agent/app_installer.py --open-installed', entry.read_text())
+                    import configparser
+                    parsed = configparser.ConfigParser()
+                    parsed.read(entry)
+                    self.assertEqual(parsed['Desktop Entry']['Type'], 'Application')
+                    self.assertNotIn(str(service.package), entry.read_text())
+                    launch.assert_not_called()
+            finally:
+                service.close()
+
+    def test_menu_action_opens_without_constructing_installer_window(self):
+        with patch.object(module, 'Installer') as installer, patch.object(module, 'App') as app:
+            self.assertEqual(module.main(['--open-installed']), 0)
+            installer.return_value.launch.assert_called_once_with()
+            installer.return_value.close.assert_called_once_with()
+            app.assert_not_called()
+
     def test_symlink_input_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

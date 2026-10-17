@@ -89,6 +89,27 @@ class Installer:
         finally:
             temporary.unlink(missing_ok=True)
 
+    def menu_entry(self):
+        data_home = Path(os.environ.get('XDG_DATA_HOME', ''))
+        if not data_home.is_absolute():
+            data_home = Path.home() / '.local/share'
+        return data_home / 'applications/nexus-7zip.desktop'
+
+    def register_menu_entry(self):
+        entry = self.menu_entry()
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        content = ('[Desktop Entry]\nType=Application\nName=7-Zip (Windows)\n'
+                   'Comment=Abrir 7-Zip instalado con Nexus Install\n'
+                   'Exec=/usr/bin/python3 /opt/nexus/agent/app_installer.py --open-installed\n'
+                   'Icon=application-x-executable\nTerminal=false\nCategories=Utility;\n')
+        with tempfile.NamedTemporaryFile(mode='w', dir=entry.parent, delete=False) as output:
+            temporary = Path(output.name)
+            output.write(content)
+        try:
+            os.replace(temporary, entry)
+        finally:
+            temporary.unlink(missing_ok=True)
+
     def prepare(self, path):
         if self.ready:
             raise PackageError('El paquete ya está preparado.')
@@ -128,6 +149,7 @@ class Installer:
             if not binary.is_file():
                 raise PackageError('El instalador terminó, pero no se encontró la aplicación esperada.')
             self.record_installation()
+            self.register_menu_entry()
             self.installed = True
         finally:
             lock.unlink(missing_ok=True)
@@ -236,9 +258,32 @@ class App(tk.Tk):
         self.destroy()
 
 
-if __name__ == '__main__':
-    import sys
-    app = App()
-    if len(sys.argv) == 2:
-        app.after(100, lambda: app.select_path(sys.argv[1]))
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(description='Nexus Install')
+    parser.add_argument('package', nargs='?')
+    parser.add_argument('--open-installed', action='store_true')
+    args = parser.parse_args(argv)
+    if args.open_installed and args.package:
+        parser.error('No se combina abrir una aplicación con seleccionar un instalador.')
+    service = Installer()
+    error = None
+    if args.open_installed:
+        try:
+            service.launch()
+        except Exception as problem:
+            error = str(problem)
+        else:
+            service.close()
+            return 0
+    app = App(service)
+    if error:
+        app.status.set(error)
+    elif args.package:
+        app.after(100, lambda: app.select_path(args.package))
     app.mainloop()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

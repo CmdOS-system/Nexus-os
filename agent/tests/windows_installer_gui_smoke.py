@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='nexus-gui-lab-') as directory:
         payload = response.read(32 * 1024 * 1024 + 1)
     assert len(payload) <= 32 * 1024 * 1024
     setup.write_bytes(payload)
-    service = Installer(root / 'application')
+    service = Installer()
     app = App(service)
     try:
         app.select_path(setup)
@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix='nexus-gui-lab-') as directory:
         Path('windows-evidence/gui-assistant-result.txt').write_text('PASS: selection verified without execution; graphical confirmation installed; graphical Open created 7-Zip window. No OS reboot or general-format acceptance.\n')
         subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
         app.request_close()
-        service = Installer(root / 'application')
+        service = Installer()
         app = App(service)
         app.update()
         assert service.installed, 'Verified install was not restored after closing assistant'
@@ -63,8 +63,22 @@ with tempfile.TemporaryDirectory(prefix='nexus-gui-lab-') as directory:
         assert '7-Zip' in windows
         ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save('windows-evidence/nexus-install-reopened.png')
         Path('windows-evidence/gui-reopen-result.txt').write_text('PASS: closed assistant and Wine; reopened from verified receipt; Open enabled without selecting installer; opened real7-Zip again. This is not a reboot persistence test.\\n')
+        subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
+        entry = service.menu_entry()
+        assert entry.is_file()
+        subprocess.run(['desktop-file-validate', str(entry)], check=True)
+        app.request_close()
+        app = None
+        subprocess.run(['gio', 'launch', str(entry)], check=True, timeout=30)
+        time.sleep(12)
+        windows = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
+        assert '7-Zip' in windows, 'Desktop launcher did not open actual Windows application'
+        assert 'Nexus Install' not in windows, 'Menu action should open installed application directly'
+        ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save('windows-evidence/7zip-menu-launch.png')
+        Path('windows-evidence/menu-launch-result.txt').write_text('PASS: generated desktop entry validated; GIO launched installed 7-Zip after assistant and Wine closed. No physical menu click or reboot tested.\n')
     finally:
-        if app.busy:
+        if app is not None and app.busy:
             wait_until(app, lambda: not app.busy)
         subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
-        app.request_close()
+        if app is not None:
+            app.request_close()

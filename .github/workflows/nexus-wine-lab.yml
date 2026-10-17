@@ -36,7 +36,8 @@ jobs:
           runuser -u nexuslab -- xvfb-run -a -s '-screen 0 1280x800x24' bash agent/tests/windows_7zip_lab.sh
       - name: Exercise graphical selection confirmation installation and launch
         run: |
-          runuser -u nexuslab -- xvfb-run -a -s '-screen 0 1280x800x24' python3 agent/tests/windows_installer_gui_smoke.py
+          install -D -m 644 agent/app_installer.py /opt/nexus/agent/app_installer.py
+          runuser -u nexuslab -- dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' python3 agent/tests/windows_installer_gui_smoke.py
       - name: Stage and validate actual EXE desktop association
         run: |
           install -D -m 644 agent/app_installer.py /opt/nexus/agent/app_installer.py
