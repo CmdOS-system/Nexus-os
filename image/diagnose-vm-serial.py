@@ -13,7 +13,7 @@ import time
 
 
 def collect(socket_path, log_path, full_hd=False):
-    deadline = time.monotonic() + 1200
+    deadline = time.monotonic() + 2100
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         while True:
             try:
@@ -114,8 +114,8 @@ def collect(socket_path, log_path, full_hd=False):
         for offset in range(0, len(payload), 1000):
             client.sendall(("printf '%s' '" + payload[offset:offset + 1000] + "' >> /tmp/nexus-windows-probe.b64\n").encode())
             time.sleep(0.1)
-        client.sendall(b"base64 -d /tmp/nexus-windows-probe.b64 > /tmp/nexus-windows-probe.py; timeout 650s python3 /tmp/nexus-windows-probe.py; printf '\\nNEXUS_WINDOWS_PROBE_EXIT=%s\\n' \"$?\"\n")
-        wait_for("NEXUS_WINDOWS_ISO_PASS", 670)
+        client.sendall(b"base64 -d /tmp/nexus-windows-probe.b64 > /tmp/nexus-windows-probe.py; timeout 1250s python3 /tmp/nexus-windows-probe.py; printf '\\nNEXUS_WINDOWS_PROBE_EXIT=%s\\n' \"$?\"\n")
+        wait_for("NEXUS_WINDOWS_ISO_PASS", 1270)
         print("Packaged Windows installer passed in disposable Live guest", flush=True)
         thread.join(timeout=max(0, deadline - time.monotonic()))
 

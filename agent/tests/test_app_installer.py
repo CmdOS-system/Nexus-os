@@ -160,6 +160,105 @@ class InstallerTests(unittest.TestCase):
             finally:
                 service.close()
 
+    def make_installed_fixture(self, directory):
+        service = module.Installer(Path(directory) / 'profile')
+        service.binary().parent.mkdir(parents=True)
+        service.binary().write_bytes(b'installed fixture')
+        service.record_installation()
+        service.register_menu_entry()
+        service.installed = True
+        return service
+
+    def test_remove_refuses_running_app_without_touching_profile_or_menu(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(module.os.environ, {'XDG_DATA_HOME': directory + '/data'}), patch.object(module.os, 'geteuid', return_value=1000), patch.object(module.shutil, 'which', side_effect=lambda name: '/usr/bin/' + name):
+            service = self.make_installed_fixture(directory)
+            try:
+                with patch.object(module.subprocess, 'run', side_effect=module.subprocess.TimeoutExpired('wineserver', 5)) as run:
+                    with self.assertRaises(module.PackageError):
+                        service.remove()
+                    self.assertEqual(run.call_count, 1)
+                self.assertTrue(service.has_verified_installation())
+                self.assertTrue(service.menu_entry().exists())
+                self.assertFalse(list(service.root.parent.glob('.*.operation.lock')))
+            finally:
+                service.close()
+
+    def test_trash_failure_restores_menu_and_keeps_installation(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(module.os.environ, {'XDG_DATA_HOME': directory + '/data'}), patch.object(module.os, 'geteuid', return_value=1000), patch.object(module.shutil, 'which', side_effect=lambda name: '/usr/bin/' + name):
+            service = self.make_installed_fixture(directory)
+            original = service.menu_entry().read_bytes()
+            try:
+                with patch.object(module.subprocess, 'run', side_effect=[None, module.subprocess.CalledProcessError(1, 'gio')]):
+                    with self.assertRaises(module.subprocess.CalledProcessError):
+                        service.remove()
+                self.assertEqual(service.menu_entry().read_bytes(), original)
+                self.assertTrue(service.has_verified_installation())
+            finally:
+                service.close()
+
+    def test_remove_moves_only_target_profile_and_clears_state(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(module.os.environ, {'XDG_DATA_HOME': directory + '/data'}), patch.object(module.os, 'geteuid', return_value=1000), patch.object(module.shutil, 'which', side_effect=lambda name: '/usr/bin/' + name):
+            service = self.make_installed_fixture(directory)
+            other = Path(directory) / 'other-app'
+            other.mkdir()
+            (other / 'data').write_text('keep')
+            destination = Path(directory) / 'trash-profile'
+            def run(args, **kwargs):
+                if args[1] == 'trash':
+                    self.assertEqual(args, ['/usr/bin/gio', 'trash', str(service.root)])
+                    service.root.rename(destination)
+            try:
+                with patch.object(module.subprocess, 'run', side_effect=run):
+                    service.remove()
+                self.assertFalse(service.root.exists())
+                self.assertFalse(service.menu_entry().exists())
+                self.assertFalse(service.installed)
+                self.assertFalse(service.ready)
+                self.assertTrue((destination / 'install-receipt.json').exists())
+                self.assertFalse(list(destination.glob('*.lock')))
+                self.assertEqual((other / 'data').read_text(), 'keep')
+            finally:
+                service.close()
+
+    def test_cold_prefix_initialization_occurs_only_after_confirmation(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(module.os.environ, {'XDG_DATA_HOME': directory + '/data'}), patch.object(module.os, 'geteuid', return_value=1000), patch.object(module.shutil, 'which', return_value='/usr/bin/wine'):
+            service = module.Installer(Path(directory) / 'profile')
+            fixture = b'approved fixture'
+            service.package.write_bytes(fixture)
+            service.ready = True
+            def run(args, **kwargs):
+                if args[1] == 'wineboot':
+                    self.assertEqual(args, ['/usr/bin/wine', 'wineboot', '--init'])
+                    self.assertEqual(kwargs['timeout'], 300)
+                    (service.root / 'prefix').mkdir()
+                else:
+                    self.assertTrue((service.root / 'prefix').exists())
+                    service.binary().parent.mkdir(parents=True)
+                    service.binary().write_bytes(b'installed binary')
+            try:
+                with patch.object(module, 'PACKAGE_SHA256', hashlib.sha256(fixture).hexdigest()), patch.object(module.subprocess, 'run', side_effect=run) as run_mock:
+                    service.install()
+                    self.assertEqual(run_mock.call_count, 2)
+                    self.assertTrue(service.installed)
+                    self.assertIn('NEXUS_WINE_INIT_END', (service.root / 'install.log').read_text())
+            finally:
+                service.close()
+
+    def test_failed_prefix_initialization_never_starts_package(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(module.os, 'geteuid', return_value=1000), patch.object(module.shutil, 'which', return_value='/usr/bin/wine'):
+            service = module.Installer(Path(directory) / 'profile')
+            fixture = b'approved fixture'
+            service.package.write_bytes(fixture)
+            service.ready = True
+            try:
+                with patch.object(module, 'PACKAGE_SHA256', hashlib.sha256(fixture).hexdigest()), patch.object(module.subprocess, 'run', side_effect=module.subprocess.TimeoutExpired('wineboot', 300)) as run:
+                    with self.assertRaises(module.subprocess.TimeoutExpired):
+                        service.install()
+                    self.assertEqual(run.call_count, 1)
+                    self.assertFalse(service.installed)
+            finally:
+                service.close()
+
     def test_symlink_input_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

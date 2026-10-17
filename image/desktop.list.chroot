@@ -19,3 +19,6 @@ x11-utils
 wine
 wine64
 fonts-wine
+
+# User-visible application menu and recoverable removal use GIO.
+libglib2.0-bin

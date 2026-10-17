@@ -5,6 +5,7 @@ Does not claim visual quality from readiness markers.
 """
 import argparse
 import json
+import re
 from pathlib import Path
 import socket
 import time
@@ -88,9 +89,14 @@ def capture(socket_path, serial_path, output, timeout=240):
                                    ("NEXUS_NOTEPAD_ISO_PREPARED", "-notepad-prepared"),
                                    ("NEXUS_NOTEPAD_ISO_OPEN", "-notepad-open"),
                                    ("NEXUS_WINDOWS_ISO_PASS", None)):
-                until = time.monotonic() + 400
+                until = time.monotonic() + 650
                 while time.monotonic() < until:
-                    if marker in serial_path.read_text(errors="replace"):
+                    current_log = serial_path.read_text(errors="replace")
+                    failure = re.search(r"(?:^|[\r\n])NEXUS_WINDOWS_PROBE_EXIT=([1-9][0-9]*)", current_log)
+                    if failure:
+                        screenshot(output.with_name(output.stem + "-failure.png"))
+                        raise RuntimeError("Guest Windows probe exited " + failure.group(1) + "; inspect serial install logs")
+                    if marker in current_log:
                         break
                     time.sleep(0.2)
                 else:

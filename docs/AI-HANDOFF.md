@@ -186,3 +186,14 @@ Fuentes: manual Debian Live de hooks https://live-team.pages.debian.net/live-man
 ### Integración gráfica de Notepad++ validada
 
 PR #28 integrada4b3565acff56842f1f51f369125507b858379d47. Fast Checks39073201045 aprobó6jobs; Wine Lab39073199395 aprobó instalación gráfica, Abrir y acceso de menú para ambos programas, registro7-Zip sin cambios, MIME y edición/guardadoNotepad++. Artefacto12115259388 descargado, notepad-assistant-result.txt y captura nexus-notepad-install.png revisados. Sustituye CI pendiente de la nota anterior. Nueva ISO Gate39073455863 iniciada con runtime mixto y catálogo de ambos programas; aún pendiente construcción/captura Live. La ISO anterior no acredita estos cambios. Global≈38%.
+
+
+## Ciclo de instalación y retirada recuperable — 2026-10-17
+
+La ISO Gate39073455863 construyó y arrancó fuente4b3565ac, pero la captura39074859209 falló: primer7-Zip no terminó dentro de180s. Artefacto12116758671 y serial revisados: NEXUS_WINDOWS_ISO_PREPARED presente; excepción de tiempo al ejecutar Wine/setup /S; no se alcanzó OPEN ni Notepad++. No declarar ambos programas validados en esa imagen. La causa exacta no quedó aislada porque el primer arranque de Wine se mezclaba con instalación y no se exportaba install.log.
+
+Se separa wineboot --init (300s, después de confirmar) de ejecución del paquete (180s), con registro por fases y marca wine-ready solo tras inicialización exitosa; perfiles incompletos vuelven a inicializarse. Probe Live espera presupuesto combinado, exporta install.log y captura fallo al detectar salida no cero sin esperar marcadores ausentes. Nueva imagen agrupa estos cambios y dependencia explícita libglib2.0-bin; no atribuir aún solución probada al Live.
+
+Se añade Desinstalar con confirmación (No predeterminado). Espera cierre del wineserver del perfil y rechaza si sigue activo; no mata la aplicación. Retira acceso Nexus y mueve perfil completo a papelera GIO. Conserva acceso dentro del perfil movido; restaura el acceso original si falla el traslado. Bloqueo de operación fuera del perfil evita dejar un lock al restaurarlo de papelera. No borra permanentemente ni purga cachés de otras aplicaciones. Se desactiva winemenubuilder para que nuevas instalaciones no creen accesos paralelos fuera de Nexus. Restaurar archivos desde papelera no implica restablecer automáticamente todos los accesos.
+
+Quince pruebas locales aprobadas: preparación previa, fallo de inicialización no ejecuta paquete, cancelación/rechazo de operación activa cubiertos en GUI lab propuesto, fallo papelera restaura menú y otro perfil intacto. E2E de retirada y nueva ISO pendientes. Global≈38%, Windows50%, instalador50%, APK0%.

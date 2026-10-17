@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import threading
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 
 PACKAGE_SHA256 = 'd54bf805f9f3704d1e8db2fa3498ae7ef2df0312b40b558e7c71c734430a665d'
 PACKAGE_NAME = '7-Zip 26.04 para Windows x64'
@@ -149,7 +149,7 @@ class Installer:
     def environment(self):
         env = os.environ.copy()
         env.update(WINEPREFIX=str(self.root / 'prefix'), WINEARCH='win64',
-                   WINEDLLOVERRIDES='mscoree,mshtml=', WINEDEBUG='-all')
+                   WINEDLLOVERRIDES='mscoree,mshtml,winemenubuilder.exe=', WINEDEBUG='-all')
         return env
 
     def install(self):
@@ -162,7 +162,7 @@ class Installer:
         if hashlib.sha256(self.package.read_bytes()).hexdigest() != self.spec['sha256']:
             raise PackageError('El instalador preparado cambió. Selecciónalo de nuevo.')
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        lock = self.root / 'install.lock'
+        lock = self.root.parent / ('.' + self.root.name + '.operation.lock')
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError as error:
@@ -170,6 +170,17 @@ class Installer:
         os.close(fd)
         try:
             with (self.root / 'install.log').open('w') as log:
+                ready_marker = self.root / 'wine-ready'
+                if not ready_marker.exists() or ready_marker.read_text() != 'win64':
+                    log.write('NEXUS_WINE_INIT_BEGIN\n')
+                    log.flush()
+                    subprocess.run([self.wine, 'wineboot', '--init'], env=self.environment(),
+                                   stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                   timeout=300, check=True)
+                    ready_marker.write_text('win64')
+                    log.write('NEXUS_WINE_INIT_END\n')
+                log.write('NEXUS_PACKAGE_INSTALL_BEGIN\n')
+                log.flush()
                 subprocess.run([self.wine, str(self.package), *self.spec['arguments']], env=self.environment(),
                                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                timeout=180, check=True)
@@ -193,6 +204,49 @@ class Installer:
                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL, close_fds=True)
 
+    def remove(self):
+        if os.geteuid() == 0:
+            raise PackageError('Desinstala desde tu usuario, sin privilegios de administrador.')
+        if not self.installed or not self.has_verified_installation() or self.root.is_symlink():
+            raise PackageError('No se encontró un perfil verificado para desinstalar.')
+        gio = shutil.which('gio')
+        server = shutil.which('wineserver')
+        if not gio or not server:
+            raise PackageError('No está disponible la papelera o el control de Wine.')
+        lock = self.root.parent / ('.' + self.root.name + '.operation.lock')
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError as error:
+            raise PackageError('Ya hay una operación en este perfil.') from error
+        os.close(fd)
+        entry = self.menu_entry()
+        saved_entry = None
+        try:
+            try:
+                subprocess.run([server, '-w'], env=self.environment(),
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=5, check=True)
+            except subprocess.TimeoutExpired as error:
+                raise PackageError('Cierra la aplicación y vuelve a desinstalar; todavía está activa.') from error
+            if entry.exists():
+                with tempfile.NamedTemporaryFile(dir=self.root, prefix='menu-backup-', suffix='.desktop', delete=False) as output:
+                    saved_entry = Path(output.name)
+                os.replace(entry, saved_entry)
+            try:
+                subprocess.run([gio, 'trash', str(self.root)], stdin=subprocess.DEVNULL,
+                               capture_output=True, timeout=30, check=True)
+                if self.root.exists():
+                    raise PackageError('No se pudo confirmar el traslado a la papelera.')
+            except Exception:
+                if saved_entry is not None and saved_entry.exists():
+                    os.replace(saved_entry, entry)
+                raise
+            self.installed = False
+            self.ready = False
+            self.package.unlink(missing_ok=True)
+        finally:
+            lock.unlink(missing_ok=True)
+
     def close(self):
         self.stage.cleanup()
 
@@ -204,7 +258,7 @@ class App(tk.Tk):
         self.events = queue.Queue()
         self.busy = False
         self.title('Nexus Install — Aplicaciones')
-        self.geometry('700x390')
+        self.geometry('700x470')
         frame = ttk.Frame(self, padding=24)
         frame.pack(fill='both', expand=True)
         ttk.Label(frame, text='Instalar una aplicación', font=('Sans', 21, 'bold')).pack(anchor='w')
@@ -217,7 +271,10 @@ class App(tk.Tk):
         self.confirm.pack(anchor='w', pady=10)
         self.open_button = ttk.Button(frame, text='Abrir aplicación', command=self.open_app, state='disabled')
         self.open_button.pack(anchor='w')
+        self.remove_button = ttk.Button(frame, text='Desinstalar (mover a papelera)', command=self.remove_app, state='disabled')
+        self.remove_button.pack(anchor='w', pady=10)
         if self.service.installed:
+            self.remove_button.state(['!disabled'])
             self.status.set(self.service.spec['name'] + ' ya está instalado en tu perfil. Puedes abrirlo sin reinstalar.')
             self.open_button.state(['!disabled'])
         self.progress = ttk.Progressbar(frame, mode='indeterminate')
@@ -232,6 +289,7 @@ class App(tk.Tk):
         self.choose.state(['disabled'])
         self.confirm.state(['disabled'])
         self.open_button.state(['disabled'])
+        self.remove_button.state(['disabled'])
         self.progress.start()
         def worker():
             try:
@@ -254,7 +312,7 @@ class App(tk.Tk):
         self.work(lambda: self.service.prepare(path), 'Archivo verificado. Pulsa Instalar para autorizar su instalación en tu perfil.')
 
     def confirm_install(self):
-        self.status.set('Instalando en un perfil Windows separado. Espera a que termine…')
+        self.status.set('Preparando el perfil Windows e instalando la aplicación. Espera a que termine…')
         self.work(self.service.install, 'Instalación finalizada. Ya puedes abrir la aplicación.')
 
     def poll(self):
@@ -270,6 +328,7 @@ class App(tk.Tk):
                 self.confirm.state(['!disabled'])
             if self.service.installed:
                 self.open_button.state(['!disabled'])
+                self.remove_button.state(['!disabled'])
         except queue.Empty:
             pass
         self.poll_job = self.after(100, self.poll)
@@ -280,6 +339,17 @@ class App(tk.Tk):
             self.status.set('Se inició ' + self.service.spec['name'] + '. Comprueba su ventana.')
         except Exception as error:
             self.status.set(str(error))
+
+    def remove_app(self):
+        if self.busy or not self.service.installed:
+            return
+        if not messagebox.askyesno('Desinstalar aplicación',
+                                  'Se moverán a la papelera la aplicación y los archivos guardados dentro de su perfil Windows. '
+                                  'Cierra la aplicación antes de continuar. ¿Quieres desinstalarla?',
+                                  parent=self, default=messagebox.NO):
+            return
+        self.status.set('Comprobando que esté cerrada y moviendo el perfil a la papelera…')
+        self.work(self.service.remove, 'Aplicación retirada del menú y movida a la papelera. Puedes recuperarla desde allí.')
 
     def request_close(self):
         if self.busy:
