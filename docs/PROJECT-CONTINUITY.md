@@ -284,3 +284,10 @@ PROJECT-PROGRESS.md reponderado por alcance nuevo: ≈28 % global estimado (27.5
 Captura 39051320346 success en baf5918: artefacto 12107933545 descargado y nexus-iso-desktop-horizon.png inspeccionado, aurora y Horizon cubren 1920x1080 sin el negro anterior. Se valida arranque Full HD con EDID nativo; NO se valida resize dinámico. #19 integrada para conservar esta configuración de laboratorio; comprobar SHA de merge en GitHub. No cambió la ISO a6997fb. Diseño completo/accesibilidad aún pendientes, módulo Horizon mantiene 50 % conservador.
 
 PR #20, test/windows-7zip-real-app: laboratorio Debian Trixie con Wine, instalador Windows 7-Zip 26.04 x64 oficial y SHA256 upstream d54bf805f9f3704d1e8db2fa3498ae7ef2df0312b40b558e7c71c734430a665d. Prueba instalación, ZIP con contenido verificado independientemente, reinicio Wine y ventana GUI con captura, sin privilegios. Shell local correcto; ejecución real pendiente. No equivale a instalador gráfico Nexus ni persistencia tras reboot OS. No subir Windows25/global≈28 hasta evidencias verificadas. Próximo trabajo prioritario: resultados PR #20 y primera aplicación real, después integración gráfica y APK conforme ONE-CLICK-APPLICATIONS.md.
+
+
+## Primera aplicación Windows validada en laboratorio — 2026-10-17
+
+PR #20 integrada f727d8256ae4bfbe8f0c18dbdd911b16357ec65a. Windows Application Lab 39052936193 y Fast Checks 39052939320 success para 3ce90a2. Artefacto 12107549425 descargado, logs y GUI revisados: instalador 7-Zip 26.04 x64 oficial con hash, creación ZIP por ejecutable Windows y contenido verificado, reapertura tras reiniciar Wine10 en Debian13 y GUI 7zFM visible. NO prueba en ISO, reboot de OS ni compresión mediante clics. Matriz WINDOWS-COMPATIBILITY-MATRIX.md creada.
+
+Windows pasa25->50 como implementación parcial/laboratorio; global33.75≈34 % con mismos pesos, Android/asistente0. Próximo trabajo prioritario: asistente gráfico para una instalación Windows conocida y verificada, luego Nexus instalado y app difícil del usuario. No extrapolar 7-Zip a todo Windows. Mantener APK como prioridad alta con requisitos Wayland/Binder separados.
