@@ -89,3 +89,12 @@ Comunícate en español. Muestra avances reales y progreso global por hitos veri
 Leer docs/WINDOWS-FIRST-ROADMAP.md antes de elegir la siguiente tarea. El usuario confirma Windows como objetivo central de Nexus; no retrasar el laboratorio Wine esperando acabados estéticos, TV/radio o voz. Trabajar instalación/persistencia como habilitador. Orden: laboratorio Debian/Wine -> aplicación real sencilla -> aplicación difícil del usuario con tarea útil -> asistente Nexus/prefijos -> prueba persistente en VM -> ampliar matriz. Investigación/ingeniería inversa para interoperabilidad con permisos, fuentes primarias y componentes abiertos; no prometer universalidad.
 
 Nueva ponderación PROJECT-PROGRESS.md: Windows 30 %, instalación 15 %; global estimado 35.75 % -> ≈36 %, frente al ≈41 % histórico por distinta ponderación. Avances de módulo no cambiaron. Windows sigue 25 % de diseño/piezas preliminares, sin una aplicación real acreditada. Siguiente incremento exige ejecución comprobada. Captura Full HD sigue como tarea acotada de escritorio; no consumir todo el proyecto en pulido visual.
+
+
+## Prioridad central ampliada: APK/Windows/Linux sin terminal — 2026-10-17
+
+Usuario exige descargar, abrir archivo y usar asistente gráfico para instalar apps Android APK, Windows exe/msi y Linux, sin introducir comandos. Leer docs/ONE-CLICK-APPLICATIONS.md: router/adaptadores, preparación gráfica de runtimes, progreso, permisos, acceso Horizon y desinstalación. No ejecutar al descargar; clic abre asistente y confirmaciones necesarias. No prometer compatibilidad de cualquier APK/EXE ni todos los formatos Linux.
+
+Android ahora prioridad alta separada de macOS. Waydroid candidato, no integrado: necesita resolver Wayland frente al XFCE/X11 actual, Binder/GPU y ABI ARM/x86_64. Investigar código abierto/interoperabilidad; no copiar emuladores propietarios ni eludir controles. Windows sigue central; TV/radio y pulido avanzado secundarios. Trabajo siguiente: laboratorio Windows real y requisitos Android antes de empaquetado.
+
+PROJECT-PROGRESS.md reponderado por alcance nuevo: ≈28 % global estimado (27.50), frente a ≈36 % del corte anterior. Mismos avances técnicos; Android/asistente/Linux nuevo mantienen 0 % conservador. Explicar reducción por alcance, no regresión. Mostrar porcentaje/barra en cada respuesta de estado.
