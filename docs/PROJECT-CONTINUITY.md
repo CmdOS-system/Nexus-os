@@ -226,3 +226,10 @@ Native Desktop Smoke 39049627191 y Fast Checks 39049627176 success en 0f3667. Ar
 PR #17 integrada b720aba890e6527f7c81aaaa1ccc4b9523f39f84. ISO Gate exige ahora preflight Debian y comparación de aurora antes del build. Cambios exclusivos de workflow no disparan reconstrucción automática del runtime sin cambios; se conserva dispatch y triggers de runtime. Último ajuste antes de merge solo cambió esa selección de triggers.
 
 ISO Gate 39048872619 de a6997fb ya success; captura automática 39049935491 todavía pendiente de inspección. Usar ese candidato existente y su checksum; no reconstruir otra imagen para comprobar un cambio exclusivo de tests. Próximo: revisar la captura QEMU con criterio de cobertura y aurora; si falla, aislar diferencia Live/LightDM/QEMU usando el preflight Debian ya verde.
+
+
+## Aurora confirmada en ISO; repintado sigue bloqueado — 2026-10-17
+
+Captura 39049935491 finalizó failure en criterio visual, como corresponde al defecto restante. Artefacto 12107931180 descargado e inspeccionado: PNG inicial muestra aurora real en 1280x800 dentro de framebuffer 1920x1080, con negro a derecha/abajo. #16 sí consiguió crear rutas monitorVirtual-1/workspace0..3/last-image y renderizar aurora; esto sustituye el pendiente genérico de fondo que no aparecía. Cobertura completa y comportamiento tras RandR todavía NO aprobados.
+
+Prueba siguiente en test/live-repaint-reload: mismo candidato a6997fb, cinco imágenes de base intactas, luego xfdesktop --reload documentado y sexta imagen del probe. Busca comprobar recuperación de repintado sin reconstrucción. Un eventual éxito tras intervención no acredita comportamiento automático del sistema. Python/shell local aprobados, ejecución pendiente. Fuente: https://docs.xfce.org/xfce/xfdesktop/command-line . No desactivar la validación por regiones negras para convertir el fallo en éxito.
