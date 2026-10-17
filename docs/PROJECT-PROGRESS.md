@@ -16,9 +16,9 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 | Voz | 2 | 0 % | Sin reconocimiento y síntesis E2E probados. |
 | Acciones de IA en el sistema | 4 | 25 % | Broker/permisos y piezas preliminares; automatización visible y verificable pendiente. |
 | Instalador y persistencia | 12 | 25 % | Plan, preflight y preview; instalación ejecutada y arranque sin ISO pendientes. |
-| Aplicaciones Windows | 25 | 50 % | 7-Zip Windows x64 instalado y usado en laboratorio Debian/Wine; asistente Nexus, más apps y persistencia OS pendientes. |
+| Aplicaciones Windows | 25 | 50 % | 7-Zip validado en Live anterior; 7-Zip y Notepad++ con instalación, menú y edición probados en laboratorio. Nueva ISO mixta construida; aceptación de ambos en Live y persistencia pendientes. |
 | Aplicaciones Android/APK | 15 | 0 % | Prioridad alta; runtime e integración gráfica todavía no probados. |
-| Asistente de instalación con un clic | 8 | 50 % | 7-Zip verificado, instalado y abierto desde asistente empaquetado en ISO; MIME y reapertura probados en laboratorio. APK/Linux, desinstalación y aceptación completa pendientes. |
+| Asistente de instalación con un clic | 8 | 50 % | Dos EXE aprobados, perfiles separados, MIME, reapertura y menú; retirada recuperable a papelera validada en laboratorio. 7-Zip validado en ISO anterior; APK/Linux y aceptación completa pendientes. |
 | Paquetes y aplicaciones Linux | 3 | 0 % | Integración gráfica .deb/Flatpak/AppImage pendiente de aceptación. |
 | Compatibilidad macOS | 1 | 0 % | Alcance futuro independiente de Android. |
 | Actualizaciones y recuperación | 4 | 50 % | Modelos y simulaciones probadas; actualización/rollback instalado pendientes. |
@@ -67,4 +67,13 @@ ISO Gate39064997881 aprobado (fuente791625cd119717fa5195a51477a70c00e6a90e65). C
 
 Alcance exacto: máquina QEMU/UEFI Live descartable, confirmación del botón programática, un paquete Windows; consulta MIME aprobada. No afirmar clic físico en Thunar, persistencia tras reinicio, compatibilidad general o certificación. La reapertura del asistente implementada en PR #25 se probó aparte en Debian/Wine y es posterior a esta ISO.
 
-Avance: instalador común25→50 por componentes integrados y flujo parcial validado en ISO, junto con MIME y reapertura probados en laboratorio. Sigue sin APK/Linux, desinstalación o aceptación completa; no corresponde75%. Windows permanece50 por amplitud del módulo. Peso8 añade2 puntos:35.75→37.75≈38% global. Siguiente entrega funcional: acceso a la aplicación instalada desde el menú, manejo de desinstalación y ampliar matriz Windows; priorizar Android y Linux después de estabilizar este flujo.
+Avance: instalador común25→50 por componentes integrados y flujo parcial validado en ISO, junto con MIME y reapertura probados en laboratorio. En ese corte seguían pendientes APK/Linux, desinstalación y aceptación completa; la retirada se validó posteriormente en laboratorio (ver actualización siguiente). No corresponde75%. Windows permanece50 por amplitud del módulo. Peso8 añade2 puntos:35.75→37.75≈38% global. Siguiente entrega funcional: acceso a la aplicación instalada desde el menú, manejo de desinstalación y ampliar matriz Windows; priorizar Android y Linux después de estabilizar este flujo.
+
+
+## Estado reconciliado: catálogo y retirada — 2026-10-17
+
+PR #29 integrada en fad9f10eafc99d531b72bd656bf48b1b5d97424d. Quince pruebas unitarias y Wine Lab39076124206 aprobados: instalación de ambos paquetes, acceso desde menú, edición/guardado Notepad++, cancelación de retirada, rechazo con aplicación activa y traslado real del perfil a papelera sin alterar7-Zip. Evidencia12117470710 inspeccionada.
+
+ISO Gate39076397453 finalizó success para esa misma fuente: preflight de escritorio, construcción y arranque UEFI aprobados. Captura39077637721 todavía en ejecución al registrar este corte: instalación/apertura de ambos dentro de esta nueva imagen NO confirmadas. No reutilizar el éxito de laboratorio como resultado Live. Pendiente revisar captura, logs por fases y marcadores de ambos programas antes de decidir siguiente cambio.
+
+No cambian pesos ni etapas: global37.75≈38%, Windows50%, asistente50%, APK0%. La tabla superior refleja el estado actual; las secciones anteriores conservan los cortes históricos.
