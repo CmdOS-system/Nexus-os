@@ -53,6 +53,43 @@ class InstallerTests(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_reopen_recognizes_receipt_without_executing(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(module.shutil, 'which', return_value='/usr/bin/wine'):
+            root = Path(directory) / 'app'
+            original = module.Installer(root)
+            original.binary().parent.mkdir(parents=True)
+            original.binary().write_bytes(b'controlled installed fixture')
+            original.record_installation()
+            original.close()
+            with patch.object(module.subprocess, 'Popen') as launch:
+                reopened = module.Installer(root)
+                try:
+                    self.assertTrue(reopened.installed)
+                    self.assertFalse(reopened.ready)
+                    launch.assert_not_called()
+                    reopened.launch()
+                    self.assertEqual(launch.call_args.args[0], ['/usr/bin/wine', str(reopened.binary())])
+                    reopened.binary().write_bytes(b'changed binary')
+                    with self.assertRaises(module.PackageError):
+                        reopened.launch()
+                    self.assertEqual(launch.call_count, 1)
+                finally:
+                    reopened.close()
+
+    def test_missing_or_invalid_receipt_never_restores_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = module.Installer(Path(directory))
+            try:
+                service.binary().parent.mkdir(parents=True)
+                service.binary().write_bytes(b'fixture')
+                self.assertFalse(service.has_verified_installation())
+                (service.root / 'install-receipt.json').write_text('[]')
+                self.assertFalse(service.has_verified_installation())
+                (service.root / 'install-receipt.json').write_text('{bad')
+                self.assertFalse(service.has_verified_installation())
+            finally:
+                service.close()
+
     def test_symlink_input_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

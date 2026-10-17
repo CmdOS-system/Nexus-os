@@ -4,6 +4,7 @@ Does not install APK/Linux formats or prepare Wine automatically yet.
 """
 from __future__ import annotations
 import hashlib
+import json
 import os
 from pathlib import Path
 import queue
@@ -58,7 +59,35 @@ class Installer:
         self.stage = tempfile.TemporaryDirectory(prefix='nexus-app-')
         self.package = Path(self.stage.name) / 'setup.exe'
         self.ready = False
-        self.installed = False
+        self.installed = self.has_verified_installation()
+
+    def binary(self):
+        return self.root / 'prefix/drive_c/Program Files/7-Zip/7zFM.exe'
+
+    def has_verified_installation(self):
+        try:
+            receipt_path = self.root / 'install-receipt.json'
+            if receipt_path.stat().st_size > 4096:
+                return False
+            receipt = json.loads(receipt_path.read_text())
+            binary = self.binary()
+            if not isinstance(receipt, dict) or not 0 < binary.stat().st_size <= MAX_BYTES:
+                return False
+            return (receipt.get('package_sha256') == PACKAGE_SHA256
+                    and receipt.get('binary_sha256') == hashlib.sha256(binary.read_bytes()).hexdigest())
+        except (OSError, ValueError):
+            return False
+
+    def record_installation(self):
+        receipt = {'package_sha256': PACKAGE_SHA256,
+                   'binary_sha256': hashlib.sha256(self.binary().read_bytes()).hexdigest()}
+        with tempfile.NamedTemporaryFile(mode='w', dir=self.root, delete=False) as output:
+            temporary = Path(output.name)
+            json.dump(receipt, output)
+        try:
+            os.replace(temporary, self.root / 'install-receipt.json')
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def prepare(self, path):
         if self.ready:
@@ -98,13 +127,17 @@ class Installer:
             binary = self.root / 'prefix/drive_c/Program Files/7-Zip/7zFM.exe'
             if not binary.is_file():
                 raise PackageError('El instalador terminó, pero no se encontró la aplicación esperada.')
+            self.record_installation()
             self.installed = True
         finally:
             lock.unlink(missing_ok=True)
 
     def launch(self):
-        if not self.installed:
-            raise PackageError('La aplicación todavía no está instalada por este asistente.')
+        if not self.installed or not self.has_verified_installation():
+            self.installed = False
+            raise PackageError('No se encontró una instalación verificada. Instala de nuevo el paquete aprobado.')
+        if not self.wine:
+            raise PackageError('Wine no está disponible para abrir la aplicación.')
         binary = self.root / 'prefix/drive_c/Program Files/7-Zip/7zFM.exe'
         return subprocess.Popen([self.wine, str(binary)], env=self.environment(),
                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -134,6 +167,9 @@ class App(tk.Tk):
         self.confirm.pack(anchor='w', pady=10)
         self.open_button = ttk.Button(frame, text='Abrir 7-Zip', command=self.open_app, state='disabled')
         self.open_button.pack(anchor='w')
+        if self.service.installed:
+            self.status.set('7-Zip ya está instalado en tu perfil. Puedes abrirlo sin reinstalar.')
+            self.open_button.state(['!disabled'])
         self.progress = ttk.Progressbar(frame, mode='indeterminate')
         self.progress.pack(fill='x', pady=14)
         self.protocol('WM_DELETE_WINDOW', self.request_close)

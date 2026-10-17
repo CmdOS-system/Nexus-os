@@ -48,6 +48,21 @@ with tempfile.TemporaryDirectory(prefix='nexus-gui-lab-') as directory:
         Path('windows-evidence/gui-assistant-windows.txt').write_text(windows)
         ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save('windows-evidence/nexus-install-7zip.png')
         Path('windows-evidence/gui-assistant-result.txt').write_text('PASS: selection verified without execution; graphical confirmation installed; graphical Open created 7-Zip window. No OS reboot or general-format acceptance.\n')
+        subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
+        app.request_close()
+        service = Installer(root / 'application')
+        app = App(service)
+        app.update()
+        assert service.installed, 'Verified install was not restored after closing assistant'
+        assert not app.open_button.instate(['disabled'])
+        assert not service.ready, 'Reopening must not prepare or run a new installer'
+        app.open_button.invoke()
+        app.update()
+        time.sleep(8)
+        windows = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
+        assert '7-Zip' in windows
+        ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save('windows-evidence/nexus-install-reopened.png')
+        Path('windows-evidence/gui-reopen-result.txt').write_text('PASS: closed assistant and Wine; reopened from verified receipt; Open enabled without selecting installer; opened real7-Zip again. This is not a reboot persistence test.\\n')
     finally:
         if app.busy:
             wait_until(app, lambda: not app.busy)
