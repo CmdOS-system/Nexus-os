@@ -184,3 +184,8 @@ PR #11: probe acotado de 20 segundos posterior a cinco capturas, salida/código 
 PR #13: aceptar únicamente backdrop por workspace y esperar hasta 60 s; evitar marcar éxito sobre propiedades heredadas. Prueba controlada local pasó con listado heredado seguido de workspace, sin escrituras prematuras y conservando preferencias posteriores. Native Desktop Smoke 39041856873 y Fast Checks 39041856816 success en e04c2fb. Falta nueva ISO y prueba Live: no declarar fondo reparado en el candidato anterior.
 
 Ambos cambios listos para revisión/integración; comprobar estado actual de PR. Próximo: construir candidato con #13 y capturar con #11; revisar aurora y cobertura 1920x1080. Mantener fallo visual documentado incluso si los workflows pasan. Documentación primaria: https://github.com/xfce-mirror/xfdesktop/blob/xfce-4.20/common/xfdesktop-common.c y https://docs.xfce.org/xfce/xfconf/xfconf-query .
+
+
+## Integración de diagnóstico y fondo — 2026-10-17
+
+PR #11 integrada 03b0fb63e3e936908d8efe12e714a3a34510984c; PR #13 integrada 9ad6b052da6957c0bdda3a0c2065f04447774ff5. Sustituye estados pendientes de integración anteriores. Los cambios de código tenían CI/captura o sesión nativa aprobadas; últimas actualizaciones previas a merge reconciliaban documentación únicamente. Consultar CI combinado del SHA 9ad6b05 y el nuevo ISO Gate. No afirmar que la ISO anterior incluya la corrección de wallpaper ni que la cobertura negra esté resuelta. Próximo hito: nueva ISO con #13, captura automática usando #11, inspección del fondo aurora y área completa; luego interacción Control Center/Agent en Live.
