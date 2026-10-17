@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
 sys.path.insert(0, '/opt/nexus/agent')
 from app_installer import App, Installer, package_specs
 
@@ -72,6 +73,22 @@ for package_id, url, title, marker in cases:
         app.confirm.invoke()
         wait(app, lambda: not app.busy)
         assert service.installed, app.status.get()
+        if package_id == 'notepadpp':
+            # Diagnostic trial only: default DirectWrite produced a black editor
+            # in the QEMU VGA fixture. Upstream MISC writeTechnologyEngine=0 is GDI.
+            config = (service.root / 'prefix/drive_c/users' / Path.home().name /
+                      'AppData/Roaming/Notepad++/config.xml')
+            config.parent.mkdir(parents=True, exist_ok=True)
+            tree = ET.parse(config) if config.exists() else ET.ElementTree(ET.Element('NotepadPlus'))
+            settings = tree.getroot().find('GUIConfigs')
+            if settings is None:
+                settings = ET.SubElement(tree.getroot(), 'GUIConfigs')
+            misc = settings.find("GUIConfig[@name='MISC']")
+            if misc is None:
+                misc = ET.SubElement(settings, 'GUIConfig', name='MISC')
+            misc.set('writeTechnologyEngine', '0')
+            tree.write(config, encoding='utf-8', xml_declaration=True)
+            print('NEXUS_NOTEPAD_GDI_TRIAL ' + str(config), flush=True)
         launched = []
         original_launch = service.launch
         def observed_launch():
