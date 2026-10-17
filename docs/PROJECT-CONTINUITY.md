@@ -217,3 +217,12 @@ Siguiente acción: identificar run ISO de a6997fb, verificar candidato y SHA256,
 Evitar el ciclo de corregir/reconstruir sin reproducir causa. PR #17 propone reemplazar preflight Ubuntu por Debian Trixie (como ISO), incluir desktop-base, registrar versiones y comparar píxeles con SVG aurora, además de probar conservación de ruta workspace. ISO Gate dependerá de ese preflight antes de construir. Documentado en docs/desktop-validation-strategy.md de la rama test/debian-desktop-before-iso. Es solución al vacío de validación entre entornos, no reparación gráfica demostrada. CI objetivo 39049597928 en curso; no integrar hasta inspeccionar resultado.
 
 ISO Gate 39048872619 de #16 todavía en build al corte. PR #14 ya detectó la cobertura parcial en el candidato viejo mediante fallo esperado 39048894867. Siguiente: resolver primero el resultado del preflight Debian, después usar una sola ISO con criterio de aurora/cobertura real. No anunciar el fondo arreglado por aprobar sintaxis, mocks o configuración xfconf.
+
+
+## Preflight Debian con prueba de píxeles aprobado — 2026-10-17
+
+Native Desktop Smoke 39049627191 y Fast Checks 39049627176 success en 0f3667. Artefacto 12107346535 descargado: xfdesktop4 4.20.1-1, xfce4-session 4.20.2-2, xfwm4 4.20.0-1; Aurora pixel match=1.000 en región muestreada. Screenshot nativo 1920x1080 inspeccionado: aurora y Horizon, sin la zona negra anterior. Es contenedor Debian/Xvfb como root, NO ISO/LightDM; no extrapolar aceptación Live.
+
+PR #17 integrada b720aba890e6527f7c81aaaa1ccc4b9523f39f84. ISO Gate exige ahora preflight Debian y comparación de aurora antes del build. Cambios exclusivos de workflow no disparan reconstrucción automática del runtime sin cambios; se conserva dispatch y triggers de runtime. Último ajuste antes de merge solo cambió esa selección de triggers.
+
+ISO Gate 39048872619 de a6997fb ya success; captura automática 39049935491 todavía pendiente de inspección. Usar ese candidato existente y su checksum; no reconstruir otra imagen para comprobar un cambio exclusivo de tests. Próximo: revisar la captura QEMU con criterio de cobertura y aurora; si falla, aislar diferencia Live/LightDM/QEMU usando el preflight Debian ya verde.
