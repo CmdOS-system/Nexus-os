@@ -327,3 +327,10 @@ ISO Gate39062372682 no produjo ISO: verify.sh rechazó las llamadas Tk app.confi
 ## Prueba Windows dentro de ISO preparada — 2026-10-17
 
 Se extiende captura QEMU para comprobar el runtime empaquetado de Nexus Install dentro del Live, con 4GB RAM, hash oficial fijado, nombre EXE con espacios, consulta MIME, selección sin prefijo, confirmación gráfica programática y apertura real7-Zip. Se conservan dos capturas adicionales del framebuffer (preparado y aplicación abierta) y marcadores seriales; se exige PASS. El probe se transfiere únicamente al invitado temporal después de las capturas Horizon; no cambia la ISO ni se instala en el producto. No representa un clic físico en Thunar ni persistencia tras reinicio. Implementación compilada; ejecución E2E pendiente de ISO Gate39064997881. No elevar porcentajes hasta revisar resultado y capturas. Global≈36%, Windows50%, instalador25%, Android0%.
+
+
+## Reabrir aplicación instalada — 2026-10-17
+
+Nexus Install guarda tras instalación exitosa un registro local mediante reemplazo atómico, con hash del instalador aprobado y del ejecutable instalado. Al abrir de nuevo reconoce ese perfil y habilita Abrir sin elegir/reinstalar EXE; abrir sigue siendo una acción explícita. Revalida el ejecutable antes de lanzarlo; registro ausente/dañado o binario modificado se rechazan. El registro es local y editable por el dueño del perfil: no es firma de proveedor ni sistema antimalware. Instalaciones previas sin registro requieren reinstalar una vez.
+
+Seis unit tests locales aprobados (incluyen reapertura sin ejecución automática y rechazo por alteración). Se amplía Wine GUI Lab para cerrar asistente/Wine, reconstruir el servicio desde el perfil y abrir7-Zip de nuevo. E2E pendiente. No es persistencia tras reiniciar el Live. ISO791625cd sigue siendo una versión anterior a esta mejora; no atribuirle el nuevo comportamiento hasta una futura imagen. Global≈36%, instalador25%, Windows50%, Android0%.
