@@ -73,8 +73,8 @@ jobs:
           from PIL import Image
           from pathlib import Path
           paths = list(Path('.').glob('nexus-iso-desktop*.png'))
-          if len(paths) != 5:
-              raise SystemExit('Expected five guest screenshots, including shortcut and direct launch attempts')
+          if len(paths) != 6:
+              raise SystemExit('Expected six guest screenshots, including the separate bounded launch probe')
           for path in paths:
               image = Image.open(path).convert('RGB')
               visible = sum(max(pixel) > 20 for pixel in image.getdata()) / (image.width * image.height)
