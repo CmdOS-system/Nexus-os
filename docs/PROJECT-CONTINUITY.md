@@ -1,3 +1,9 @@
+# Punto de entrada actualizado — 2026-10-17
+
+Leer primero [AI-HANDOFF.md](AI-HANDOFF.md): consolida estado, trabajo realizado, backlog priorizado, criterios de aceptación y prompt portátil para cualquier IA. El resto de este archivo conserva el registro cronológico; las notas posteriores sustituyen estados anteriores.
+
+En esta sesión se confirmó directamente que PR #7 está integrada en `c5c05a6392ab543882b1f53ce40d12ac3db06d92`. Su captura usó la ISO antigua, por lo que no valida el rediseño de PR #9. No se confirmó el resultado de ISO Gate 38991943403; esa comprobación y la revisión visual del candidato nuevo siguen como siguiente acción. Este cambio es documental y no añade validaciones de ejecución del sistema.
+
 # Nexus OS — continuidad del proyecto
 
 Actualizado: 2026-10-16. Punto de partida inspeccionado: main, b4592913efafbc83065021ae75e39d330fe4e798.
