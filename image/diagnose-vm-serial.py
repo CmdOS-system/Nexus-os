@@ -98,6 +98,8 @@ def collect(socket_path, log_path, full_hd=False):
             "xfconf-query -c xsettings -lv; xfconf-query -c xfce4-desktop -lv; "
             "ls -l /usr/local/libexec/nexus-horizon-appearance; "
             "cat /etc/xdg/autostart/*nexus* /home/nexus/.config/autostart/*nexus* 2>/dev/null; "
+            "printf '\\nNEXUS_REPAINT_PROBE\\n'; xfdesktop --reload; repaint_rc=$?; "
+            "printf 'xfdesktop reload exit=%s\\n' \"$repaint_rc\"; sleep 3; "
             "timeout 20s /usr/local/bin/nexus-horizon >/tmp/nexus-horizon-probe.log 2>&1 & probe_pid=$!; "
             "sleep 10; xwininfo -root -tree; printf 'NEXUS_HORIZON_PROBE_%s\\n' READY; sleep 10; wait \"$probe_pid\"; probe_rc=$?; "
             "printf 'Horizon bounded probe exit=%s (124 means timeout)\\n' \"$probe_rc\"; "
