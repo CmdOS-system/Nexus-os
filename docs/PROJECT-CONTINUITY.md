@@ -168,29 +168,19 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 - Progreso global: nueva ISO construida y UEFI aprobado; apariencia y lanzamiento Horizon Live bloqueados. Instalación persistente, IA en ISO/voz, Windows y recuperación instalada siguen pendientes.
 
 
-## Instrumentación Live preparada — 2026-10-17
+## Hito confirmado: Horizon visible mediante atajo en ISO — 2026-10-17
 
-PR #11, test/live-horizon-launch-diagnostics: añade señal de finalización de las cinco capturas de teclado, luego prueba del wrapper limitada a 20 segundos con stdout/stderr, estado de salida y árbol de ventanas. Recoge preferencias xfconf y autostart sin ejecutar el inicializador de apariencia. El lanzamiento diagnóstico ocurre después de las capturas para no acreditar falsamente el atajo. El candidato manual se fija ahora en a2582a2 / ISO Gate 38991943403. No modifica la ISO ni elimina rechazo de imágenes negras.
+Se descargó artefacto 12104561411 de captura QEMU 39041523768 (success, harness f5d257f85cb3a80938b27ec121368f393e7ff653, candidato ISO a2582a2). Inspección visual: nexus-iso-desktop-horizon.png muestra el lanzador Horizon tras Super+Espacio; horizon-probe.png lo muestra también por ejecución directa. Esto sustituye el pendiente de apertura y atajo para ese candidato, sin acreditar todavía todas sus interacciones.
 
-Validación local: compilación Python y sintaxis bash del comando generado; comprobación de salto de línea terminal y expansión de PID. PR en borrador, pendiente de CI y ejecución QEMU. Próximo paso: revisar Actions del head vigente de PR #11, descargar logs y distinguir error de ejecución del wrapper, preferencias/autostart y repintado. No declarar arreglado Horizon Live.
+El fondo sigue siendo XFCE en área 1280x800 y hay negro en parte del framebuffer 1920x1080. Aurora/cobertura completa no aprobadas; un run verde solo confirma los criterios implementados. PR #11 conserva diagnóstico y sincronización de captura; PR #13 propone esperar claves de backdrop por workspace en vez de finalizar sobre claves heredadas, con CI nativo y validación ISO pendientes. Ambas propuestas siguen sin integrar al corte.
 
-
-## Resultado del probe y documentación revisada — 2026-10-17
-
-Run 39040527570 completó captura/probe, pero falló rechazo de framebuffer negro; no es éxito visual. Artefacto 12103877628 descargado: el árbol X durante el lanzamiento acotado contiene ventana Nexus Horizon 880x720; salida del wrapper vacía y código 124 esperado al agotar timeout. Esto acredita creación de ventana por ejecución directa en Live, no atajo, interacción o calidad visual. xfconf registra Arc-Dark, Papirus-Dark, Inter 11 y rutas aurora. Configuración de wallpaper no demuestra renderizado efectivo.
-
-Documentación primaria revisada: https://docs.xfce.org/xfce/xfconf/xfconf-query (consulta/listado y propagación de ajustes) y https://docs.xfce.org/xfce/xfce4-session/preferences (autostart y restauración de sesiones). Mantener separados configuración, ejecución y píxeles observados.
-
-PR #11 ampliada con sexta captura horizon-probe tras inventario de ventanas, antes del vencimiento del proceso. Las cinco capturas previas conservan orden y rechazo de negro. Compilación Python, sintaxis bash generada y diff local aprobados; ejecución nueva pendiente. Próximo paso: revisar artefacto del head f5d257f y la captura del probe; comprobar si aurora se repinta tras cambio de resolución sin modificar preferencias para ocultar el fallo.
+Evidencia real: https://github.com/CmdOS-system/Nexus-os/actions/runs/39041523768/artifacts/12104561411 . Fast Checks 39041669629 success para 4de73ae. Próximo paso: inspeccionar captura sincronizada 39041654332 y resultado nativo 39041856873, resolver fondo/repintado y después reconstruir y validar candidato que incluya la corrección. Progreso: Live UEFI + Horizon visible y atajo confirmados; instalación persistente, IA en ISO/voz, Windows y recuperación instalada pendientes.
 
 
-## Sincronización de captura — 2026-10-17
+## Cambios preparados para integración — 2026-10-17
 
-Fast Checks 39041543483 finalizó success para db66883393a4f7259fa289f240ee23010e71c7b2. Captura 39041523768 seguía en progreso al corte. Se identificó carrera en el harness: capture-vm esperaba XFCE+45 segundos, mientras diagnose-vm podía seguir ejecutando xrandr concurrentemente. En 9779277 la captura exige además NEXUS_DIAG_END antes de la espera de repintado. No se afirma que esta carrera sea la causa única ni que la corrección repare el renderizado. Python compile y diff local correctos; nuevo QEMU pendiente. Se conservan las seis capturas y rechazo de negro. Siguiente acción: revisar ambos runs y el PNG horizon-probe; no integrar PR #11 como arreglo visual sin inspección.
+PR #11: probe acotado de 20 segundos posterior a cinco capturas, salida/código y ventanas; sexta captura separada, señal de sincronización y espera NEXUS_DIAG_END antes de imagen inicial. Captura 39041654332 success en 9779277; PNG inicial inspeccionado: aún fondo XFCE parcial con negro, por lo que la sincronización no arregló el render. Artefacto 12104700554. Fast Checks 39042032070 success en 1d246e6. Es mejora de diagnóstico, no aceptación visual completa.
 
+PR #13: aceptar únicamente backdrop por workspace y esperar hasta 60 s; evitar marcar éxito sobre propiedades heredadas. Prueba controlada local pasó con listado heredado seguido de workspace, sin escrituras prematuras y conservando preferencias posteriores. Native Desktop Smoke 39041856873 y Fast Checks 39041856816 success en e04c2fb. Falta nueva ISO y prueba Live: no declarar fondo reparado en el candidato anterior.
 
-## Horizon visible y atajo confirmado en Live — 2026-10-17
-
-Run 39041523768 success para f5d257f; artefacto 12104561411 descargado y PNG inspeccionados. nexus-iso-desktop-horizon.png muestra Nexus Horizon después de Super+Espacio; nexus-iso-desktop-horizon-probe.png también muestra el lanzador durante ejecución acotada. Sustituye el pendiente de apertura visual y atajo para este candidato a2582a2. No acredita interacción completa con todas las apps. Sigue fondo XFCE en área 1280x800 con zona negra en framebuffer 1920x1080; aurora NO validada. El control de no-negro es insuficiente para detectar esa cobertura parcial y no acredita calidad visual.
-
-Evidencia: https://github.com/CmdOS-system/Nexus-os/actions/runs/39041523768/artifacts/12104561411 . No confundir este success con corrección del fondo (#13) ni sincronización posterior 9779277, que no están en ese head. Fast Checks 39041669629 success para 4de73ae. Próximo: comprobar captura 39041654332 y CI nativo de #13; conservar criterio de aceptación de cobertura completa y aurora visible antes de declarar escritorio terminado.
+Ambos cambios listos para revisión/integración; comprobar estado actual de PR. Próximo: construir candidato con #13 y capturar con #11; revisar aurora y cobertura 1920x1080. Mantener fallo visual documentado incluso si los workflows pasan. Documentación primaria: https://github.com/xfce-mirror/xfdesktop/blob/xfce-4.20/common/xfdesktop-common.c y https://docs.xfce.org/xfce/xfconf/xfconf-query .
