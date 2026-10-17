@@ -80,13 +80,13 @@ grep -q "^Exec=python3 /opt/nexus/installer-preview.py$" "$INSTALLER_DESKTOP"
 grep -q "from installer_inventory import capture_inventory" "$INSTALLER_PREVIEW"
 grep -q "from installer_plan import plan_install" "$INSTALLER_PREVIEW"
 grep -q "Installation is DISABLED in this preview" "$INSTALLER_PREVIEW"
-grep -q "installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py" "$BUILD"
+grep -q "installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py" "$BUILD"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
   grep -q -- "$flag" "$BUILD"
 done
 
-for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py; do
+for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py; do
   test -s "$PROJECT_ROOT/agent/$module" || { echo "Missing Nexus Agent runtime module: $module" >&2; exit 1; }
   python3 -m py_compile "$PROJECT_ROOT/agent/$module"
 done
@@ -106,3 +106,7 @@ if grep -Eq "sendkey|monitor stdio" "$ROOT/boot-smoke.sh"; then
 fi
 
 echo "Nexus OS image source checks passed"
+
+test -s "$ROOT/includes/usr/share/applications/nexus-app-install.desktop"
+grep -qx 'Exec=/usr/bin/python3 /opt/nexus/agent/app_installer.py %f' "$ROOT/includes/usr/share/applications/nexus-app-install.desktop"
+grep -qx 'application/vnd.microsoft.portable-executable=nexus-app-install.desktop;' "$ROOT/includes/etc/skel/.config/mimeapps.list"

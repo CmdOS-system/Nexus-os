@@ -14,3 +14,8 @@ Siguiente tras E2E: revisar logs/captura, integrar código, diseñar asociación
 ## Resultado posterior confirmado
 
 GUI Wine Lab39053538833 aprobado; artefacto12108338331 descargado e inspeccionado, logs y captura. Selección no ejecutó instalador, confirmación gráfica instaló y Abrir produjo ventana7-Zip. PR #21 integrada02d6bdb. Sustituye el estado CI pendiente anterior. Los límites de formato, empaquetado, motor y persistencia siguen vigentes.
+
+
+## Integración de archivos e imagen (2026-10-17)
+
+Se incorpora app_installer.py al runtime preparado por image/build.sh; entrada de menú Nexus Install y asociaciones EXE para perfiles nuevos mediante mimeapps.list. Wine/wine64/fonts-wine se incluyen en la lista de paquetes. Abrir un EXE entrega su ruta al asistente; no autoriza ejecutarlo: se conserva verificación de hash y confirmación. Solo está aprobado 7-Zip26.04 x64. APK, MSI y paquetes Linux siguen pendientes. Esta integración requiere validar apertura desde Thunar y generar/probar una nueva ISO; el E2E anterior demuestra el asistente en Debian/Xvfb, no esta nueva integración en Nexus. Avance global permanece ≈36%, instalador25%, Windows50%, Android0%. Siguiente: comprobar MIME con archivo cuyo nombre tenga espacios, ausencia de ejecución al abrir y confirmación/resultado en ISO; no reconstruir repetidamente sin revisar el fallo concreto.
