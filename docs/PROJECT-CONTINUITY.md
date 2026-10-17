@@ -247,3 +247,12 @@ Este trabajo no sustituye el bloqueo de cobertura Live ni requiere nueva ISO. Pr
 Run 39050598708 failure, artefacto 12108125568 inspeccionado. xfdesktop --reload devolvió 0 y sexta captura aún presenta aurora limitada a región antigua; no integrar #18 como reparación. PR #19 configura EDID preferido 1920x1080 desde el arranque y elimina cambio xrandr en la prueba, manteniendo requisito de dimensiones y rechazo de negro. Usa la misma ISO a6997fb; sin reconstrucción. Fuente QEMU v8.2.2 vga-pci.c / edid.h confirma propiedades xres/yres. Si pasa, acredita arranque Full HD, no cambio dinámico de resolución; el defecto RandR sigue separado.
 
 TV: disponibilidad oficial de Kodi y kodi-pvr-iptvsimple en Debian Trixie documentada; Tvheadend aún no confirmado como paquete de esa distribución. Próximo prototipo aislado con clip propio, sin alterar ISO ni incorporar fuentes no autorizadas.
+
+
+## Radio y formato de progreso global — 2026-10-17
+
+Usuario solicita incluir radio y estudiar documentación antes de integración. Investigación guardada en docs/research/nexus-radio-feasibility-2026-10-17.md: directorio Radio Browser, fuentes oficiales, motor compartido, MPRIS, IA por IDs y FM opcional con hardware V4L2. Radio sigue sin implementación/reproducción comprobada. No prometer perfección sin matriz de pruebas.
+
+En cada respuesta usar barra global por hitos, no porcentaje inventado. Orden estable de ocho hitos: 1 Live/UEFI; 2 escritorio Horizon completo; 3 IA integrada en sistema; 4 instalación/persistencia; 5 compatibilidad Windows; 6 actualización/recuperación instalada; 7 TV/radio; 8 aceptación de release/hardware. Convención: verde=criterio completo, amarillo=en curso/parcial, blanco=pendiente. Al corte: 🟩🟨🟨⬜⬜⬜🟨⬜. Las posiciones no representan esfuerzo equivalente ni porcentaje de producto. Live probado, escritorio con aurora pero cobertura pendiente, IA real solo consola fuera ISO, medios en investigación. Mantener el progreso actualizado con evidencia.
+
+Escritorio: captura Full HD nativa 39051320346 todavía en curso al corte; no reconstruir ISO para esta prueba.
