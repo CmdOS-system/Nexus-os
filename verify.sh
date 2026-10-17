@@ -15,10 +15,8 @@ find "$ROOT/image" -maxdepth 1 -type f -name '*.sh' -print0 | xargs -0 -r -n1 ba
 find "$ROOT/image/hooks" -type f -print0 | xargs -0 -r -n1 bash -n
 
 echo "[1/5] Security regression scan"
-if grep -R -n -E 'from secrets import|\.invoke\(' "$ROOT/agent" --include='*.py' --exclude-dir='__pycache__'; then
-  echo "Forbidden legacy security API detected" >&2
-  exit 1
-fi
+python3 "$ROOT/scripts/test_security_regressions.py"
+python3 "$ROOT/scripts/check-security-regressions.py" "$ROOT/agent"
 
 echo "[2/5] Python syntax"
 find "$ROOT/agent" -name '*.py' -print0 | xargs -0 -n1 python3 -m py_compile
