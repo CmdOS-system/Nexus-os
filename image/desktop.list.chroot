@@ -6,3 +6,7 @@ ca-certificates
 
 python3-tk
 libsecret-tools
+arc-theme
+papirus-icon-theme
+fonts-inter
+librsvg2-common

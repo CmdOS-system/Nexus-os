@@ -18,8 +18,8 @@ panel = load("horizon_capture_panel", "image/includes/opt/nexus/horizon-panel.py
 bar = panel.HorizonPanel()
 launcher = horizon.Horizon()
 try:
-    bar.geometry("1024x48+0+0")
-    launcher.geometry("760x570+132+105")
+    bar.geometry("1920x48+0+0")
+    launcher.geometry("920x760+500+150")
     bar.update()
     launcher.update()
     launcher.lift()

@@ -1,0 +1,26 @@
+#!/bin/sh
+# First-session defaults only. Later logins retain the user's wallpaper choice.
+set -eu
+config_root=${XDG_CONFIG_HOME:-"$HOME/.config"}
+state="$config_root/nexus/horizon-appearance-v1"
+wallpaper=/usr/share/backgrounds/nexus/horizon-aurora.svg
+[ ! -e "$state" ] || exit 0
+[ -r "$wallpaper" ] || exit 1
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+  properties=$(xfconf-query -c xfce4-desktop -l 2>/dev/null || true)
+  paths=$(printf '%s\n' "$properties" | sed -n '\|^/backdrop/.*/last-image$|p')
+  if [ -n "$paths" ]; then
+    printf '%s\n' "$paths" | while IFS= read -r property; do
+      xfconf-query -c xfce4-desktop -p "$property" -s "$wallpaper"
+      xfconf-query -c xfce4-desktop -p "${property%/*}/image-style" -n -t int -s 5
+    done
+    mkdir -p "${state%/*}"
+    printf '%s\n' 'Horizon background initialized; future user choices are preserved.' > "$state"
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  sleep 1
+done
+echo 'Horizon background deferred: XFCE monitor properties not available' >&2
+exit 1

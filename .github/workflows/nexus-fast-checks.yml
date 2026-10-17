@@ -65,7 +65,7 @@ jobs:
       - name: Install virtual display and Tk
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xauth python3-tk python3-pil
+          sudo apt-get install -y xvfb xauth python3-tk python3-pil fonts-inter
       - name: Exercise installer read-only UI
         run: xvfb-run -a /usr/bin/python3 agent/tests/gui_smoke.py
       - name: Exercise Nexus Control Center widgets
@@ -77,9 +77,9 @@ jobs:
       - name: Exercise Horizon desktop integration
         run: xvfb-run -a /usr/bin/python3 agent/tests/horizon_desktop_integration_smoke.py
       - name: Capture real Nexus Horizon screenshot
-        run: xvfb-run -a -s "-screen 0 1024x768x24" /usr/bin/python3 agent/tests/horizon_screenshot.py
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 agent/tests/horizon_screenshot.py
       - name: Capture Horizon integrated desktop screenshot
-        run: xvfb-run -a -s "-screen 0 1024x768x24" /usr/bin/python3 agent/tests/horizon_desktop_screenshot.py
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 agent/tests/horizon_desktop_screenshot.py
       - name: Publish Horizon integrated desktop screenshot
         uses: actions/upload-artifact@v4
         with:
