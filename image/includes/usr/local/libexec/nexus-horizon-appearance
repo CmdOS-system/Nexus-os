@@ -12,9 +12,36 @@ while [ "$attempt" -lt 60 ]; do
   # Legacy monitor-only keys may exist before xfdesktop migrates settings.
   # Only per-workspace keys are consumed by the current backdrop renderer.
   paths=$(printf '%s\n' "$properties" | sed -n '\|^/backdrop/.*/workspace[0-9][0-9]*/last-image$|p')
+  if [ -z "$paths" ]; then
+    # xfdesktop 4.20 can finish legacy migration before workspaces exist.
+    # Recover only after EWMH and GDK report the real desktop topology.
+    paths=$(python3 - <<'PYBACKDROP'
+import re
+import subprocess
+import gi
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk
+try:
+    result = subprocess.run(["xprop", "-root", "_NET_NUMBER_OF_DESKTOPS"],
+                            capture_output=True, text=True, timeout=3, check=True)
+    match = re.search(r"=\s*(\d+)\s*$", result.stdout)
+    count = int(match.group(1)) if match else 0
+    display = Gdk.Display.get_default()
+    screen = Gdk.Screen.get_default()
+    if display is not None and screen is not None and 0 < count <= 64:
+        for index in range(display.get_n_monitors()):
+            model = display.get_monitor(index).get_model()
+            if model and not any(c in model for c in "/\n\r"):
+                for workspace in range(count):
+                    print(f"/backdrop/screen{screen.get_number()}/monitor{model}/workspace{workspace}/last-image")
+except (OSError, subprocess.SubprocessError):
+    pass
+PYBACKDROP
+    ) || paths=""
+  fi
   if [ -n "$paths" ]; then
     printf '%s\n' "$paths" | while IFS= read -r property; do
-      xfconf-query -c xfce4-desktop -p "$property" -s "$wallpaper"
+      xfconf-query -c xfce4-desktop -p "$property" -n -t string -s "$wallpaper"
       xfconf-query -c xfce4-desktop -p "${property%/*}/image-style" -n -t int -s 5
     done
     mkdir -p "${state%/*}"
