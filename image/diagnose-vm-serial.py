@@ -95,7 +95,12 @@ def collect(socket_path, log_path, full_hd=False):
             time.sleep(0.2)
         probe = (
             "printf '\\nNEXUS_HORIZON_PROBE_BEGIN\\n'; "
-            "xfconf-query -c xsettings -lv; xfconf-query -c xfce4-desktop -lv; "
+            "xfdesktop --version; xfconf-query -c xsettings -lv; xfconf-query -c xfce4-desktop -lv; "
+            "xprop -root _NET_NUMBER_OF_DESKTOPS _NET_CURRENT_DESKTOP; "
+            "python3 -c 'import gi; gi.require_version(\"Gdk\", \"3.0\"); from gi.repository import Gdk; "
+            "d=Gdk.Display.get_default(); print(\"GDK_MODELS\", [d.get_monitor(i).get_model() for i in range(d.get_n_monitors())])'; "
+            "cat /home/nexus/.config/nexus/horizon-appearance-v1 2>/dev/null; "
+            "tail -n 100 /home/nexus/.xsession-errors; "
             "ls -l /usr/local/libexec/nexus-horizon-appearance; "
             "cat /etc/xdg/autostart/*nexus* /home/nexus/.config/autostart/*nexus* 2>/dev/null; "
             "timeout 20s /usr/local/bin/nexus-horizon >/tmp/nexus-horizon-probe.log 2>&1 & probe_pid=$!; "
