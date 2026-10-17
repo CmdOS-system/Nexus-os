@@ -13,7 +13,7 @@ import time
 def capture(socket_path, serial_path, output, timeout=240):
     deadline = time.monotonic() + timeout
     markers = ("NEXUS_LIVE_BOOT_READY_V1", "NEXUS_GRAPHICAL_STACK_READY_V1",
-               "NEXUS_XFCE_SESSION_READY_V1")
+               "NEXUS_XFCE_SESSION_READY_V1", "NEXUS_DIAG_END")
     while time.monotonic() < deadline:
         log = serial_path.read_text(errors="replace") if serial_path.exists() else ""
         if all(marker in log for marker in markers) and socket_path.exists():
@@ -21,6 +21,8 @@ def capture(socket_path, serial_path, output, timeout=240):
         time.sleep(1)
     else:
         raise RuntimeError("Guest readiness not observed; no desktop screenshot claimed")
+    # Serial diagnostics change display mode. Capture only after that command
+    # finishes, then allow the guest compositor to repaint.
     time.sleep(45)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(15)
