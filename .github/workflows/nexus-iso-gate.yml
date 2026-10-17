@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
     paths:
+      - "verify.sh"
+      - "scripts/*security*py"
       - "image/build.sh"
       - "image/desktop.list.chroot"
       - "image/validate.sh"
