@@ -189,3 +189,12 @@ Ambos cambios listos para revisión/integración; comprobar estado actual de PR.
 ## Integración de diagnóstico y fondo — 2026-10-17
 
 PR #11 integrada 03b0fb63e3e936908d8efe12e714a3a34510984c; PR #13 integrada 9ad6b052da6957c0bdda3a0c2065f04447774ff5. Sustituye estados pendientes de integración anteriores. Los cambios de código tenían CI/captura o sesión nativa aprobadas; últimas actualizaciones previas a merge reconciliaban documentación únicamente. Consultar CI combinado del SHA 9ad6b05 y el nuevo ISO Gate. No afirmar que la ISO anterior incluya la corrección de wallpaper ni que la cobertura negra esté resuelta. Próximo hito: nueva ISO con #13, captura automática usando #11, inspección del fondo aurora y área completa; luego interacción Control Center/Agent en Live.
+
+
+## Nueva ISO probada: fondo aún incorrecto — 2026-10-17
+
+ISO Gate 39042198220 success en 9ad6b052da6957c0bdda3a0c2065f04447774ff5. Captura automática 39043287407 success según criterio básico; artefacto 12105111678 descargado, horizon-probe.png inspeccionado: Horizon visible, fondo XFCE limitado a 1280x800 con negro restante en 1920x1080. ISO SHA256 8935009d92e26e8a6ce308cab9168b029764ff0dd7e34b4c3593dbe555e06a4a. Este resultado demuestra que #13 no resolvió el aspecto Live; no repetir éxito de sesión Xvfb como aceptación ISO.
+
+Probe sigue mostrando únicamente monitor0/monitor1 last-image heredados; no hay rutas workspace. Siguiente diagnóstico en rama test/live-backdrop-migration: versión xfdesktop, EWMH escritorios, modelos GDK reales, marcador de inicialización y errores tardíos. La ausencia de workspace al migrar es hipótesis, no causa confirmada. Se usa el candidato nuevo exacto sin reconstruirlo.
+
+PR #14 propone rechazar cobertura parcial; prueba local rechazó baseline defectuoso con 14/48 regiones negras y aceptó captura nativa aurora con 0/48. Sigue en borrador. Progreso: Live UEFI y Horizon confirmados; fondo/cobertura bloqueados, instalación persistente, IA en ISO/voz y Windows pendientes.
