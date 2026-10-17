@@ -240,3 +240,10 @@ Prueba siguiente en test/live-repaint-reload: mismo candidato a6997fb, cinco im�
 Ver docs/research/nexus-tv-feasibility-2026-10-17.md: fuentes primarias, propuesta Kodi/IPTV Simple + Tvheadend opcional + broker de IA, alternativa libmpv y servicios DRM por vías oficiales. Investigación documental guardada, sin implementación/reproducción probada. Falta identificar SuperTV exacto; la ficha com.supertv.yapp no permite deducir que sea la aplicación del usuario ni sus derechos de contenido. No se descargó ni analizó un APK. Sin puerta pirata ni evasión de DRM/pagos; interoperabilidad solo con fuentes y accesos autorizados.
 
 Este trabajo no sustituye el bloqueo de cobertura Live ni requiere nueva ISO. Próximo TV: identificar app, elegir fuente propia/autorizada y prototipo aislado antes de empaquetado. Escritorio: revisar prueba test/live-repaint-reload sobre el candidato existente.
+
+
+## Repintado: reload descartado y prueba EDID preparada — 2026-10-17
+
+Run 39050598708 failure, artefacto 12108125568 inspeccionado. xfdesktop --reload devolvió 0 y sexta captura aún presenta aurora limitada a región antigua; no integrar #18 como reparación. PR #19 configura EDID preferido 1920x1080 desde el arranque y elimina cambio xrandr en la prueba, manteniendo requisito de dimensiones y rechazo de negro. Usa la misma ISO a6997fb; sin reconstrucción. Fuente QEMU v8.2.2 vga-pci.c / edid.h confirma propiedades xres/yres. Si pasa, acredita arranque Full HD, no cambio dinámico de resolución; el defecto RandR sigue separado.
+
+TV: disponibilidad oficial de Kodi y kodi-pvr-iptvsimple en Debian Trixie documentada; Tvheadend aún no confirmado como paquete de esa distribución. Próximo prototipo aislado con clip propio, sin alterar ISO ni incorporar fuentes no autorizadas.
