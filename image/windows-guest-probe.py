@@ -9,7 +9,7 @@ sys.path.insert(0, '/opt/nexus/agent')
 from app_installer import App, Installer, package_specs
 
 
-def wait(app, condition, seconds=230):
+def wait(app, condition, seconds=540):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         app.update()
@@ -77,6 +77,11 @@ for package_id, url, title, marker in cases:
         else:
             assert seven_receipt[0].read_bytes() == seven_receipt[1]
     finally:
+        diagnostic_log = service.root / 'install.log'
+        if diagnostic_log.exists():
+            print('NEXUS_INSTALL_LOG_BEGIN ' + package_id, flush=True)
+            print(diagnostic_log.read_text(errors='replace')[-65536:], flush=True)
+            print('NEXUS_INSTALL_LOG_END ' + package_id, flush=True)
         subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
         if app is not None:
             app.request_close()

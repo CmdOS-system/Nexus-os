@@ -7,6 +7,7 @@ import tempfile
 import time
 import urllib.request
 from PIL import ImageGrab
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app_installer import App, Installer
 
@@ -114,6 +115,35 @@ with tempfile.TemporaryDirectory(prefix='nexus-gui-lab-') as directory:
         assert 'Nexus Install' not in windows
         ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save('windows-evidence/notepad-menu-launch.png')
         Path('windows-evidence/notepad-assistant-result.txt').write_text('PASS: graphical selection identified Notepad++ by hash; no execution before confirmation; install/Open and desktop menu action opened actual application; separate 7-Zip receipt unchanged. Debian/Wine laboratory, not ISO.\n')
+        service = Installer(package_id='notepadpp')
+        app = App(service)
+        app.update()
+        with patch('app_installer.messagebox.askyesno', return_value=False):
+            app.remove_app()
+        assert service.installed and service.root.exists(), 'Cancel must preserve application'
+        with patch('app_installer.messagebox.askyesno', return_value=True):
+            app.remove_app()
+        wait_until(app, lambda: not app.busy)
+        assert service.installed and service.root.exists(), 'Running application must not be removed'
+        assert 'activa' in app.status.get(), app.status.get()
+        subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
+        subprocess.run(['wineserver', '-w'], env=service.environment(), check=True, timeout=20)
+        removed_root = service.root
+        removed_entry = service.menu_entry()
+        with patch('app_installer.messagebox.askyesno', return_value=True):
+            app.remove_app()
+        wait_until(app, lambda: not app.busy)
+        assert not service.installed, app.status.get()
+        assert not removed_root.exists() and not removed_entry.exists()
+        assert app.open_button.instate(['disabled'])
+        assert app.remove_button.instate(['disabled'])
+        assert (seven_root / 'install-receipt.json').read_bytes() == seven_receipt
+        trash = Path.home() / '.local/share/Trash/files'
+        trashed = [path for path in trash.glob(removed_root.name + '*') if (path / 'install-receipt.json').is_file()]
+        assert trashed, 'Removed profile must be recoverable in actual desktop Trash'
+        assert all(not list(path.glob('*.lock')) for path in trashed), 'No stale operation lock in recoverable profile'
+        ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save('windows-evidence/notepad-removed.png')
+        Path('windows-evidence/notepad-remove-result.txt').write_text('PASS: cancel preserved install; running application blocked removal; after closing, target profile and menu moved to desktop Trash; 7-Zip receipt unchanged. No permanent deletion or reboot test.\n')
     finally:
         if app is not None and app.busy:
             wait_until(app, lambda: not app.busy)
