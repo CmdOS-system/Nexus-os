@@ -9,3 +9,8 @@ Pruebas locales: cuatro unit tests aprobados, compilación Python; rechazo de ar
 Prueba E2E propuesta en Debian13: descargar instalador de origen oficial, seleccionar en la ventana, comprobar que todavía no exista prefijo, pulsar Instalar, comprobar resultado, pulsar Abrir, exigir ventana real 7-Zip y guardar captura. CI pendiente al publicar; no anunciarlo como disponible a usuarios.
 
 Siguiente tras E2E: revisar logs/captura, integrar código, diseñar asociación de archivos/asistente inicial de motor y desinstalación; extender adaptadores con pruebas por plataforma. Mantener Android y Linux pendientes explícitos. No subir porcentaje de instalador por código aún no validado.
+
+
+## Resultado posterior confirmado
+
+GUI Wine Lab39053538833 aprobado; artefacto12108338331 descargado e inspeccionado, logs y captura. Selección no ejecutó instalador, confirmación gráfica instaló y Abrir produjo ventana7-Zip. PR #21 integrada02d6bdb. Sustituye el estado CI pendiente anterior. Los límites de formato, empaquetado, motor y persistencia siguen vigentes.
