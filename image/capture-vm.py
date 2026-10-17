@@ -72,7 +72,15 @@ def capture(socket_path, serial_path, output, timeout=240):
                 key(code, settle=0.1)
             key("ret", settle=15)
             screenshot(output.with_name(output.stem + "-horizon-direct.png"))
-    serial_path.with_suffix(".keys-done").touch()
+            serial_path.with_suffix(".keys-done").touch()
+            ready_deadline = time.monotonic() + 60
+            while time.monotonic() < ready_deadline:
+                if "NEXUS_HORIZON_PROBE_READY" in serial_path.read_text(errors="replace"):
+                    break
+                time.sleep(0.2)
+            else:
+                raise RuntimeError("Bounded launch window inventory absent")
+            screenshot(output.with_name(output.stem + "-horizon-probe.png"))
     probe_deadline = time.monotonic() + 75
     while time.monotonic() < probe_deadline:
         if "NEXUS_HORIZON_PROBE_END" in serial_path.read_text(errors="replace"):
