@@ -23,8 +23,8 @@ jobs:
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
-      ISO_RUN_ID: ${{ github.event.workflow_run.id || '38991943403' }}
-      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || 'a2582a2c05d826a15e4c7a4f71503889d0b4eb69' }}
+      ISO_RUN_ID: ${{ github.event.workflow_run.id || '39048872619' }}
+      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || 'a6997fb5356e71e70242fe71e545ab1c8d510b78' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install QEMU and UEFI firmware
@@ -59,12 +59,12 @@ jobs:
           sha256sum "$iso" > nexus-vm-iso.sha256
           qemu-system-x86_64 -machine q35,accel=tcg -m 2048 -smp 2 -boot d \
             -drive if=pflash,format=raw,readonly=on,file="$firmware" \
-            -cdrom "$iso" -display none -vga std -serial unix:/tmp/nexus-serial.sock,server=on,wait=off \
+            -cdrom "$iso" -display none -vga none -device VGA,edid=on,xres=1920,yres=1080 -serial unix:/tmp/nexus-serial.sock,server=on,wait=off \
             -qmp unix:/tmp/nexus-capture.sock,server=on,wait=off \
             -monitor none -no-reboot -snapshot > nexus-vm-qemu.log 2>&1 &
           vm_pid=$!
           trap 'kill "$vm_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
-          python3 image/diagnose-vm-serial.py /tmp/nexus-serial.sock nexus-vm-serial.log --full-hd > nexus-serial-client.log 2>&1 &
+          python3 image/diagnose-vm-serial.py /tmp/nexus-serial.sock nexus-vm-serial.log > nexus-serial-client.log 2>&1 &
           serial_pid=$!
           trap 'kill "$vm_pid" "$serial_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true' EXIT
           python3 image/capture-vm.py /tmp/nexus-capture.sock nexus-vm-serial.log nexus-iso-desktop.png
@@ -78,6 +78,8 @@ jobs:
               raise SystemExit('Expected six guest screenshots, including the separate bounded launch probe')
           for path in paths:
               image = Image.open(path).convert('RGB')
+              if image.size != (1920, 1080):
+                  raise SystemExit(f'Guest did not boot at Full HD: {image.size}')
               visible = sum(max(pixel) > 20 for pixel in image.getdata()) / (image.width * image.height)
               print(path, 'non-dark fraction', visible)
               if visible < 0.01:
