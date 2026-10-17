@@ -83,6 +83,18 @@ def capture(socket_path, serial_path, output, timeout=240):
             else:
                 raise RuntimeError("Bounded launch window inventory absent")
             screenshot(output.with_name(output.stem + "-horizon-probe.png"))
+            for marker, suffix in (("NEXUS_WINDOWS_ISO_PREPARED", "-windows-prepared"),
+                                   ("NEXUS_WINDOWS_ISO_OPEN", "-windows-open"),
+                                   ("NEXUS_WINDOWS_ISO_PASS", None)):
+                until = time.monotonic() + 400
+                while time.monotonic() < until:
+                    if marker in serial_path.read_text(errors="replace"):
+                        break
+                    time.sleep(0.2)
+                else:
+                    raise RuntimeError("Live Windows probe absent: " + marker)
+                if suffix:
+                    screenshot(output.with_name(output.stem + suffix + ".png"))
     probe_deadline = time.monotonic() + 75
     while time.monotonic() < probe_deadline:
         if "NEXUS_HORIZON_PROBE_END" in serial_path.read_text(errors="replace"):
