@@ -82,3 +82,10 @@ Actúa como responsable técnico de Nexus OS y continúa su desarrollo de forma 
 
 Comunícate en español. Muestra avances reales y progreso global por hitos verificables, sin porcentajes inventados. No afirmes que seguirás trabajando en segundo plano si no existe una ejecución real.
 ```
+
+
+## Prioridad central ratificada: aplicaciones Windows — 2026-10-17
+
+Leer docs/WINDOWS-FIRST-ROADMAP.md antes de elegir la siguiente tarea. El usuario confirma Windows como objetivo central de Nexus; no retrasar el laboratorio Wine esperando acabados estéticos, TV/radio o voz. Trabajar instalación/persistencia como habilitador. Orden: laboratorio Debian/Wine -> aplicación real sencilla -> aplicación difícil del usuario con tarea útil -> asistente Nexus/prefijos -> prueba persistente en VM -> ampliar matriz. Investigación/ingeniería inversa para interoperabilidad con permisos, fuentes primarias y componentes abiertos; no prometer universalidad.
+
+Nueva ponderación PROJECT-PROGRESS.md: Windows 30 %, instalación 15 %; global estimado 35.75 % -> ≈36 %, frente al ≈41 % histórico por distinta ponderación. Avances de módulo no cambiaron. Windows sigue 25 % de diseño/piezas preliminares, sin una aplicación real acreditada. Siguiente incremento exige ejecución comprobada. Captura Full HD sigue como tarea acotada de escritorio; no consumir todo el proyecto en pulido visual.
