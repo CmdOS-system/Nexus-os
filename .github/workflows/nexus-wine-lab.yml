@@ -6,6 +6,9 @@ on:
       - 'agent/tests/windows_7zip_lab.sh'
       - 'agent/app_installer.py'
       - 'agent/tests/windows_installer_gui_smoke.py'
+      - 'agent/tests/windows_file_association_smoke.py'
+      - 'image/includes/usr/share/applications/nexus-app-install.desktop'
+      - 'image/includes/etc/skel/.config/mimeapps.list'
       - '.github/workflows/nexus-wine-lab.yml'
 permissions:
   contents: read
@@ -23,7 +26,7 @@ jobs:
       - name: Install Debian Wine and test display
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates curl wine wine64 fonts-wine xvfb xauth x11-utils python3 python3-pil python3-tk
+          apt-get install -y --no-install-recommends git ca-certificates curl wine wine64 fonts-wine xvfb xauth x11-utils python3 python3-pil python3-tk desktop-file-utils shared-mime-info xdg-utils libglib2.0-bin dbus-x11 file
           useradd --create-home nexuslab
       - uses: actions/checkout@v4
       - name: Install and exercise actual Windows 7-Zip as an unprivileged user
@@ -34,6 +37,14 @@ jobs:
       - name: Exercise graphical selection confirmation installation and launch
         run: |
           runuser -u nexuslab -- xvfb-run -a -s '-screen 0 1280x800x24' python3 agent/tests/windows_installer_gui_smoke.py
+      - name: Stage and validate actual EXE desktop association
+        run: |
+          install -D -m 644 agent/app_installer.py /opt/nexus/agent/app_installer.py
+          install -D -m 644 image/includes/usr/share/applications/nexus-app-install.desktop /usr/share/applications/nexus-app-install.desktop
+          install -D -m 644 image/includes/etc/skel/.config/mimeapps.list /etc/skel/.config/mimeapps.list
+          desktop-file-validate /usr/share/applications/nexus-app-install.desktop
+          update-desktop-database /usr/share/applications
+          runuser -u nexuslab -- dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' python3 agent/tests/windows_file_association_smoke.py
       - name: Preserve real Windows application evidence
         if: always()
         uses: actions/upload-artifact@v4
