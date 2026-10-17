@@ -4,7 +4,7 @@ Corte vigente: 2026-10-17. Método de seguimiento solicitado por el usuario. **E
 
 ## Cálculo y criterios
 
-Cada módulo tiene peso según su relevancia/esfuerzo previsto. Los pesos son una decisión de planificación inicial, no mediciones de horas. Suman 100. Avance global = suma(peso × avance del módulo) / 100. Redondear el resultado solo al mostrarlo: 33.75 % -> aproximadamente 34 %.
+Cada módulo tiene peso según su relevancia/esfuerzo previsto. Los pesos son una decisión de planificación inicial, no mediciones de horas. Suman 100. Avance global = suma(peso × avance del módulo) / 100. Redondear el resultado solo al mostrarlo: 35.75 % -> aproximadamente 36 %.
 
 Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alcance/investigación/diseño concreto, con posibles piezas preliminares; 50 % = implementación parcial y pruebas de componentes; 75 % = flujo principal validado en el sistema objetivo, faltando aceptación completa; 100 % = criterios del módulo satisfechos con evidencia. Para módulos amplios, no ascender por un único componente aprobado. El porcentaje es aproximado y revisable.
 
@@ -18,7 +18,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 | Instalador y persistencia | 12 | 25 % | Plan, preflight y preview; instalación ejecutada y arranque sin ISO pendientes. |
 | Aplicaciones Windows | 25 | 50 % | 7-Zip Windows x64 instalado y usado en laboratorio Debian/Wine; asistente Nexus, más apps y persistencia OS pendientes. |
 | Aplicaciones Android/APK | 15 | 0 % | Prioridad alta; runtime e integración gráfica todavía no probados. |
-| Asistente de instalación con un clic | 8 | 0 % | Flujo común APK/Windows/Linux especificado; sin implementación verificada. |
+| Asistente de instalación con un clic | 8 | 25 % | Prototipo gráfico 7-Zip probado con Wine; asociación Descargas, preparación del motor, desinstalación y otros formatos pendientes. |
 | Paquetes y aplicaciones Linux | 3 | 0 % | Integración gráfica .deb/Flatpak/AppImage pendiente de aceptación. |
 | Compatibilidad macOS | 1 | 0 % | Alcance futuro independiente de Android. |
 | Actualizaciones y recuperación | 4 | 50 % | Modelos y simulaciones probadas; actualización/rollback instalado pendientes. |
@@ -28,7 +28,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 
 ## Resultado vigente — Windows, Android e instalación gráfica
 
-**Avance global estimado: 33.75 %, mostrado como aproximadamente 34 %.** No afirmar que el 34 % de las funciones está terminado: el cálculo acredita también etapas de diseño e implementación parcial según la escala anterior.
+**Avance global estimado: 35.75 %, mostrado como aproximadamente 36 %.** No afirmar que el 36 % de las funciones está terminado: el cálculo acredita también etapas de diseño e implementación parcial según la escala anterior.
 
 ## Actualización
 
@@ -38,7 +38,7 @@ Escala de cinco etapas para evitar falsa precisión: 0 % = pendiente; 25 % = alc
 - En respuestas de estado mostrar barra y porcentaje global aproximado, más los módulos que cambiaron. Mostrar tabla completa cuando el usuario la pida o cambie el alcance.
 - No incluir puertas piratas o evasión de DRM en el alcance; TV/radio se refieren a fuentes autorizadas.
 
-Ejemplo de presentación: Avance global estimado ≈34 %; completado para release todavía no. Barra gráfica de diez segmentos es solo representación redondeada del cálculo.
+Ejemplo de presentación: Avance global estimado ≈36 %; completado para release todavía no. Barra gráfica de diez segmentos es solo representación redondeada del cálculo.
 
 
 ## Reponderación solicitada: Windows primero
@@ -54,3 +54,8 @@ Usuario confirma APK, Windows y Linux con asistente gráfico como prioridad cent
 ## Incremento verificado: primera aplicación Windows real
 
 2026-10-17: Windows25 -> Windows50 en la escala de implementación parcial/laboratorio. Run 39052936193 y artefacto 12107549425 inspeccionados; PR #20 integrada f727d825. 7-Zip Windows 26.04 x64 instala, crea ZIP correcto, reabre tras reinicio Wine y muestra GUI en Debian 13. Pendientes integración Nexus/ISO, reboot instalado y aplicaciones difíciles. Con peso25, contribución aumenta 6.25 puntos: global27.50 ->33.75 (≈34 %). No significa 50 % del catálogo Windows compatible. Ver WINDOWS-COMPATIBILITY-MATRIX.md.
+
+
+## Incremento verificado: asistente gráfico limitado
+
+2026-10-17: instalador común0->25 por primer prototipo restringido con prueba real de selección sin ejecución, confirmación, instalación y apertura. Run39053538833, artefacto12108338331 revisado; Fast Checks39053586940 aprobado. No equivale al flujo completo APK/EXE/Linux ni integración en ISO. Con peso8 añade2 puntos:33.75->35.75≈36 %. Windows sigue50; Android y paquetes Linux0. No confundir este ≈36 % con un corte antiguo que tenía otros pesos.
