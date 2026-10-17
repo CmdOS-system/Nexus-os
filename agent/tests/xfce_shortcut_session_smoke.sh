@@ -8,6 +8,8 @@ export XDG_CONFIG_HOME="$session_root/config"
 export XDG_CACHE_HOME="$session_root/cache"
 mkdir -p "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml" "$XDG_CACHE_HOME"
 cp "$source_xml" "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
+# xfconfd is D-Bus activated, so it needs the same isolated XDG paths.
+dbus-update-activation-environment XDG_CONFIG_HOME XDG_CACHE_HOME
 xfsettingsd --no-daemon > "$session_root/settings.log" 2>&1 &
 settings_pid=$!
 trap 'kill "$settings_pid" 2>/dev/null || true; wait "$settings_pid" 2>/dev/null || true; rm -rf "$session_root"' EXIT
