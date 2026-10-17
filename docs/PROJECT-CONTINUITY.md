@@ -256,3 +256,8 @@ Usuario solicita incluir radio y estudiar documentación antes de integración. 
 En cada respuesta usar barra global por hitos, no porcentaje inventado. Orden estable de ocho hitos: 1 Live/UEFI; 2 escritorio Horizon completo; 3 IA integrada en sistema; 4 instalación/persistencia; 5 compatibilidad Windows; 6 actualización/recuperación instalada; 7 TV/radio; 8 aceptación de release/hardware. Convención: verde=criterio completo, amarillo=en curso/parcial, blanco=pendiente. Al corte: 🟩🟨🟨⬜⬜⬜🟨⬜. Las posiciones no representan esfuerzo equivalente ni porcentaje de producto. Live probado, escritorio con aurora pero cobertura pendiente, IA real solo consola fuera ISO, medios en investigación. Mantener el progreso actualizado con evidencia.
 
 Escritorio: captura Full HD nativa 39051320346 todavía en curso al corte; no reconstruir ISO para esta prueba.
+
+
+## Porcentajes por módulo solicitados — 2026-10-17
+
+El usuario pide porcentaje global y por cada función, incluyendo nuevas funciones. Sustituye la presentación solo por colores. Leer docs/PROJECT-PROGRESS.md: escala estimada 0/25/50/75/100 y pesos explícitos que suman 100; primer corte 40.75 %, mostrado ≈41 %. Es estimación de gestión que incluye diseño/implementación parcial, no porcentaje de funcionalidades acabadas ni certificación. Los pesos son juicio inicial de planificación, no horas medidas. Mostrar siempre porcentaje global aproximado; añadir/reponderar filas ante nuevo alcance y explicar si baja el total. No subir avances por estados CI sin verificar ni por documentación repetida. Cortes anteriores sin porcentaje siguen siendo registros históricos.
