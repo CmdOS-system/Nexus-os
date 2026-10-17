@@ -198,3 +198,8 @@ ISO Gate 39042198220 success en 9ad6b052da6957c0bdda3a0c2065f04447774ff5. Captur
 Probe sigue mostrando únicamente monitor0/monitor1 last-image heredados; no hay rutas workspace. Siguiente diagnóstico en rama test/live-backdrop-migration: versión xfdesktop, EWMH escritorios, modelos GDK reales, marcador de inicialización y errores tardíos. La ausencia de workspace al migrar es hipótesis, no causa confirmada. Se usa el candidato nuevo exacto sin reconstruirlo.
 
 PR #14 propone rechazar cobertura parcial; prueba local rechazó baseline defectuoso con 14/48 regiones negras y aceptó captura nativa aurora con 0/48. Sigue en borrador. Progreso: Live UEFI y Horizon confirmados; fondo/cobertura bloqueados, instalación persistente, IA en ISO/voz y Windows pendientes.
+
+
+## Topología Live confirmada y recuperación propuesta — 2026-10-17
+
+Diagnóstico 39044057903 success y Fast Checks 39044076378 success para 2c1da29. Artefacto 12105745314 descargado: xfdesktop 4.20.1, GDK Virtual-1 y cuatro workspaces EWMH; solo claves heredadas y migración=1, inicializador diferido. PR #16 propone crear claves modernas desde topología real cuando falten, con dependencias explícitas. Shell/Python y regresión controlada de topología pasaron; CI nativo y nueva ISO pendientes. No se ha resuelto aún el fondo Live ni la cobertura negra. PR #15 sigue como diagnóstico no integrado; #14 sigue como criterio de cobertura no integrado. Próximo: validar #16 en sesión nativa, luego candidato ISO y capturas; conservar preferencia posterior del usuario.
