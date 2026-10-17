@@ -67,8 +67,8 @@ jobs:
           from PIL import Image
           from pathlib import Path
           paths = list(Path('.').glob('nexus-iso-desktop*.png'))
-          if len(paths) != 4:
-              raise SystemExit('Expected four guest screenshots, including the Horizon shortcut attempt')
+          if len(paths) != 5:
+              raise SystemExit('Expected five guest screenshots, including shortcut and direct launch attempts')
           for path in paths:
               image = Image.open(path).convert('RGB')
               visible = sum(max(pixel) > 20 for pixel in image.getdata()) / (image.width * image.height)

@@ -70,6 +70,10 @@ def collect(socket_path, log_path):
             "sudo -n tail -n 100 /var/log/lightdm/lightdm.log; "
             "sudo -n tail -n 100 /var/log/Xorg.0.log; "
             "export DISPLAY=:0 XAUTHORITY=/home/nexus/.Xauthority; "
+            "printf '\\nNEXUS_SHORTCUT_CONFIG\\n'; "
+            "xfconf-query -c xfce4-keyboard-shortcuts -lv; "
+            "ls -l /usr/local/bin/nexus-horizon /opt/nexus/horizon.py; "
+            "cat /home/nexus/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml; "
             "xrandr --current; xset q; xprop -root _NET_SUPPORTING_WM_CHECK _NET_CLIENT_LIST; "
             "xwininfo -root -tree; printf '\\nNEXUS_DIAG_%s\\n' END\n"
         )
