@@ -7,9 +7,11 @@ wallpaper=/usr/share/backgrounds/nexus/horizon-aurora.svg
 [ ! -e "$state" ] || exit 0
 [ -r "$wallpaper" ] || exit 1
 attempt=0
-while [ "$attempt" -lt 30 ]; do
+while [ "$attempt" -lt 60 ]; do
   properties=$(xfconf-query -c xfce4-desktop -l 2>/dev/null || true)
-  paths=$(printf '%s\n' "$properties" | sed -n '\|^/backdrop/.*/last-image$|p')
+  # Legacy monitor-only keys may exist before xfdesktop migrates settings.
+  # Only per-workspace keys are consumed by the current backdrop renderer.
+  paths=$(printf '%s\n' "$properties" | sed -n '\|^/backdrop/.*/workspace[0-9][0-9]*/last-image$|p')
   if [ -n "$paths" ]; then
     printf '%s\n' "$paths" | while IFS= read -r property; do
       xfconf-query -c xfce4-desktop -p "$property" -s "$wallpaper"
