@@ -168,5 +168,5 @@ Se recuperó la conversación «Nexus Horizon»: el usuario pidió estudiar Appl
 
 - Se implementó `installer_executor.py` que recibe un plan de instalación, requiere que el inventario original se mantenga sin cambios, realiza particionamiento UEFI (`sgdisk`), formatea (`mkfs.fat`, `mkfs.ext4`) y sincroniza los archivos del rootfs al destino (`rsync`), para luego instalar el gestor de arranque (`grub-install`).
 - Se introdujeron las dependencias correspondientes en `image/desktop.list.chroot` (`rsync`, `gdisk`, `dosfstools`, `parted`).
-- Se añadió un script `test_installer_end_to_end.sh` como contenedor inicial de la simulación con discos `qcow2` según la especificación de aislamiento del `INSTALLER-ARCHITECTURE.md`.
+- Se añadió un script `test_installer_end_to_end.sh` como contenedor inicial de la simulación con discos `qcow2` según la especificación de aislamiento del `INSTALLER-ARCHITECTURE.md` y soporte añadido para nombres de bloque `mmcblk`.
 - Con los tres avances de la sesión actual (Pantalla negra en captura Live, Dock flotante de Horizon, e Instalador de persistencia base), este ciclo de trabajo de validación local queda implementado en la rama y está listo para integración en main.

@@ -18,7 +18,8 @@ def install(target_path):
     run_cmd(["partprobe", target_path])
     time.sleep(2)
 
-    if target_path[-1].isdigit():
+    import re
+    if re.search(r'\d$', target_path):
         part_efi = f"{target_path}p1"
         part_root = f"{target_path}p2"
     else:
