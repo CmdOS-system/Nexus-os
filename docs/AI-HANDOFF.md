@@ -158,3 +158,8 @@ Tras instalar correctamente, Nexus Install registra atómicamente nexus-7zip.des
 ### Resultado confirmado del acceso de aplicación
 
 PR #26 integrada652059f6c14eae6b52c72f9817a6b834a6ba6030. Fast Checks39067681676 y Windows Lab39067679141 aprobados. Artefacto12113773411 descargado, menu-launch-result.txt y 7zip-menu-launch.png revisados: acceso .desktop válido abre7-Zip directamente después de cerrar asistente/Wine, sin ventana del instalador. Sustituye el estado CI pendiente anterior. Verificación en Debian/Xvfb mediante GIO; sigue pendiente el clic físico en menúXFCE y nueva ISO con PR #25/#26. No reconstruir la imagen por documentación: agrupar próxima entrega funcional. Global≈38%, Windows50%, instalador50%, Android0%.
+
+
+## Segunda aplicación Windows: Notepad++ — 2026-10-17
+
+Se añade laboratorio real para Notepad++8.9.8.1 x64, instalador de https://github.com/notepad-plus-plus/notepad-plus-plus/releases/tag/v8.9.8.1 con SHA25626f3bcced788fadbac4e7e577b430ea2ce6060cf3bcad993ef4612ecd7d743da (digest del asset oficial). Manual primario https://github.com/notepad-plus-plus/npp-usermanual/blob/master/content/docs/command-prompt.md: /S y /noUpdater documentados. El probe instala sin root en prefijo descartable, abre un archivo cuyo nombre tiene espacios, enfoca la ventana real, escribe con teclado y guarda; verifica bytes del archivo y conserva captura/logs. CI pendiente. No añadir Notepad++ al catálogo gráfico aprobado ni afirmar soporte dentro de ISO hasta validar e implementar su adaptador. Global≈38%, Windows50%.
