@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus Windows Office Profile
+Comment=Prepare an isolated Wine prefix for licensed Office and Windows installers
+Exec=/usr/lib/nexus/nexus-wine-office-profile
+Icon=preferences-system
+Terminal=false
+Categories=System;Utility;

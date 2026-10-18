@@ -9,6 +9,6 @@ lb config \
   --architectures amd64 \
   --binary-images iso-hybrid \
   --debian-installer none \
-  --archive-areas "main non-free-firmware" \
+  --archive-areas "main contrib non-free-firmware" \
   --bootloader grub-efi \
   --bootappend-live "boot=live components console=tty0 console=ttyS0,115200n8"

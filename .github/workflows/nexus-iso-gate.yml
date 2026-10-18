@@ -49,8 +49,10 @@ jobs:
 
       - name: Install build and VM dependencies
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils
+          sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils \
+            gcc-mingw-w64-x86-64 wine wine64 winetricks cabextract winbind fonts-liberation xvfb file unzip
 
       - name: Install project Rust nightly for the Linux loader
         uses: dtolnay/rust-toolchain@nightly
@@ -63,6 +65,9 @@ jobs:
 
       - name: Compile loader and stage checksum-verified Wasmtime
         run: bash image/stage-omni-subsystem.sh
+
+      - name: Run real PE, WASI, APK, CRX, Darling bridge and PWA smoke tests
+        run: bash image/runtime-smoke.sh
 
       - name: Preflight and build inside Debian Trixie
         run: |

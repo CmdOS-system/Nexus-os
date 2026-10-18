@@ -41,12 +41,16 @@ cp "$ROOT/hooks/010-enable-nexus-boot-ready.hook.chroot" config/hooks/live/
 chmod 0755 config/hooks/live/010-enable-nexus-boot-ready.hook.chroot
 cp "$ROOT/hooks/030-wine-multiarch.hook.chroot" config/hooks/live/
 chmod 0755 config/hooks/live/030-wine-multiarch.hook.chroot
+cp "$ROOT/hooks/040-waydroid-binder.hook.chroot" config/hooks/live/
+chmod 0755 config/hooks/live/040-waydroid-binder.hook.chroot
 cp "$ROOT/hooks/050-enable-nexus-omnios-binfmt.hook.chroot" config/hooks/live/
 chmod 0755 config/hooks/live/050-enable-nexus-omnios-binfmt.hook.chroot
 
 
 mkdir -p config/includes.chroot
 cp -a "$ROOT/includes/." config/includes.chroot/
+chmod 0755 config/includes.chroot/usr/lib/nexus/nexus-waydroid-preflight
+chmod 0755 config/includes.chroot/usr/lib/nexus/nexus-wine-office-profile
 
 for runtime in nexus-omniloader wasmtime; do
   test -x "$ROOT/staging/usr/bin/$runtime" || {

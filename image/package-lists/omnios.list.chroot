@@ -8,3 +8,9 @@ pkexec
 aapt
 waydroid
 weston
+
+# Wine support for PE installers and 64-bit Windows dispatch.
+winbind
+cabextract
+winetricks
+fonts-liberation

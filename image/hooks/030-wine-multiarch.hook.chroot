@@ -5,6 +5,6 @@ set -eu
 export DEBIAN_FRONTEND=noninteractive
 dpkg --add-architecture i386
 apt-get update
-apt-get install -y --no-install-recommends wine32:i386
+apt-get install -y --no-install-recommends wine32:i386 winbind cabextract winetricks fonts-liberation
 dpkg-query -W -f='${Status}\n' wine32:i386 | grep -qx 'install ok installed'
 apt-get clean

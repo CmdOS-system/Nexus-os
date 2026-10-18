@@ -23,6 +23,12 @@ root = Path(os.environ["ROOTFS"])
 for binary in ("usr/bin/nexus-omniloader", "usr/bin/wasmtime"):
     item = root / binary
     assert item.is_file() and os.access(item, os.X_OK), f"missing executable in ISO: /{binary}"
+waydroid_preflight = root / "usr/lib/nexus/nexus-waydroid-preflight"
+assert waydroid_preflight.is_file() and os.access(waydroid_preflight, os.X_OK), "Waydroid Binder preflight missing"
+office_profile = root / "usr/lib/nexus/nexus-wine-office-profile"
+assert office_profile.is_file() and os.access(office_profile, os.X_OK), "isolated Wine Office profile helper missing"
+assert (root / "usr/share/applications/nexus-wine-office-profile.desktop").is_file(), "Office profile desktop launcher missing"
+assert (root / "etc/modules-load.d/nexus-waydroid.conf").read_text().strip() == "binder_linux"
 
 unit = root / "etc/systemd/system/nexus-omnios-binfmt.service"
 enabled = root / "etc/systemd/system/multi-user.target.wants/nexus-omnios-binfmt.service"
@@ -45,7 +51,7 @@ for paragraph in paragraphs:
     if fields.get("Status") == "install ok installed":
         installed.add((fields.get("Package"), fields.get("Architecture", "all")))
 
-for package in ("chromium", "aapt", "waydroid", "weston", "wine64"):
+for package in ("chromium", "aapt", "waydroid", "weston", "wine64", "winbind", "cabextract", "winetricks", "fonts-liberation"):
     assert any(name == package for name, _ in installed), f"required installed package missing from ISO: {package}"
 assert ("wine32", "i386") in installed, "wine32:i386 missing from ISO"
 

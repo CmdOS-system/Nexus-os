@@ -28,6 +28,10 @@ OMNI_UNIT="$ROOT/includes/etc/systemd/system/nexus-omnios-binfmt.service"
 OMNI_DESKTOP="$ROOT/includes/usr/share/applications/nexus-omnisubsystem.desktop"
 OMNI_STAGE="$ROOT/stage-omni-subsystem.sh"
 OMNI_ISO_VERIFY="$ROOT/verify-omni-image.sh"
+OMNI_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh"
+WAYDROID_PREFLIGHT="$ROOT/includes/usr/lib/nexus/nexus-waydroid-preflight"
+WAYDROID_HOOK="$ROOT/hooks/040-waydroid-binder.hook.chroot"
+WINE_OFFICE_PROFILE="$ROOT/includes/usr/lib/nexus/nexus-wine-office-profile"
 
 bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
@@ -39,9 +43,13 @@ sh -n "$ROOT/auto/config"
 sh -n "$OMNI_HOOK"
 bash -n "$OMNI_STAGE"
 bash -n "$OMNI_ISO_VERIFY"
+bash -n "$OMNI_RUNTIME_SMOKE"
+sh -n "$WAYDROID_PREFLIGHT"
+sh -n "$WAYDROID_HOOK"
+sh -n "$WINE_OFFICE_PROFILE"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP" "$OMNI_PACKAGES" "$OMNI_ARCHIVE" "$OMNI_HOOK" "$OMNI_UNIT" "$OMNI_DESKTOP" "$OMNI_STAGE" "$OMNI_ISO_VERIFY" "$ROOT/auto/config"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP" "$OMNI_PACKAGES" "$OMNI_ARCHIVE" "$OMNI_HOOK" "$WAYDROID_HOOK" "$WAYDROID_PREFLIGHT" "$WINE_OFFICE_PROFILE" "$OMNI_UNIT" "$OMNI_DESKTOP" "$OMNI_STAGE" "$OMNI_ISO_VERIFY" "$OMNI_RUNTIME_SMOKE" "$ROOT/auto/config"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -96,8 +104,8 @@ grep -q "installer_plan.py installer_inventory.py installer_preflight.py local_m
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
   grep -q -- "$flag" "$ROOT/auto/config"
 done
-for package in chromium unzip zenity pkexec aapt waydroid weston; do grep -qx "$package" "$OMNI_PACKAGES"; done
-grep -q '^deb http://deb.debian.org/debian trixie-backports main$' "$OMNI_ARCHIVE"
+for package in chromium unzip zenity pkexec aapt waydroid weston winbind cabextract winetricks fonts-liberation; do grep -qx "$package" "$OMNI_PACKAGES"; done
+grep -q '^deb http://deb.debian.org/debian trixie-backports main contrib$' "$OMNI_ARCHIVE"
 grep -q '050-enable-nexus-omnios-binfmt.hook.chroot' "$BUILD"
 grep -q 'nexus-omniloader --register-binfmt' "$OMNI_UNIT"
 grep -q 'nexus-omniloader %f' "$OMNI_DESKTOP"
@@ -106,6 +114,16 @@ grep -q 'omnios.list.chroot' "$BUILD"
 grep -q 'nexus-omniloader' "$BUILD"
 grep -q 'wasmtime' "$BUILD"
 grep -q 'nexus-omniloader' "$OMNI_STAGE"
+grep -q 'cargo +nightly -Z bindeps build' "$OMNI_STAGE"
+grep -q 'cargo +nightly -Z bindeps test' "$ROOT/../.github/workflows/nexus-iso-gate.yml"
+grep -q 'image/runtime-smoke.sh' "$ROOT/../.github/workflows/nexus-iso-gate.yml"
+grep -q -- '--archive-areas "main contrib non-free-firmware"' "$ROOT/auto/config"
+grep -q 'wine32:i386 winbind cabextract winetricks fonts-liberation' "$ROOT/hooks/030-wine-multiarch.hook.chroot"
+grep -q 'binder_linux' "$WAYDROID_PREFLIGHT"
+grep -q 'systemctl enable waydroid-container.service' "$WAYDROID_HOOK"
+grep -q "DllOverrides" "$WINE_OFFICE_PROFILE"
+grep -q 'Name=Nexus Windows Office Profile' "$ROOT/includes/usr/share/applications/nexus-wine-office-profile.desktop"
+grep -q '040-waydroid-binder.hook.chroot' "$BUILD"
 
 for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py; do
   test -s "$PROJECT_ROOT/agent/$module" || { echo "Missing Nexus Agent runtime module: $module" >&2; exit 1; }

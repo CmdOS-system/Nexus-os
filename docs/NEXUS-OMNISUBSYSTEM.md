@@ -22,21 +22,25 @@ Gestor de archivos / execve
 - `image/stage-omni-subsystem.sh` toma el artefacto Linux amd64 de Wasmtime v49.0.2, verifica el `sha256` publicado por la API oficial de releases y prepara los binarios fuera de Git.
 - `image/auto/config`, listas de paquetes, el archivo oficial de `trixie-backports` y hooks configuran live-build. Waydroid se instala desde Debian Trixie Backports; Chromium y `aapt` salen de Debian Trixie.
 - `nexus-omnios-binfmt.service` registra handlers del kernel al iniciar. El kernel solo despacha por magic/extension a `/usr/bin/nexus-omniloader`; el código del cargador sigue en espacio de usuario.
+- `nexus-waydroid-preflight` confirma Binder, propone inicializar la imagen oficial con autorización y arranca el contenedor/sesión Waydroid. El hook del ISO solicita `binder_linux` al inicio sin descargar Android durante el build.
+- El perfil Wine de Office es explícito y aislado. El asistente descarga componentes por Winetricks tras confirmación y limita `DllOverrides` a ese prefijo; no altera otros perfiles.
 - ELF no se registra a través del cargador para evitar un ciclo infinito. `.deb` es un archivo de paquete y se abre mediante asociación gráfica, no `binfmt_misc`.
 - Las asociaciones MIME de EXE preservan Nexus Install y su catálogo limitado de instaladores aprobados. Ejecutar un EXE de forma directa es una acción distinta y usa Wine.
 
 ## Validación y límites técnicos
 
-`cargo test -p omni-loader` prueba clasificación y generación de reglas sin requerir privilegios. El workflow del ISO compila el binario, construye la ISO, verifica su checksum, extrae `filesystem.squashfs`, comprueba binarios/paquetes/activación del servicio y luego ejecuta el smoke test UEFI existente. Estas pruebas validan integración de imagen, no compatibilidad universal ni aceptación sobre hardware físico.
+`cargo +nightly -Z bindeps test -p omni-loader` prueba el parser AXML/DEX/CRX y el despacho. `image/runtime-smoke.sh` genera fixtures estructurales, inspecciona un APK, valida el contenedor CRX, ejecuta un módulo WASI con Wasmtime y compila/ejecuta un EXE PE x86_64 por el cargador y Wine. También comprueba el contrato de argumentos de Darling y PWA mediante ejecutables de prueba. El workflow del ISO construye la ISO, verifica checksum/SquashFS y arranca el sistema con QEMU/UEFI.
+
+Estas comprobaciones no son intercambiables: el APK fixture se inspecciona pero no se instala; el CRX de prueba es unsigned y nunca se instala; el CI no dispone de Binder/Waydroid ni Darling y sus scripts se validan sin afirmar ejecución de apps Android/macOS. El smoke de PE es un programa de consola mínimo, no Word/Office. La ISO y la aceptación en hardware dependen del resultado final del gate.
 
 | Ruta | Comportamiento implementado | Requisitos y límites pendientes |
 |---|---|---|
-| PE `.exe` / MSI | Wine para PE; los MSI válidos se pasan a `wine msiexec /i` vía `binfmt_misc` o asociación MIME | No se redirige automáticamente a Proton: Steam/Proton no es una API genérica para todo instalador. No acredita Office/Word ni periféricos. |
-| APK | Comprueba ZIP y entradas Android; pide confirmación, instala en Waydroid e intenta abrir el package ID con `aapt` | Waydroid debe inicializarse, tener imagen Android, Binder y sesión Wayland funcional. La ISO instala componentes; no descarga ni configura imágenes Android durante el build. Aceptación GUI Live pendiente. |
+| PE `.exe` / MSI | PE x86_64 va a `wine64` cuando está disponible; MSI válido usa `wine msiexec /i`. Perfil Office aislado con Winetricks y overrides por prefijo. CI compila y ejecuta un PE que devuelve 0. | El smoke prueba el dispatcher, no una suite de oficina. Word/Office, versiones, periféricos y GUI aún requieren aceptación real. Proton no es un destino genérico. |
+| APK | Valida ZIP/rutas, lee package ID desde AXML, verifica cabecera DEX, pide confirmación y preflight Binder/Waydroid; después instala y abre por package ID. CI inspecciona un APK fixture. | El fixture no se instala ni tiene actividad. Ejecución de APK real requiere imagen Waydroid, Binder, ABI compatible y sesión gráfica/hardware. |
 | DEX independiente | Explica por qué no es un APK instalable | Requiere ART/framework Android; no se inventa un paquete alrededor del DEX. |
-| Mach-O | Llama a `darling shell` si existe; traduce la ruta del host a `/Volumes/SystemRoot` y cita los argumentos para el shell del prefix | Darling no se distribuye con la ISO por ser externo al archive Debian usado aquí; aplicaciones, GUI, arquitectura y versión no son universalmente compatibles. |
-| WASM | Ejecuta Wasmtime sin conceder preopens de filesystem | El comportamiento WASI depende de imports y versión. El usuario sigue siendo responsable de ejecutar el módulo escogido. |
-| CRX | Abre gestor de extensiones Chromium en perfil dedicado | No instala a ciegas extensiones de terceros. CRX es extensión del navegador, no una app independiente; verificación de editor/permisos e instalación manual pendiente. |
+| Mach-O | Llama a `darling shell` si existe; traduce rutas y cita argumentos. CI verifica ese contrato con un ejecutable de prueba. | No se ejecuta una app Mach-O real en CI. Darling es externo y requiere pruebas de apps/arquitecturas en un host compatible. |
+| WASM / PWA | Ejecuta un módulo WASI con Wasmtime sin preabrir el filesystem; `--webapp` abre Chromium con `--app` usando HTTPS o localhost. | El fixture verifica salida cero, no todas las APIs WASI ni ChromeOS como sistema. |
+| CRX | Valida versión/longitudes y manifest en perfil Chromium separado, para revisión manual. | CI usa paquete unsigned solo para inspección. Chromium debe verificar firma/editor y permisos antes de instalar. CRX no es una app independiente. |
 | `.deb` | Pide confirmación y solicita autenticación de escritorio antes de apt | Requiere red/repositorios válidos y privilegios aceptados. Los paquetes locales no se instalan solo por descargarlos. |
 
 No se descargan binarios de Darling/Proton/Wine fuera de los repositorios configurados ni se eluden licencias, DRM o controles de acceso. No se afirma soporte para macOS, ChromeOS, Office o Android completo sin pruebas por aplicación, versión, arquitectura y entorno.
@@ -47,8 +51,10 @@ En Debian x86_64 con Rust nightly, requerido porque el workspace también contie
 
 ```sh
 cargo +nightly fmt --manifest-path omnios/Cargo.toml --package omni-loader -- --check
-cargo +nightly test --manifest-path omnios/Cargo.toml -p omni-loader
+cargo +nightly -Z bindeps test --manifest-path omnios/Cargo.toml -p omni-loader
 bash image/stage-omni-subsystem.sh
+sudo apt install gcc-mingw-w64-x86-64 wine64 xvfb
+bash image/runtime-smoke.sh
 docker run --rm --privileged --mount type=bind,source="$PWD",target=/src --workdir /src debian:trixie bash image/build.sh
 ```
 
