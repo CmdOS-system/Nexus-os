@@ -42,3 +42,8 @@ El porcentaje global es una estimación ponderada del plan técnico, no una mét
 1. Obtener CI verde para `Build and boot OmniOS UEFI x86_64 in QEMU`.
 2. Si falla, corregir usando el log de la etapa que falla y repetir el workflow.
 3. Después del arranque confirmado, programar `kernel/src/memory/frame_allocator.rs` con allocator de frames probado sobre mapas UEFI sintéticos.
+
+## Registro de validación
+
+- CI #1: falló durante la preparación del bootloader porque faltaba `rust-src`; agregado al toolchain y a la instalación del workflow.
+- CI #2: `x86_64 0.15.2` no compila con el nightly actual porque su implementación inestable de `Step` no incluye los métodos nuevos; fijada la dependencia en `0.15.5`, cuya publicación declara compatibilidad con nightlies desde 2026-07-10. Arranque QEMU aún no confirmado.
