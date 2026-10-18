@@ -50,8 +50,9 @@ impl<const N: usize> RangeSet<N> {
                 index += 1;
                 continue;
             }
-            range.start = range.start.min(current.start);
+            let start = range.start.min(current.start);
             let end = range.end().max(current.end());
+            range.start = start;
             range.count = end - range.start;
             self.remove_index(index);
             index = 0;
