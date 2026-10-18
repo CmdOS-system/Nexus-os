@@ -1,10 +1,12 @@
 """Exercise both approved Windows apps inside a disposable Nexus Live VM."""
 import hashlib
+import select
 from pathlib import Path
 import subprocess
 import sys
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
 sys.path.insert(0, '/opt/nexus/agent')
 from app_installer import App, Installer, package_specs
 
@@ -24,6 +26,40 @@ def hold(app, seconds):
     while time.monotonic() < end:
         app.update()
         time.sleep(0.1)
+
+
+def capture_ready(app, marker, seconds=60):
+    """Keep the exact scene alive until the host acknowledges its screenshot."""
+    print(marker, flush=True)
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        app.update()
+        readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if readable:
+            line = sys.stdin.readline()
+            if not line:
+                raise RuntimeError('Capture acknowledgement input closed')
+            if line.strip() == 'NEXUS_CAPTURE_ACK ' + marker:
+                return
+    raise RuntimeError('Host did not acknowledge screenshot: ' + marker)
+
+
+def wait_window(title, app=None, process=None, seconds=120):
+    """Wait for actual UI readiness; installation completion is not window readiness."""
+    end = time.monotonic() + seconds
+    windows = ''
+    while time.monotonic() < end:
+        if app is not None:
+            app.update()
+        windows = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
+        if title in windows:
+            return windows
+        if process is not None and process.poll() not in (None, 0):
+            raise RuntimeError(f'{title} launch exited {process.returncode}; windows={windows}')
+        time.sleep(0.5)
+    processes = subprocess.check_output(['ps', '-eo', 'pid,etimes,args'], text=True)
+    raise RuntimeError(f'{title} window absent after {seconds}s; process exit='
+                       f'{process.poll() if process is not None else "unknown"}\n{processes}\n{windows}')
 
 
 cases = [
@@ -49,26 +85,46 @@ for package_id, url, title, marker in cases:
         wait(app, lambda: not app.busy)
         assert service.ready and service.package_id == package_id, app.status.get()
         assert not (service.root / 'prefix').exists()
-        print(marker + '_PREPARED', flush=True)
-        hold(app, 10)
+        capture_ready(app, marker + '_PREPARED')
         app.confirm.invoke()
         wait(app, lambda: not app.busy)
         assert service.installed, app.status.get()
+        if package_id == 'notepadpp':
+            # Diagnostic trial only: default DirectWrite produced a black editor
+            # in the QEMU VGA fixture. Upstream MISC writeTechnologyEngine=0 is GDI.
+            config = (service.root / 'prefix/drive_c/users' / Path.home().name /
+                      'AppData/Roaming/Notepad++/config.xml')
+            config.parent.mkdir(parents=True, exist_ok=True)
+            tree = ET.parse(config) if config.exists() else ET.ElementTree(ET.Element('NotepadPlus'))
+            settings = tree.getroot().find('GUIConfigs')
+            if settings is None:
+                settings = ET.SubElement(tree.getroot(), 'GUIConfigs')
+            misc = settings.find("GUIConfig[@name='MISC']")
+            if misc is None:
+                misc = ET.SubElement(settings, 'GUIConfig', name='MISC')
+            misc.set('writeTechnologyEngine', '0')
+            tree.write(config, encoding='utf-8', xml_declaration=True)
+            print('NEXUS_NOTEPAD_GDI_TRIAL ' + str(config), flush=True)
+        launched = []
+        original_launch = service.launch
+        def observed_launch():
+            process = original_launch()
+            launched.append(process)
+            return process
+        service.launch = observed_launch
         app.open_button.invoke()
-        hold(app, 12)
-        windows = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
-        assert title in windows, windows
+        assert launched, app.status.get()
+        windows = wait_window(title, app, launched[-1])
         print(windows, flush=True)
-        print(marker + '_OPEN', flush=True)
-        hold(app, 10)
+        hold(app, 2)
+        capture_ready(app, marker + '_OPEN')
         entry = service.menu_entry()
         assert entry.is_file()
         subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)
         app.request_close()
         app = None
         subprocess.run(['gio', 'launch', str(entry)], check=True, timeout=30)
-        time.sleep(12)
-        windows = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
+        windows = wait_window(title)
         assert title in windows and 'Nexus Install' not in windows, windows
         print(marker + '_MENU_PASS', flush=True)
         receipt = service.root / 'install-receipt.json'

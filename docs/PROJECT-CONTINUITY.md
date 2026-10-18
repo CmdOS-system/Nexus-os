@@ -404,3 +404,24 @@ Quince pruebas locales aprobadas: preparación previa, fallo de inicialización 
 PR #29 integradafad9f10eafc99d531b72bd656bf48b1b5d97424d. Fast Checks39076129040, Native Desktop39076128989 y Wine Lab39076124206 aprobados. Artefacto12117470710 descargado, notepad-remove-result.txt y notepad-removed.png revisados: No conserva instalación; aplicación activa rechaza retirada; tras cerrar, perfil verificable aparece en papelera real y acceso Nexus desaparece; registro7-Zip sin cambios. También pasan instalación, menú, MIME y edición/guardado. Nueva preparación explícita Wine validada en laboratorio; comportamiento lento Live aún pendiente.
 
 Nueva ISO Gate39076397453 iniciada (fuente fad9f10e). Captura posterior debe demostrar ambos programas dentro del Live; si falla, revisar NEXUS_WINE_INIT_BEGIN/END, NEXUS_PACKAGE_INSTALL_BEGIN y log exportado antes de proponer otra corrección. No declarar arreglada la captura39074859209 solo por aumentar presupuestos. Global≈38%.
+
+
+## Live de dos aplicaciones: diagnóstico del 17/10
+
+Captura39077637721 (ISO Gate39076397453, fuente fad9f10e) falló, artefacto12118320662 descargado e inspeccionado.7-Zip alcanza PREPARED, OPEN y MENU_PASS en esta ISO mixta. Notepad++ completa wineboot y setup sin error, registra instalación, pero no aparece su título en xwininfo12s después de abrir. No es el timeout de instalación anterior ni demuestra todavía fallo permanente del programa.
+
+Se propone esperar ventana real hasta120s en lugar de dormir12s: error temprano si proceso sale no cero, y diagnóstico de procesos/ventanas si vence el límite. Se conserva el clic del botón y la misma ruta launch del asistente. Misma comprobación para apertura desde menú. Tres verificaciones locales del helper aprobadas (ventana tardía, salida7, timeout con diagnóstico). Falta ejecutar de nuevo en la misma ISO; no reconstruir imagen solo por cambio del probe. Global≈38% sin incremento.
+
+
+### Apertura Live confirmada; defecto visual pendiente
+
+Run39078885829 contra la misma ISO fad9f10e: captura/guest probe success, pero workflow global failure en cobertura visual. Artefacto12118387302 descargado; serial acredita OPEN/MENU_PASS para7-Zip y Notepad++, WINDOWS_ISO_PASS y salida0. Diez capturas FullHD; nueve pasan cobertura, notepad-open falla con seis tiles negros. Inspección visual confirma editor negro (no desactivar el gate ni llamarlo éxito integral). El estado anterior de ausencia de ventana se supera esperando readiness, pero usabilidad Notepad++ no queda aceptada.
+
+Siguiente ensayo controlado en perfil descartable: configurar MISC/writeTechnologyEngine=0 (GDI) antes del primer arranque Notepad++, manteniendo la misma ISO y todos los controles de captura. Es un cambio del probe de diagnóstico, NO adaptador del instalador empaquetado. Fuente primaria versión v8.9.8.1: PowerEditor/src/Parameters.cpp lee MISC writeTechnologyEngine; manual https://github.com/notepad-plus-plus/npp-usermanual/blob/master/content/docs/preferences.md describe GDI most compatible y DirectWrite por defecto. Hipótesis: problema de dibujo DirectWrite en VGA/Wine; aún sin confirmar. Fast Checks39078885732 seis jobs aprobados para probe anterior. Global≈38% sin incremento.
+
+
+### No aceptar el verde GDI como prueba visual — 2026-10-17 Bogotá
+
+Run39079632096 success, Fast Checks39079632099 seis jobs success. Artefacto12118184503 descargado, serial OPEN/MENU_PASS/PASS y salida0 para ambos; diez imágenes pasan cobertura. Sin embargo, inspección manual de notepad-open.png muestra solo el asistente, SIN ventana Notepad++. Por tanto NO se confirma corrección del editor negro ni se incorpora GDI al instalador. La ventana sí figura en inventario anterior, pero puede cerrarse antes de que el host reciba el marcador por el puerto serial.
+
+Se reemplaza espera fija por protocolo de confirmación: huésped anuncia escena y mantiene Tk/ventana abiertos hasta ACK exacto (60s máximo); host guarda PNG vía QMP y solo después escribe señal; colector serial reenvía ACK de una lista cerrada. Si captura/ACK falla, prueba falla. Se mantienen todos los controles visuales y ensayo GDI solo en perfil descartable. Compilación de tres scripts y prueba local con pipe real aprobadas: espera ACK correcto, ignora ACK de otra escena y falla si no recibe confirmación. Falta nueva captura inspeccionada. Avance global37.75≈38%, sin incremento por verde insuficiente.

@@ -1,6 +1,10 @@
 name: Nexus ISO Desktop Capture
 
 on:
+  pull_request:
+    paths:
+      - 'image/windows-guest-probe.py'
+      - '.github/workflows/nexus-vm-screenshot.yml'
   workflow_dispatch:
     inputs:
       iso_run_id:
@@ -26,8 +30,10 @@ jobs:
     timeout-minutes: 40
     env:
       GH_TOKEN: ${{ github.token }}
-      ISO_RUN_ID: ${{ github.event.workflow_run.id || inputs.iso_run_id }}
-      ISO_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || inputs.iso_source_sha }}
+      # PR probe regressions deliberately reuse this verified mixed-Wine fixture.
+      # Automatic ISO Gate captures still use their triggering candidate; manual runs require inputs.
+      ISO_RUN_ID: ${{ github.event_name == 'pull_request' && '39076397453' || github.event.workflow_run.id || inputs.iso_run_id }}
+      ISO_SOURCE_SHA: ${{ github.event_name == 'pull_request' && 'fad9f10eafc99d531b72bd656bf48b1b5d97424d' || github.event.workflow_run.head_sha || inputs.iso_source_sha }}
     steps:
       - uses: actions/checkout@v4
       - name: Install QEMU and UEFI firmware
