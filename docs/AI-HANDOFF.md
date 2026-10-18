@@ -15,6 +15,12 @@ Esta sección sustituye los estados antiguos que aparecen más abajo. Global pon
 - Si la imagen demuestra GDI correcto, implementar ajuste automático en adaptadorNotepad++ con pruebas que preserven configuración y perfil7-Zip; validar laboratorio, integrar y construir una solaISO para probar adaptador empaquetado sin parche del probe. Si sigue negra, investigar dibujo antes de aceptar.
 - Pendientes principales después de Windows básico: instalaciónUEFI en QCOW2 y arranque sinISO/persistencia; Androidruntime+APK (Wayland/binder/GPU); Linuxformatos; IAenISO. TV/radio solo fuentesautorizadas, investigación25% sinreproductoraceptado.
 
+## Prioridad funcional vigente — 2026-10-17, 21:44 Bogotá
+
+El usuario exige demostrar instalación y uso de **Microsoft Word/Office de escritorio**.7-Zip/Notepad++ solo son pruebas básicas; no dar por aceptada compatibilidadWindows con esos dos programas. Leer [OFFICE-DESKTOP-ACCEPTANCE.md](OFFICE-DESKTOP-ACCEPTANCE.md): siete requisitos aún pendientes enNexus. Primer intento real de instalación/tareaWord en DebianWine: https://github.com/CmdOS-system/Nexus-os/actions/runs/39091083886 (consultar resultado, no asumir éxito). Código en PR #32, https://github.com/CmdOS-system/Nexus-os/pull/32 ; instalador oficialODT16.0.20326.20112 fijado porhash. No añadirOffice al catálogo aprobado hasta aceptación. SiWinefalla, registrarcausa y evaluarCrossOverporversión oWindowsVM/RemoteApp sin confundirbackends.
+
+BloqueoNotepad++: captura sincronizada39087177796 y artefacto12121412527 inspeccionados; editor visiblecorrecto con ensayoGDI0, apertura/menú de ambos programas. PR #30 integrada7c804462. PR #31 implementa GDI automático en instalador;19unitarias, Fast Checks39090854682 y WineLab39090852630 aprobados; artefacto12122523119 inspeccionado. Falta nuevaISO con adaptador empaquetado; capturaPR39090854665 todavía usa fixtureantigua. No confundir ensayoGDI delprobe conISOactualizada. Global37.75≈38%, Windows50/asistente50/APK0.
+
 ## Entrada única y alcance
 
 Repositorio: https://github.com/CmdOS-system/Nexus-os

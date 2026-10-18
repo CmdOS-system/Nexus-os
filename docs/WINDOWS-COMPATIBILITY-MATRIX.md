@@ -6,6 +6,10 @@ Actualizado: 2026-10-17. Cada fila es una aplicación/versión/entorno, no garan
 | --- | --- | --- | --- | --- | --- | --- |
 | 7-Zip 26.04 Windows x64 | Debian Trixie, Wine 10.0~repack-6, Xvfb, usuario sin privilegios | EXE oficial /S, hash verificado | ZIP creado por 7z.exe Windows; contenido exacto verificado con Python zipfile; comprobado otra vez tras reiniciar Wine | 7zFM.exe abrió ventana y se inspeccionó captura; compresión no operada mediante clics | No probada; reiniciar Wine no es reiniciar Nexus | Aprobado en laboratorio, pendiente integración Nexus |
 
+## Requisito prioritario: Word/Office de escritorio
+
+El usuario exige instalación y uso real de Word/Office para aceptar compatibilidad relevante.7-Zip y Notepad++ solo son casos básicos. Word/Office: **pendiente, sin instalación ni tarea acreditadas en Nexus**. Consultar [OFFICE-DESKTOP-ACCEPTANCE.md](OFFICE-DESKTOP-ACCEPTANCE.md): siete requisitos, fuentes primarias y laboratorio inicial. Un navegador o LibreOffice no sustituyen esta prueba. La ruta Wine/CrossOver y la ruta WindowsVM se registrarán por separado.
+
 ## Evidencia reproducible
 
 - Workflow: https://github.com/CmdOS-system/Nexus-os/actions/runs/39052936193 ; success para 3ce90a2bd472e35a17212d86f9f433b09ed20c76.
