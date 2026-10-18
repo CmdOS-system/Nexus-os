@@ -2,6 +2,19 @@
 
 Actualizado: 2026-10-17 (Bogotá).
 
+## Corte prioritario — 2026-10-17, 20:35 Bogotá
+
+Esta sección sustituye los estados antiguos que aparecen más abajo. Global ponderado37.75≈38%; Windows50%, asistente50%, APK0%. No elevar por CI o documentación.
+
+- Prioridad central: aplicaciones Windows y después APK/Linux, instalación gráfica sin terminal; no reabrir el diagnóstico Horizon ya acreditado salvo regresión.
+- Main incluye PR #29 (fad9f10e): dos EXE oficiales por hash, perfiles separados, selección sin ejecución, confirmación, recibo/verificación, menú y retirada recuperable. Laboratorio Debian/Wine acredita ambos programas, edición/guardado Notepad++, MIME y ciclo de retirada. No confundir con instalación persistente del OS.
+- ISO Gate39076397453 aprobó build y arranque UEFI de fad9f10e. Captura39077637721 acredita7-Zip; Notepad++ instaló pero la prueba de apertura fija12s fue insuficiente.
+- PR #30 abierta: https://github.com/CmdOS-system/Nexus-os/pull/30 . Run39078885829 con espera de ventana acredita apertura y menú de ambos, pero falla visualmente: editorNotepad++ negro. Artefacto12118387302 inspeccionado.
+- Ensayo GDI en perfil descartable39079632096 salió verde; revisión del artefacto12118184503 detectó que notepad-open.png NO muestra la aplicación. NO considerar arreglado el editor ni incorporar ese ajuste al instalador aún.
+- Siguiente ejecución concreta39087177796 usa la misma ISO e incorpora sincronización por ACK: no cerrar escena hasta que QMP guardePNG. Revisar resultado, serial y capturaNotepad++ de esta ejecución antes de repetir, modificar runtime o reconstruir.
+- Si la imagen demuestra GDI correcto, implementar ajuste automático en adaptadorNotepad++ con pruebas que preserven configuración y perfil7-Zip; validar laboratorio, integrar y construir una solaISO para probar adaptador empaquetado sin parche del probe. Si sigue negra, investigar dibujo antes de aceptar.
+- Pendientes principales después de Windows básico: instalaciónUEFI en QCOW2 y arranque sinISO/persistencia; Androidruntime+APK (Wayland/binder/GPU); Linuxformatos; IAenISO. TV/radio solo fuentesautorizadas, investigación25% sinreproductoraceptado.
+
 ## Entrada única y alcance
 
 Repositorio: https://github.com/CmdOS-system/Nexus-os
