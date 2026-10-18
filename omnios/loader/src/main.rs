@@ -201,7 +201,7 @@ fn materialize_crx_zip(path: &Path, offset: usize) -> io::Result<TempCrxZip> {
         input.seek(SeekFrom::Start(offset))?;
         let mut signature = [0u8; 4];
         input.read_exact(&mut signature)?;
-        if signature != *b"PK\\x03\\x04" { return Err(io::Error::other("El payload CRX no comienza con una cabecera ZIP local.")); }
+        if signature != *b"PK\x03\x04" { return Err(io::Error::other("El payload CRX no comienza con una cabecera ZIP local.")); }
         input.seek(SeekFrom::Start(offset))?;
         if io::copy(&mut input, &mut output)? != size - offset { return Err(io::Error::other("Copia incompleta del payload ZIP CRX.")); }
         output.flush()?;
