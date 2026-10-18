@@ -1,5 +1,6 @@
 """Exercise both approved Windows apps inside a disposable Nexus Live VM."""
 import hashlib
+import select
 from pathlib import Path
 import subprocess
 import sys
@@ -25,6 +26,22 @@ def hold(app, seconds):
     while time.monotonic() < end:
         app.update()
         time.sleep(0.1)
+
+
+def capture_ready(app, marker, seconds=60):
+    """Keep the exact scene alive until the host acknowledges its screenshot."""
+    print(marker, flush=True)
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        app.update()
+        readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if readable:
+            line = sys.stdin.readline()
+            if not line:
+                raise RuntimeError('Capture acknowledgement input closed')
+            if line.strip() == 'NEXUS_CAPTURE_ACK ' + marker:
+                return
+    raise RuntimeError('Host did not acknowledge screenshot: ' + marker)
 
 
 def wait_window(title, app=None, process=None, seconds=120):
@@ -68,8 +85,7 @@ for package_id, url, title, marker in cases:
         wait(app, lambda: not app.busy)
         assert service.ready and service.package_id == package_id, app.status.get()
         assert not (service.root / 'prefix').exists()
-        print(marker + '_PREPARED', flush=True)
-        hold(app, 10)
+        capture_ready(app, marker + '_PREPARED')
         app.confirm.invoke()
         wait(app, lambda: not app.busy)
         assert service.installed, app.status.get()
@@ -100,8 +116,8 @@ for package_id, url, title, marker in cases:
         assert launched, app.status.get()
         windows = wait_window(title, app, launched[-1])
         print(windows, flush=True)
-        print(marker + '_OPEN', flush=True)
-        hold(app, 10)
+        hold(app, 2)
+        capture_ready(app, marker + '_OPEN')
         entry = service.menu_entry()
         assert entry.is_file()
         subprocess.run(['wineserver', '-k'], env=service.environment(), check=False)

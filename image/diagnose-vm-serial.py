@@ -115,7 +115,23 @@ def collect(socket_path, log_path, full_hd=False):
             client.sendall(("printf '%s' '" + payload[offset:offset + 1000] + "' >> /tmp/nexus-windows-probe.b64\n").encode())
             time.sleep(0.1)
         client.sendall(b"base64 -d /tmp/nexus-windows-probe.b64 > /tmp/nexus-windows-probe.py; timeout 1250s python3 /tmp/nexus-windows-probe.py; printf '\\nNEXUS_WINDOWS_PROBE_EXIT=%s\\n' \"$?\"\n")
-        wait_for("NEXUS_WINDOWS_ISO_PASS", 1270)
+        # The guest keeps each scene open until capture-vm acknowledges screendump.
+        acknowledgement = log_path.with_suffix('.capture-ack')
+        forwarded = None
+        allowed = {'NEXUS_WINDOWS_ISO_PREPARED', 'NEXUS_WINDOWS_ISO_OPEN',
+                   'NEXUS_NOTEPAD_ISO_PREPARED', 'NEXUS_NOTEPAD_ISO_OPEN'}
+        until = min(deadline, time.monotonic() + 1270)
+        while time.monotonic() < until:
+            if b'NEXUS_WINDOWS_ISO_PASS' in buffer:
+                break
+            if acknowledgement.exists():
+                marker = acknowledgement.read_text()
+                if marker in allowed and marker != forwarded:
+                    client.sendall(('NEXUS_CAPTURE_ACK ' + marker + '\n').encode())
+                    forwarded = marker
+            time.sleep(0.1)
+        else:
+            raise RuntimeError('Windows probe completion absent after synchronized captures')
         print("Packaged Windows installer passed in disposable Live guest", flush=True)
         thread.join(timeout=max(0, deadline - time.monotonic()))
 

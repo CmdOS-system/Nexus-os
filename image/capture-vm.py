@@ -103,6 +103,8 @@ def capture(socket_path, serial_path, output, timeout=240):
                     raise RuntimeError("Live Windows probe absent: " + marker)
                 if suffix:
                     screenshot(output.with_name(output.stem + suffix + ".png"))
+                    # Serial collector relays this only after screendump succeeds.
+                    serial_path.with_suffix('.capture-ack').write_text(marker)
     probe_deadline = time.monotonic() + 75
     while time.monotonic() < probe_deadline:
         if "NEXUS_HORIZON_PROBE_END" in serial_path.read_text(errors="replace"):
