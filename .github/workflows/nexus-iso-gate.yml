@@ -59,7 +59,7 @@ jobs:
 
       - name: Test real Linux loader
         run: |
-          cargo +nightly test --manifest-path omnios/Cargo.toml -p omni-loader
+          cargo +nightly -Z bindeps test --manifest-path omnios/Cargo.toml -p omni-loader
 
       - name: Compile loader and stage checksum-verified Wasmtime
         run: bash image/stage-omni-subsystem.sh

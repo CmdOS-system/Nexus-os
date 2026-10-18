@@ -39,13 +39,13 @@ jobs:
           components: rustfmt, clippy, llvm-tools, rust-src
       - name: Test loader signatures and workspace
         working-directory: omnios
-        run: cargo test --workspace
+        run: cargo +nightly -Z bindeps test --workspace
       - name: Build BIOS and UEFI boot images
         working-directory: omnios
-        run: cargo build --release
+        run: cargo +nightly -Z bindeps build --release
       - name: Boot UEFI image and require serial success marker
         working-directory: omnios
-        run: timeout 60s cargo run --release -- uefi-smoke
+        run: timeout 60s cargo +nightly -Z bindeps run --release -- uefi-smoke
       - name: Stage generated boot images
         working-directory: omnios
         run: |
