@@ -77,3 +77,15 @@ PR #29 integrada en fad9f10eafc99d531b72bd656bf48b1b5d97424d. Quince pruebas uni
 ISO Gate39076397453 finalizó success para esa misma fuente: preflight de escritorio, construcción y arranque UEFI aprobados. Captura39077637721 todavía en ejecución al registrar este corte: instalación/apertura de ambos dentro de esta nueva imagen NO confirmadas. No reutilizar el éxito de laboratorio como resultado Live. Pendiente revisar captura, logs por fases y marcadores de ambos programas antes de decidir siguiente cambio.
 
 No cambian pesos ni etapas: global37.75≈38%, Windows50%, asistente50%, APK0%. La tabla superior refleja el estado actual; las secciones anteriores conservan los cortes históricos.
+
+
+## Ampliación de plataformas: macOS y ChromeOS — 2026-10-17
+
+Se agrega ChromeOS como módulo independiente de peso1 y 0% validado. Para mantener pesos totales en100, Seguridad, hardware y entrega pasa de3 a2 (continúa25%). Cálculo actualizado: (37.75 - 0.25)/100 = 37.50%, mostrado como aproximadamente38%; no cambió código ni se perdió trabajo, cambió la ponderación por ampliación del alcance.
+
+| Plataforma | Peso | Avance | Qué significa aceptación |
+| --- | ---: | ---: | --- |
+| macOS | 1 | 0% | Compatibilidad por app; preferir versión web o multiplataforma. La ejecución de apps/macOS VM exige validar hardware Apple y licencia; ningún .dmg está probado. |
+| ChromeOS | 1 | 0% | Probar por separado Nexus instalado/arrancando en equipo compatible y apps Linux dentro del entorno Linux de Chromebook; soporte Android depende de modelo. |
+
+La tabla de módulos vigente queda con estos cambios respecto al corte anterior: macOS1%, ChromeOS1%, Seguridad/hardware/entrega2%, peso total100%. Los porcentajes ChromeOS/macOS se mantienen en0 hasta pruebas reales. El alcance detallado y fuentes primarias quedan en MULTIPLATFORM-APPLICATIONS.md. No confundir ChromeOS con Linux de escritorio genérico ni macOS con Linux/Wine.
