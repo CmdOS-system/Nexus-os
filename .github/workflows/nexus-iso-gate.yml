@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
     paths:
+      - ".github/workflows/nexus-iso-gate.yml"
+      - "agent/app_installer.py"
       - "verify.sh"
       - "scripts/*security*py"
       - "image/build.sh"
