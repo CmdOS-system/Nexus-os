@@ -63,13 +63,15 @@ def main():
             odt = root / 'odt.exe'
             odt.write_bytes(data)
             toolkit = root / 'toolkit'
-            # Extract container without executing its Windows self-extractor.
-            run('extract-odt', ['7z', 'x', '-y', '-o' + str(toolkit), str(odt)], 60)
+            run('wine-initialize', ['wine', 'wineboot', '--init'], 300)
+            windows_toolkit = subprocess.check_output(['winepath', '-w', str(toolkit)], env=env, text=True).strip()
+            # Use Microsoft's own self-extractor. Its embedded Usage text defines
+            # /quiet and /extract:path; generic 7z failed on the SFX file attributes.
+            run('extract-odt', ['wine', str(odt), '/quiet', '/extract:' + windows_toolkit], 120)
             setup = next(toolkit.rglob('setup.exe'), None)
             if setup is None:
                 raise RuntimeError('ODT archive did not contain setup.exe')
             result['setup_sha256'] = hashlib.sha256(setup.read_bytes()).hexdigest()
-            run('wine-initialize', ['wine', 'wineboot', '--init'], 300)
             config = root / 'configuration.xml'
             config.write_text('''<Configuration>
  <Add OfficeClientEdition="32" Channel="Current">

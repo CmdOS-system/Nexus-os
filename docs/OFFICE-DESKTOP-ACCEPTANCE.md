@@ -42,3 +42,7 @@ Aprobación de laboratorio representa solo base técnica. Word web, LibreOffice 
 2. Resolver el primer bloqueo reproducible o decidir backend alternativo con evidencia.
 3. Integrar en Nexus el backend que funcione y repetir los siete requisitos arriba.
 4. MantenerOffice como P0 funcional de compatibilidad; APK/Linux siguen en alcance sin porcentaje ficticio.
+
+## Primer bloqueo reproducido
+
+Run39091083886 y artefacto12122462178 inspeccionados: hashODT correcto, extracción7z25.01 falla con `Incorrect reparse stream` sobre configuration-Office365-x64.xml (salida2). ODT contiene CABMSZip embebido en offset263168. No llegó a ejecutar setup.exe ni instalarOffice; no clasificarlo como incompatibilidadWord. Se usa ahora el propio autoextractor oficial, cuyas opciones `/quiet` y `/extract:path` se verificaron en el textoUsage embebido del mismo binarioMicrosoft. Wineboot se prepara antes de extraer; el resultado del siguiente intento está pendiente. Sin nuevaISO ni cambios al catálogo deNexus.
