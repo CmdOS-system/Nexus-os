@@ -24,12 +24,12 @@ try:
     points = [(x, y) for x in range(200, 400, 20) for y in range(120, 960, 20)]
     matches = sum(max(abs(a-b) for a, b in zip(image.getpixel(p), expected.getpixel(p))) <= 25 for p in points)
     ratio = matches / len(points)
-    report = f'Aurora pixel match: {ratio:.3f}\\n'
+    report = f'Aurora pixel match: {ratio:.3f}\n'
     if ratio < 0.90:
-        report += 'XFCE rendered a different wallpaper; accepted for the headless native-session smoke.\\n'
+        report += 'XFCE rendered a different wallpaper; accepted for the headless native-session smoke.\n'
         print(f'XFCE wallpaper differs from aurora in this headless session (match {ratio:.3f}); continuing.')
     else:
-        report += 'Aurora wallpaper rendered.\\n'
+        report += 'Aurora wallpaper rendered.\n'
     (root / 'native-desktop-evidence/wallpaper-match.txt').write_text(report)
     # Also reject an unloaded/black background.
     samples = {image.getpixel((x, y)) for x in range(40, 400, 20) for y in range(100, 1000, 20)}
