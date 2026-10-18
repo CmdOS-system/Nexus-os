@@ -29,6 +29,7 @@ VERIFY_PATHS=(
 )
 unsquashfs -no-xattrs -no-progress -f -d "$TEMP/rootfs" \
   "$TEMP/filesystem.squashfs" "${VERIFY_PATHS[@]}" >/dev/null
+ROOTFS="${ROOTFS:-$TEMP/rootfs}"
 
 ROOTFS="$TEMP/rootfs" python3 - <<'PY'
 import os
