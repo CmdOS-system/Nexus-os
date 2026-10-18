@@ -1,0 +1,27 @@
+name: Nexus Windows VM Prerequisites
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'agent/windows_vm_preflight.py'
+      - 'agent/tests/test_windows_vm_preflight.py'
+      - '.github/workflows/nexus-windows-vm-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  observe-host:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify classification and observe actual runner without changing it
+        run: |
+          python3 -m unittest discover -s agent/tests -p test_windows_vm_preflight.py
+          python3 agent/windows_vm_preflight.py > windows-vm-prerequisites.json
+      - name: Distinguish runner KVM permissions from unavailable hardware
+        run: |
+          sudo -n /usr/bin/python3 agent/windows_vm_preflight.py > windows-vm-prerequisites-admin.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-vm-readonly-prerequisites
+          path: windows-vm-prerequisites*.json

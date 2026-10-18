@@ -91,6 +91,12 @@ def main():
             raise RuntimeError('Word document window absent; inspect failure screenshot')
 
         try:
+            # Wine's msv1_0 package requires ntlm_auth before it can register NTLM.
+            # Check before wineboot so an incomplete SSPI setup cannot hide as a
+            # long Office setup timeout. No credentials are supplied to this check.
+            result['stage'] = 'ntlm-helper-preflight'
+            result['ntlm_auth_version'] = subprocess.check_output(
+                ['ntlm_auth', '--version'], text=True, timeout=10).strip()
             result['wine_version'] = subprocess.check_output(['wine', '--version'], text=True).strip()
             result['stage'] = 'download-official-odt'
             with urllib.request.urlopen(ODT_URL, timeout=60) as response:
@@ -111,7 +117,7 @@ def main():
             result['setup_sha256'] = hashlib.sha256(setup.read_bytes()).hexdigest()
             config = root / 'configuration.xml'
             config.write_text('''<Configuration>
- <Add OfficeClientEdition="32" Channel="Current">
+ <Add OfficeClientEdition="32" Channel="Current" Version="16.0.20430.20182">
   <Product ID="O365ProPlusRetail"><Language ID="en-us"/>
    <ExcludeApp ID="Access"/><ExcludeApp ID="Excel"/><ExcludeApp ID="Groove"/>
    <ExcludeApp ID="Lync"/><ExcludeApp ID="OneDrive"/><ExcludeApp ID="OneNote"/>

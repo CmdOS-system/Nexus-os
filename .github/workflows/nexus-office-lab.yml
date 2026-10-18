@@ -22,7 +22,7 @@ jobs:
         run: |
           dpkg --add-architecture i386
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates wine wine64 wine32:i386 fonts-wine xvfb xauth x11-utils xdotool python3 python3-pil
+          apt-get install -y --no-install-recommends git ca-certificates wine wine64 wine32:i386 fonts-wine winbind xvfb xauth x11-utils xdotool python3 python3-pil
           useradd --create-home nexuslab
       - uses: actions/checkout@v4
       - name: Attempt official Office installation and real Word document task
