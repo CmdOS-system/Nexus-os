@@ -1,0 +1,44 @@
+# OmniOS: estado, fases y pendientes
+
+Este archivo es la fuente de verdad del avance del prototipo. Los porcentajes describen alcance de ingeniería, no compatibilidad certificada. Actualiza este documento en el mismo cambio que complete una tarea.
+
+## Estado general
+
+- **OmniOS (proyecto completo): 4% estimado.** Solo existe la base experimental x86_64 y una prueba de arranque UEFI en QEMU. No es un sistema operativo de uso diario.
+- **Nexus (repositorio anfitrión): 38% reportado anteriormente.** Es un proyecto distinto y este cambio no modifica su implementación.
+
+## Componentes
+
+| Área | Avance | Hecho | Siguiente | Pendiente / límite |
+|---|---:|---|---|---|
+| Repositorio y CI | 25% | Estructura inicial, workflow, imagen UEFI/BIOS construida por Cargo | Ejecutar y corregir la primera corrida de GitHub Actions | Artefacto reproducible, protección de ramas y matriz ARM64 |
+| OmniKernel / arranque | 5% | Entrada `no_std`, salida serial, ruta de salida QEMU y comprobación de tablas | Gestor de memoria física a partir del mapa UEFI | Excepciones, interrupciones, paginación, scheduler, IPC y drivers |
+| OmniLoader | 4% | Detección acotada de magic bytes; pruebas ELF/MZ/Mach-O/DEX/ZIP | Parser ELF con validación de rangos y segmentos | Cargadores PE/Mach-O, verificación de APK, permisos y ejecución segura |
+| Dispatcher ABI | 2% | Tablas ilustrativas Linux y rutas internas OmniBridge Windows/Darwin | Definir contrato de ABI y entrada de trap | No hay syscalls reales; no prometer compatibilidad NT/XNU |
+| OmniLang | 2% | Borrador de sintaxis y objetivos de diseño | Prototipo lexer/parser y decisiones de tipos/ownership | No existe compilador, UIR, LLVM backend ni runtime |
+| Puentes y gráficos | 1% | Alcance y límites documentados para Win32, glibc, Cocoa, ART y Vulkan | Priorizar un bridge con pruebas de conformidad | No existen implementaciones; evaluar APIs, licencias y drivers |
+| Windows/macOS/Android/Linux/ChromeOS | 0% compatibilidad verificada | Requisitos registrados en la arquitectura | Desglosar por aplicación y servicio | Ningún programa de esos sistemas se ha instalado o ejecutado aquí |
+
+El porcentaje global es una estimación ponderada del plan técnico, no una métrica de líneas de código. La compatibilidad de aplicaciones se reporta por separado y permanece en **0% verificado** hasta ejecutar programas representativos.
+
+## Fases de entrega
+
+1. **Base compilable y arranque UEFI x86_64 — en curso.** Compilar kernel e imágenes, ejecutar el kernel en OVMF/QEMU y validar marca serial y salida de depuración en CI.
+2. **Memoria e interrupciones — pendiente.** Mapa UEFI, allocator de frames con pruebas, paginación, IDT/excepciones y temporizador.
+3. **Loader Linux — pendiente.** Parser ELF defensivo, espacio de usuario, carga de un binario de prueba y ABI Linux mínima documentada.
+4. **Compatibilidad Windows y formatos adicionales — pendiente.** Parser PE, puente Win32 incremental y pruebas con aplicaciones Windows legales/de muestra; Mach-O, Android/APK, ChromeOS y ARM64 requieren proyectos separados y revisión técnica/legal.
+5. **OmniLang — pendiente.** Lexer, parser, AST, verificador de tipos/seguridad, UIR versionada y backend LLVM; primero compilar y ejecutar ejemplos en host.
+6. **Gráficos, instaladores y producto multiplataforma — pendiente.** Servicio de usuario, Vulkan, instalación con interfaz, drivers, seguridad, telemetría opcional, empaquetado y pruebas en hardware real.
+
+## Criterios para marcar una tarea como hecha
+
+- Código y documentación están en GitHub.
+- El CI correspondiente termina en verde y se enlaza su ejecución en el PR.
+- Para compatibilidad, registrar aplicación/versión, arquitectura, hardware o emulador, resultado y limitaciones. Una prueba de parser o un arranque del kernel no cuenta como prueba de compatibilidad de aplicaciones.
+- Actualizar porcentajes solo con evidencia nueva y describir qué cambió.
+
+## Pendiente inmediato
+
+1. Obtener CI verde para `Build and boot OmniOS UEFI x86_64 in QEMU`.
+2. Si falla, corregir usando el log de la etapa que falla y repetir el workflow.
+3. Después del arranque confirmado, programar `kernel/src/memory/frame_allocator.rs` con allocator de frames probado sobre mapas UEFI sintéticos.

@@ -1,0 +1,11 @@
+module       = "module", path, ";", { import | declaration } ;
+declaration  = capability | struct | enum | function | impl ;
+function     = ["pub"], "fn", identifier, "(", [parameters], ")", ["->", type], block ;
+type         = path | "&", ["mut"], type | "[", type, ";", integer, "]"
+             | "Option", "<", type, ">" | "Result", "<", type, ",", type, ">" ;
+block        = "{", { statement }, [expression], "}" ;
+statement    = "let", ["mut"], identifier, [":", type], "=", expression, ";"
+             | expression, ";" | "return", [expression], ";" ;
+
+(* Draft grammar only. Ownership, lifetimes, generics, unsafe and ABI are specified
+   in the design document; parser/compiler are not implemented in this phase. *)
