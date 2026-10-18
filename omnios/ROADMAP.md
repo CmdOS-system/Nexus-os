@@ -1,11 +1,12 @@
-# OmniOS: estado, fases y pendientes
+# OmniOS / Nexus OmniSubsystem: estado, fases y pendientes
 
 Este archivo es la fuente de verdad del avance del prototipo. Los porcentajes describen alcance de ingeniería, no compatibilidad certificada. Actualiza este documento en el mismo cambio que complete una tarea.
 
 ## Estado general
 
-- **OmniOS (proyecto completo): 6% estimado.** Existe la base experimental x86_64 y CI ya construye y arranca el prototipo UEFI en QEMU. Este cambio añade algoritmos reales de frames, paginación y planificación con pruebas; todavía no existe una experiencia de sistema operativo de uso diario.
-- **Nexus (repositorio anfitrión): 38% reportado anteriormente.** Es un proyecto distinto y este cambio no modifica su implementación.
+- **OmniKernel freestanding: 6% estimado.** Es un prototipo de investigación x86_64 con arranque QEMU; no es el kernel de Nexus ni una meta de producto para ejecutar aplicaciones comerciales.
+- **Nexus OmniSubsystem (primera integración): 25% estimado.** Se ha escrito un binario Linux en Rust que despacha a runtimes del sistema, junto con configuración live-build y pruebas unitarias. Falta compilarlo/probarlo en CI, verificar el contenido de la ISO y probar rutas con aplicaciones reales en la sesión gráfica.
+- **Nexus OS global: ≈38% reportado en `docs/PROJECT-PROGRESS.md`.** No sube con esta integración hasta que una ISO y un flujo de aplicación representativo pasen validación; reconocer un formato no prueba compatibilidad de apps.
 
 ## Componentes
 
@@ -13,7 +14,8 @@ Este archivo es la fuente de verdad del avance del prototipo. Los porcentajes de
 |---|---:|---|---|---|
 | Repositorio y CI | 45% | Estructura inicial, workflow verde, imágenes UEFI/BIOS y artefacto publicado | Añadir caché/lockfile y pruebas repetibles para cambios de kernel | Protección de ramas y matriz ARM64 |
 | OmniKernel / arranque | 17% | Entrada `no_std`, arranque UEFI confirmado en QEMU, allocator fijo basado en mapa UEFI con reserva/liberación, backend de tablas x86_64 de cuatro niveles con aislamiento, scheduler RR/Fair y pruebas unitarias | Ejecutar CI y conectar el allocator a `BootInfo`; configurar direct map para tablas activas | IDT, timer ISR/context restore, activación de CR3 en arranque, IPC y drivers |
-| OmniLoader | 6% | Detección acotada de ELF/MZ/Mach-O/DEX/ZIP/WASM/CRX y pruebas unitarias | Parser ELF y validadores por formato con límites | No verifica firmas CRX, no interpreta secciones WASM ni carga/ejecuta formatos |
+| Nexus OmniLoader (usuario Linux) | 25% | CLI Rust con rutas Wine/Waydroid/Darling/Wasmtime/Chromium/apt, registro `binfmt_misc`, pruebas unitarias escritas | Cargo/CI, extracción de ISO y smoke UEFI; sesión gráfica y apps objetivo | CI y contenido de la ISO todavía no verificados en este cambio; no es parser universal ni garantiza ABI |
+| OmniKernel freestanding (investigación) | 17% | Entry `no_std`, memoria/scheduler de prototipo y pruebas; arranque anterior en QEMU | Mantener separado del producto Debian | No arranca Nexus ni reemplaza Linux; traps/ABI/drivers incompletos |
 | Dispatcher ABI | 2% | Tablas ilustrativas Linux y rutas internas OmniBridge Windows/Darwin | Definir contrato de ABI y entrada de trap | No hay syscalls reales; no prometer compatibilidad NT/XNU |
 | OmniLang | 2% | Borrador de sintaxis y objetivos de diseño | Prototipo lexer/parser y decisiones de tipos/ownership | No existe compilador, UIR, LLVM backend ni runtime |
 | Puentes y gráficos | 1% | Alcance y límites documentados para Win32, glibc, Cocoa, ART y Vulkan | Priorizar un bridge con pruebas de conformidad | No existen implementaciones; evaluar APIs, licencias y drivers |
@@ -22,11 +24,15 @@ Este archivo es la fuente de verdad del avance del prototipo. Los porcentajes de
 
 El porcentaje global es una estimación ponderada del plan técnico, no una métrica de líneas de código. La compatibilidad de aplicaciones se reporta por separado y permanece en **0% verificado** hasta ejecutar programas representativos.
 
+## Arquitectura de producto vigente
+
+Nexus se entrega como Debian con el kernel Linux real. OmniLoader se compila como proceso Linux en espacio de usuario y se registra mediante `binfmt_misc`; formatos Linux ELF quedan al kernel. OmniKernel y el futuro OmniLang continúan como investigación separada, sin reclamación de compatibilidad de apps. Detalle: [Nexus OmniSubsystem](../docs/NEXUS-OMNISUBSYSTEM.md).
+
 ## Fases de entrega
 
 1. **Base compilable y arranque UEFI x86_64 — completada en CI.** Run #4 pasó tests, construcción BIOS/UEFI, arranque OVMF/QEMU con `OMNIOS_BOOT_OK`, staging y publicación de artefactos: https://github.com/CmdOS-system/Nexus-os/actions/runs/39099281130 .
 2. **Base de memoria — 45% de fase.** Ya hay allocator de frames 4 KiB, gestor 4 niveles, backend direct-map opt-in y scheduler RR/Fair con contexto guardado; pruebas unitarias añadidas. Falta pasar el mapa real de `BootInfo` a un allocator persistente, habilitar/configurar direct map/NX, e integrar IDT, timer y restauración hardware del contexto.
-3. **Loader Linux — pendiente.** Parser ELF defensivo, espacio de usuario, carga de un binario de prueba y ABI Linux mínima documentada.
+3. **Nexus OmniSubsystem — en integración.** Compilar el cargador para Linux, registrar runtimes de usuario, construir ISO y comprobar sus contenidos; después validar APK/Wine/Wasmtime en la imagen real. ELF sigue nativo y no debe redirigirse al cargador.
 4. **Compatibilidad Windows y formatos adicionales — pendiente.** Parser PE, puente Win32 incremental y pruebas con aplicaciones Windows legales/de muestra; Mach-O, Android/APK, ChromeOS y ARM64 requieren proyectos separados y revisión técnica/legal.
 5. **OmniLang — pendiente.** Lexer, parser, AST, verificador de tipos/seguridad, UIR versionada y backend LLVM; primero compilar y ejecutar ejemplos en host.
 6. **WASI, ChromeOS y PWA — diseño/firmas en curso.** El loader reconoce candidatos WASM y CRX; implementar parsers seguros, host WASI en usuario y shell web PWA con manifiestos, permisos y APIs web.

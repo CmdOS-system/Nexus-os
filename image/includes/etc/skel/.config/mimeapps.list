@@ -1,4 +1,11 @@
 [Default Applications]
 application/vnd.microsoft.portable-executable=nexus-app-install.desktop;
+application/x-msi=nexus-omnisubsystem.desktop;
+application/vnd.android.package-archive=nexus-omnisubsystem.desktop;
+application/vnd.android.dex=nexus-omnisubsystem.desktop;
+application/x-mach-binary=nexus-omnisubsystem.desktop;
+application/wasm=nexus-omnisubsystem.desktop;
+application/x-chrome-extension=nexus-omnisubsystem.desktop;
+application/vnd.debian.binary-package=nexus-omnisubsystem.desktop;
 application/x-msdownload=nexus-app-install.desktop;
 application/x-ms-dos-executable=nexus-app-install.desktop;

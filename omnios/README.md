@@ -1,6 +1,8 @@
-# OmniOS
+# OmniOS / Nexus OmniSubsystem
 
-OmniOS es un proyecto experimental de sistema operativo en Rust/C para investigar una experiencia común de ejecución de aplicaciones. OmniKernel arranca en x86_64 por UEFI/BIOS mediante el bootloader de Rust OSDev. El primer kernel escribe una marca por puerto serial y finaliza QEMU de forma controlada; CI comprueba el arranque. Esto es un esqueleto arrancable, no un OS funcional ni compatible con todas las aplicaciones.
+La decisión de arquitectura del proyecto de producto es usar el kernel Linux real de Debian en Nexus. El código Rust de `omnios/loader` se integra como el **Nexus OmniSubsystem**, un ejecutable Linux de usuario conectado a `binfmt_misc` y a runtimes instalados. Ver [arquitectura y límites del subsistema](../docs/NEXUS-OMNISUBSYSTEM.md).
+
+`omnios/kernel` permanece como prototipo experimental UEFI/BIOS freestanding para investigación. No arranca Nexus, no implementa una ABI de Windows/macOS/Android y no se usa como alternativa al kernel Linux del sistema.
 
 ## Arquitectura inicial
 

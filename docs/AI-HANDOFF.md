@@ -117,6 +117,7 @@ Comunícate en español. Muestra avances reales y progreso global por hitos veri
 ```
 
 
+
 ## Prioridad central ratificada: aplicaciones Windows — 2026-10-17
 
 Leer docs/WINDOWS-FIRST-ROADMAP.md antes de elegir la siguiente tarea. El usuario confirma Windows como objetivo central de Nexus; no retrasar el laboratorio Wine esperando acabados estéticos, TV/radio o voz. Trabajar instalación/persistencia como habilitador. Orden: laboratorio Debian/Wine -> aplicación real sencilla -> aplicación difícil del usuario con tarea útil -> asistente Nexus/prefijos -> prueba persistente en VM -> ampliar matriz. Investigación/ingeniería inversa para interoperabilidad con permisos, fuentes primarias y componentes abiertos; no prometer universalidad.
@@ -237,3 +238,11 @@ Quince pruebas locales aprobadas: preparación previa, fallo de inicialización 
 PR #29 integradafad9f10eafc99d531b72bd656bf48b1b5d97424d. Fast Checks39076129040, Native Desktop39076128989 y Wine Lab39076124206 aprobados. Artefacto12117470710 descargado, notepad-remove-result.txt y notepad-removed.png revisados: No conserva instalación; aplicación activa rechaza retirada; tras cerrar, perfil verificable aparece en papelera real y acceso Nexus desaparece; registro7-Zip sin cambios. También pasan instalación, menú, MIME y edición/guardado. Nueva preparación explícita Wine validada en laboratorio; comportamiento lento Live aún pendiente.
 
 Nueva ISO Gate39076397453 iniciada (fuente fad9f10e). Captura posterior debe demostrar ambos programas dentro del Live; si falla, revisar NEXUS_WINE_INIT_BEGIN/END, NEXUS_PACKAGE_INSTALL_BEGIN y log exportado antes de proponer otra corrección. No declarar arreglada la captura39074859209 solo por aumentar presupuestos. Global≈38%.
+
+## Cambio de arquitectura vigente — 2026-10-18
+
+La integración del producto es Debian + kernel Linux real. Lee [NEXUS-OMNISUBSYSTEM.md](NEXUS-OMNISUBSYSTEM.md) y el último registro de [PROJECT-CONTINUITY.md](PROJECT-CONTINUITY.md) antes de seguir. Las instrucciones previas que piden implementar OmniKernel como base del sistema quedan reemplazadas: el kernel Rust freestanding queda separado como investigación, y `omnios/loader` se compila como proceso Linux `nexus-omniloader`.
+
+En PR #37 / rama `feature/omnios-uefi-foundation`, el siguiente paso es inspeccionar Actions del SHA nuevo. El entorno local de edición no tiene Cargo/Rust ni live-build, así que no declares compilado el loader ni construida la ISO hasta que el workflow termine. Si falla, leer el log del job, corregir la causa en esta rama y repetir el gate. Éxito de build y extracción del SquashFS acredita integración de paquetes/servicio, no compatibilidad de apps. Después se necesita probar una APK de muestra en una sesión Waydroid inicializada y Windows mediante Wine dentro de esa ISO. Global Nexus sigue ≈38%, OmniKernel 6%, primera integración OmniSubsystem 25% hasta CI/ISO verificados.
+
+Prompt portátil actualizado: conecta al repo y revisa rama/PR/Actions; lee `docs/NEXUS-OMNISUBSYSTEM.md`, `docs/PROJECT-CONTINUITY.md`, `docs/PROJECT-PROGRESS.md` y `omnios/ROADMAP.md`; continúa desde esta arquitectura, verifica evidencia del SHA y actualiza documentos/porcentajes sin presentar detección de formato como compatibilidad real.

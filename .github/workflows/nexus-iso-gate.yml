@@ -2,10 +2,21 @@ name: Nexus ISO Gate
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/nexus-iso-gate.yml"
+      - "omnios/Cargo.toml"
+      - "omnios/Cargo.lock"
+      - "omnios/loader/**"
+      - "image/**"
+      - "verify.sh"
   push:
     branches: [main]
     paths:
       - ".github/workflows/nexus-iso-gate.yml"
+      - "omnios/Cargo.toml"
+      - "omnios/Cargo.lock"
+      - "omnios/loader/**"
       - "agent/app_installer.py"
       - "verify.sh"
       - "scripts/*security*py"
@@ -39,7 +50,19 @@ jobs:
       - name: Install build and VM dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 ovmf xorriso
+          sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils
+
+      - name: Install Rust stable for the Linux loader
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Test real Linux loader
+        run: |
+          cargo test --manifest-path omnios/Cargo.toml -p omni-loader
+
+      - name: Compile loader and stage checksum-verified Wasmtime
+        run: bash image/stage-omni-subsystem.sh
 
       - name: Preflight and build inside Debian Trixie
         run: |
@@ -54,11 +77,13 @@ jobs:
               bash image/build.sh
             '
 
-      - name: Verify ISO artifact
+      - name: Verify ISO artifact and integrated runtimes
         run: |
           bash image/verify-artifact.sh image/work
           cd image/work
           sha256sum -c SHA256SUMS
+          iso="$(find . -maxdepth 1 -type f -name '*.iso' -print -quit)"
+          bash ../verify-omni-image.sh "$iso"
 
       - name: Locate candidate
         id: iso

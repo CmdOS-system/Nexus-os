@@ -4,11 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - "omnios/**"
+      - "omnios/kernel/**"
+      - "omnios/build.rs"
       - ".github/workflows/build-os.yml"
   pull_request:
     paths:
-      - "omnios/**"
+      - "omnios/kernel/**"
+      - "omnios/build.rs"
       - ".github/workflows/build-os.yml"
   workflow_dispatch:
 

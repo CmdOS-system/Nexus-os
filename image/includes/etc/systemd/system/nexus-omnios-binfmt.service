@@ -1,0 +1,15 @@
+[Unit]
+Description=Nexus OmniSubsystem binary format registrations
+Documentation=https://docs.kernel.org/admin-guide/binfmt-misc.html
+After=systemd-binfmt.service local-fs.target
+Wants=systemd-binfmt.service
+ConditionPathExists=/usr/bin/nexus-omniloader
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nexus-omniloader --register-binfmt
+RemainAfterExit=yes
+TimeoutStartSec=15
+
+[Install]
+WantedBy=multi-user.target

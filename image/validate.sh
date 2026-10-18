@@ -21,6 +21,13 @@ HORIZON_SHORTCUTS="$ROOT/includes/etc/skel/.config/xfce4/xfconf/xfce-perchannel-
 CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desktop"
 INSTALLER_PREVIEW="$ROOT/includes/opt/nexus/installer-preview.py"
 INSTALLER_DESKTOP="$ROOT/includes/usr/share/applications/nexus-installer-preview.desktop"
+OMNI_PACKAGES="$ROOT/package-lists/omnios.list.chroot"
+OMNI_ARCHIVE="$ROOT/archives/trixie-backports.list.chroot"
+OMNI_HOOK="$ROOT/hooks/050-enable-nexus-omnios-binfmt.hook.chroot"
+OMNI_UNIT="$ROOT/includes/etc/systemd/system/nexus-omnios-binfmt.service"
+OMNI_DESKTOP="$ROOT/includes/usr/share/applications/nexus-omnisubsystem.desktop"
+OMNI_STAGE="$ROOT/stage-omni-subsystem.sh"
+OMNI_ISO_VERIFY="$ROOT/verify-omni-image.sh"
 
 bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
@@ -28,9 +35,13 @@ bash -n "$LAUNCHER"
 bash -n "$HORIZON_LAUNCHER"
 bash -n "$BOOT_HOOK"
 sh -n "$GRUB_HOOK"
+sh -n "$ROOT/auto/config"
+sh -n "$OMNI_HOOK"
+bash -n "$OMNI_STAGE"
+bash -n "$OMNI_ISO_VERIFY"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP" "$OMNI_PACKAGES" "$OMNI_ARCHIVE" "$OMNI_HOOK" "$OMNI_UNIT" "$OMNI_DESKTOP" "$OMNI_STAGE" "$OMNI_ISO_VERIFY" "$ROOT/auto/config"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -83,8 +94,18 @@ grep -q "Installation is DISABLED in this preview" "$INSTALLER_PREVIEW"
 grep -q "installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py" "$BUILD"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
-  grep -q -- "$flag" "$BUILD"
+  grep -q -- "$flag" "$ROOT/auto/config"
 done
+for package in chromium unzip zenity pkexec aapt waydroid weston; do grep -qx "$package" "$OMNI_PACKAGES"; done
+grep -q '^deb http://deb.debian.org/debian trixie-backports main$' "$OMNI_ARCHIVE"
+grep -q '050-enable-nexus-omnios-binfmt.hook.chroot' "$BUILD"
+grep -q 'nexus-omniloader --register-binfmt' "$OMNI_UNIT"
+grep -q 'nexus-omniloader %f' "$OMNI_DESKTOP"
+grep -q 'trixie-backports.list.chroot' "$BUILD"
+grep -q 'omnios.list.chroot' "$BUILD"
+grep -q 'nexus-omniloader' "$BUILD"
+grep -q 'wasmtime' "$BUILD"
+grep -q 'nexus-omniloader' "$OMNI_STAGE"
 
 for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py; do
   test -s "$PROJECT_ROOT/agent/$module" || { echo "Missing Nexus Agent runtime module: $module" >&2; exit 1; }
@@ -114,3 +135,7 @@ grep -qx 'application/vnd.microsoft.portable-executable=nexus-app-install.deskto
 test -s "$ROOT/hooks/030-wine-multiarch.hook.chroot"
 sh -n "$ROOT/hooks/030-wine-multiarch.hook.chroot"
 grep -q '030-wine-multiarch.hook.chroot' "$BUILD"
+grep -q 'application/vnd.microsoft.portable-executable=nexus-app-install.desktop;' "$ROOT/includes/etc/skel/.config/mimeapps.list"
+for mime in application/vnd.android.package-archive application/x-msi application/x-mach-binary application/wasm application/x-chrome-extension application/vnd.debian.binary-package; do
+  grep -q "^$mime=nexus-omnisubsystem.desktop;" "$ROOT/includes/etc/skel/.config/mimeapps.list"
+done

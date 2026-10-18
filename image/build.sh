@@ -19,7 +19,7 @@ fi
 mkdir -p "$WORK"
 cd "$WORK"
 
-lb config --mode debian --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer none --archive-areas "main non-free-firmware" --bootloader grub-efi --bootappend-live "boot=live components console=tty0 console=ttyS0,115200n8"
+bash "$ROOT/auto/config"
 
 mkdir -p config/bootloaders/grub-pc
 GRUB_TEMPLATE="/usr/share/live/build/bootloaders/grub-pc/grub.cfg"
@@ -31,16 +31,38 @@ test -s "$GRUB_TEMPLATE" || { echo "Missing live-build GRUB template: $GRUB_TEMP
 
 mkdir -p config/package-lists
 cp "$ROOT/desktop.list.chroot" config/package-lists/nexus-desktop.list.chroot
+cp "$ROOT/package-lists/omnios.list.chroot" config/package-lists/omnios.list.chroot
+
+mkdir -p config/archives
+cp "$ROOT/archives/trixie-backports.list.chroot" config/archives/trixie-backports.list.chroot
 
 mkdir -p config/hooks/live
 cp "$ROOT/hooks/010-enable-nexus-boot-ready.hook.chroot" config/hooks/live/
 chmod 0755 config/hooks/live/010-enable-nexus-boot-ready.hook.chroot
 cp "$ROOT/hooks/030-wine-multiarch.hook.chroot" config/hooks/live/
 chmod 0755 config/hooks/live/030-wine-multiarch.hook.chroot
+cp "$ROOT/hooks/050-enable-nexus-omnios-binfmt.hook.chroot" config/hooks/live/
+chmod 0755 config/hooks/live/050-enable-nexus-omnios-binfmt.hook.chroot
 
 
 mkdir -p config/includes.chroot
 cp -a "$ROOT/includes/." config/includes.chroot/
+
+for runtime in nexus-omniloader wasmtime; do
+  test -x "$ROOT/staging/usr/bin/$runtime" || {
+    echo "Missing staged /usr/bin/$runtime. Run image/stage-omni-subsystem.sh before building the ISO." >&2
+    exit 1
+  }
+done
+test -s "$ROOT/staging/usr/share/doc/wasmtime/LICENSE" || {
+  echo "Missing staged Wasmtime license notice." >&2
+  exit 1
+}
+mkdir -p config/includes.chroot/usr/bin
+install -m 0755 "$ROOT/staging/usr/bin/nexus-omniloader" config/includes.chroot/usr/bin/nexus-omniloader
+install -m 0755 "$ROOT/staging/usr/bin/wasmtime" config/includes.chroot/usr/bin/wasmtime
+mkdir -p config/includes.chroot/usr/share/doc/wasmtime
+install -m 0644 "$ROOT/staging/usr/share/doc/wasmtime/LICENSE" config/includes.chroot/usr/share/doc/wasmtime/LICENSE
 
 mkdir -p config/includes.chroot/opt/nexus/agent
 for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py; do

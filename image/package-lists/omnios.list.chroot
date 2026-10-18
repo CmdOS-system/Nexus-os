@@ -1,0 +1,10 @@
+# Native runtimes bridged by Nexus OmniLoader.
+chromium
+unzip
+zenity
+pkexec
+
+# Android APK inspection and app launch after Waydroid installation.
+aapt
+waydroid
+weston
