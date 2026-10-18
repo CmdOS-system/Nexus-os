@@ -47,3 +47,4 @@ El porcentaje global es una estimación ponderada del plan técnico, no una mét
 
 - CI #1: falló durante la preparación del bootloader porque faltaba `rust-src`; agregado al toolchain y a la instalación del workflow.
 - CI #2: `x86_64 0.15.2` no compila con el nightly actual porque su implementación inestable de `Step` no incluye los métodos nuevos; fijada la dependencia en `0.15.5`, cuya publicación declara compatibilidad con nightlies desde 2026-07-10. Arranque QEMU aún no confirmado.
+- CI #3: pruebas del workspace, construcción BIOS/UEFI y arranque UEFI QEMU con `OMNIOS_BOOT_OK` pasaron; falló solo la publicación por una ruta de artefacto que no encontró archivos. Se prepara una carpeta conocida y se comprueba que contenga ambas imágenes antes de subirlas.

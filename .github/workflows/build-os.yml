@@ -44,10 +44,17 @@ jobs:
       - name: Boot UEFI image and require serial success marker
         working-directory: omnios
         run: timeout 60s cargo run --release -- uefi-smoke
+      - name: Stage generated boot images
+        working-directory: omnios
+        run: |
+          mkdir -p artifacts
+          find target -type f -path '*/out/omnios-*.img' -exec cp -v {} artifacts/ \;
+          test -s artifacts/omnios-uefi.img
+          test -s artifacts/omnios-bios.img
       - name: Upload bootable disk images
         uses: actions/upload-artifact@v4
         with:
           name: omnios-boot-images-x86_64
-          path: omnios/target/release/build/*/out/omnios-*.img
+          path: omnios/artifacts/omnios-*.img
           if-no-files-found: error
           retention-days: 14
