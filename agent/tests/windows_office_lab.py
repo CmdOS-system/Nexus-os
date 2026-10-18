@@ -13,11 +13,35 @@ import time
 import urllib.request
 import zipfile
 from xml.etree import ElementTree as ET
-from PIL import ImageGrab
 
 ODT_URL = 'https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20326-20112.exe'
 ODT_SHA256 = 'fbb64358fd4168acd52ee4efe47ffd032b6231dfb415ae2dce61b0e58ba67f86'
 EXPECTED = 'Nexus Word desktop test: edited and saved.'
+
+
+def fatal_office_service_error(root):
+    """Recognize observed fatal service errors, not generic Office warnings."""
+    users = root / 'prefix/drive_c/users'
+    if not users.is_dir():
+        return None
+    for user in users.iterdir():
+        for temp in (user / 'AppData/Local/Temp', user / 'Temp'):
+            if not temp.is_dir():
+                continue
+            for path in temp.glob('*.log'):
+                if path.is_symlink() or not path.is_file():
+                    continue
+                try:
+                    with path.open('rb') as log:
+                        log.seek(max(0, path.stat().st_size - 262144))
+                        data = log.read(262144)
+                except OSError:
+                    continue  # Installer may rotate or remove a log between polls.
+                for encoding in ('utf-16le', 'utf-8'):
+                    text = data.decode(encoding, errors='replace')
+                    if 'ClickToRunSvc service cannot start - error code 1053' in text:
+                        return 'ClickToRunSvc failed to start (1053); Office cannot queue its installation task'
+    return None
 
 
 def main():
@@ -33,21 +57,46 @@ def main():
         root = Path(directory)
         env = dict(os.environ, WINEPREFIX=str(root / 'prefix'), WINEARCH='win64',
                    WINEDLLOVERRIDES='mscoree,mshtml,winemenubuilder.exe=',
-                   WINEDEBUG='-all,err+all,warn+seh')
+                   WINEDEBUG='-all,err+all,warn+seh,trace+service,trace+process')
 
         def run(stage, args, timeout):
             result['stage'] = stage
             with (evidence / (stage + '.log')).open('w') as log:
-                subprocess.run(args, env=env, cwd=root, stdin=subprocess.DEVNULL,
-                               stdout=log, stderr=log, check=True, timeout=timeout)
+                if stage != 'office-configure':
+                    subprocess.run(args, env=env, cwd=root, stdin=subprocess.DEVNULL,
+                                   stdout=log, stderr=log, check=True, timeout=timeout)
+                    return
+                process = subprocess.Popen(args, env=env, cwd=root, stdin=subprocess.DEVNULL,
+                                           stdout=log, stderr=log)
+                deadline = time.monotonic() + timeout
+                try:
+                    while process.poll() is None:
+                        fatal = fatal_office_service_error(root)
+                        if fatal:
+                            raise RuntimeError(fatal)
+                        if time.monotonic() >= deadline:
+                            raise subprocess.TimeoutExpired(args, timeout)
+                        time.sleep(1)
+                    if process.returncode:
+                        raise subprocess.CalledProcessError(process.returncode, args)
+                finally:
+                    if process.poll() is None:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5)
 
         def screenshot(name):
+            from PIL import ImageGrab
             ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(evidence / name)
 
         def collect_diagnostics():
             for label, command in [('processes', ['ps', '-eo', 'pid,etimes,args']),
                                    ('windows', ['xwininfo', '-root', '-tree']),
-                                   ('clicktorun-service', ['wine', 'sc', 'query', 'ClickToRunSvc'])]:
+                                   ('clicktorun-service', ['wine', 'sc', 'query', 'ClickToRunSvc']),
+                                   ('clicktorun-service-config', ['wine', 'sc', 'qc', 'ClickToRunSvc'])]:
                 try:
                     output = subprocess.run(command, env=env, text=True, errors='replace',
                                             capture_output=True, timeout=10)
