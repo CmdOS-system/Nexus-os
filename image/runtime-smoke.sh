@@ -6,7 +6,20 @@ PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
 LOADER="$ROOT/staging/usr/bin/nexus-omniloader"
 WASMTIME="$ROOT/staging/usr/bin/wasmtime"
 TEMP="$(mktemp -d)"
-trap 'rm -rf "$TEMP"' EXIT
+cleanup() {
+  local status=$?
+  trap - EXIT
+  if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
+    WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
+    timeout 15s env WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
+  fi
+  if ! rm -rf -- "$TEMP"; then
+    chmod -R u+rwX -- "$TEMP" 2>/dev/null || true
+    rm -rf -- "$TEMP" || status=$?
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
 
 for tool in python3 unzip x86_64-w64-mingw32-gcc xvfb-run; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
@@ -56,7 +69,7 @@ printf '%s\n' "$@" > "$NEXUS_CAPTURE"
 SH
 chmod 0755 "$TEMP/fake-bin/darling" "$TEMP/fake-bin/chromium"
 export NEXUS_CAPTURE="$TEMP/macho-args"
-printf '\316\372\355\376NEXUS' > "$TEMP/probe.macho"
+printf '\317\372\355\376NEXUS' > "$TEMP/probe.macho"
 PATH="$TEMP/fake-bin:$PATH" "$LOADER" "$TEMP/probe.macho" 'argument with spaces'
 grep -Fxq shell "$NEXUS_CAPTURE"
 grep -Fq '/Volumes/SystemRoot' "$NEXUS_CAPTURE"
