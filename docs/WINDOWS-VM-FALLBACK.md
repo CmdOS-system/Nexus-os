@@ -17,7 +17,9 @@ Cuatro pruebas locales aprobadas. El entorno local carece de /dev/kvm y herramie
 
 Run39092631455 success; artefacto12123665679 descargado y revisado. El runner dispone de unos15.6GiB de RAM total,85.8GiB libres, Docker y Podman. /dev/kvm devuelve permiso denegado, no ausencia. Faltan QEMU y FreeRDP. Ese verde significa que la inspección funcionó; los requisitos siguen incompletos.
 
-Se añade una segunda consulta de solo lectura con el administrador del runner para diferenciar permisos del usuario y disponibilidad real de KVM. No modifica grupos, permisos, módulos del kernel ni archivos de configuración. Se conservan ambos JSON. Resultado pendiente; no es un patrón de ejecución privilegiada propuesto para el usuario final.
+Se añade una segunda consulta de solo lectura con el administrador del runner para diferenciar permisos del usuario y disponibilidad real de KVM. No modifica grupos, permisos, módulos del kernel ni archivos de configuración. Se conservan ambos JSON. No es un patrón de ejecución privilegiada propuesto para el usuario final.
+
+Run39092711537 success; artefacto12123421036 descargado y revisado: usuario normal recibe permiso denegado y consulta administrativa devuelve KVM API12 disponible. Se confirma acceso posible a aceleración en ese runner; todavía faltan QEMU y FreeRDP. No se creó ninguna VM, instaló Windows o ejecutó Word. Siguiente paso técnico: preparar herramientas y acceso de laboratorio apropiado, y solo entonces instalar Windows/Office en disco virtual desechable.
 
 ## Siguiente entrega
 
