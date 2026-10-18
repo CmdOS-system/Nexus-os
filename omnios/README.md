@@ -6,8 +6,8 @@ OmniOS es un proyecto experimental de sistema operativo en Rust/C para investiga
 
 ```text
 Aplicaciones / formatos
-PE + Win32 │ ELF + POSIX │ Mach-O + Darwin │ APK + ART
-                         │ bridges de usuario
+PE + Win32 │ ELF + POSIX │ Mach-O + Darwin │ APK + ART │ WASM/WASI │ CRX/PWA
+                         │ runtimes/bridges de usuario
 OmniLoader (detección segura; loaders incrementales)
                          │ proceso + personalidad ABI fija
 OmniKernel: syscall dispatcher │ memoria │ scheduler │ IPC
@@ -15,7 +15,7 @@ OmniKernel: syscall dispatcher │ memoria │ scheduler │ IPC
                x86_64 (primera fase) → ARM64
 ```
 
-El dispatcher guarda una personalidad por proceso y selecciona una tabla de rutas inmutable. Los bridges user-mode convierten contratos de Win32, POSIX, Darwin y Android a primitivas internas. El kernel inicial solo muestra la estructura del dispatcher: todavía no instala una entrada de syscall de CPU ni implementa esos servicios. Las llamadas Windows NT varían por versión; no se inventan números estables. Las rutas Windows/Darwin iniciales son identificadores internos producidos por el bridge.
+El dispatcher guarda una personalidad por proceso y selecciona una tabla de rutas inmutable. Los bridges y runtimes de usuario convierten contratos de Win32, POSIX, Darwin, Android y WASI a primitivas internas. El kernel inicial solo muestra la estructura del dispatcher: todavía no instala una entrada de syscall de CPU ni implementa esos servicios. Las llamadas Windows NT varían por versión; no se inventan números estables. Las rutas Windows/Darwin iniciales son identificadores internos producidos por el bridge. WASI se implementará en un proceso sandbox de usuario con capacidades; el kernel solo ofrecerá sus primitivas seguras de memoria, IPC y archivos.
 
 OmniLang tendrá sintaxis estática, ownership/borrowing, memoria segura por defecto y FFI marcado. El compilador previsto usa LLVM y una UIR verificada con backends AOT/JIT. Aún no existe compilador. La UIR sirve para programas OmniLang portables; no convierte mágicamente binarios PE, Mach-O o DEX.
 
@@ -41,7 +41,7 @@ omnios/
 └── subsystems/   # contratos y backlog por bridge/gráficos
 ```
 
-La detección de magic bytes no autentica ni valida una imagen ejecutable. PE/ELF/Mach-O requieren parsing con límites y validación de segmentos; APK es un ZIP que debe verificarse por sus entradas `AndroidManifest.xml` y DEX/recursos antes de elegir ART. DEX independiente comienza con `dex\n`. La capa correcta depende también de API, arquitectura, servicios, drivers y licencia.
+La detección de magic bytes no autentica ni valida una imagen ejecutable. PE/ELF/Mach-O requieren parsing con límites y validación de segmentos; APK es un ZIP que debe verificarse por sus entradas `AndroidManifest.xml` y DEX/recursos antes de elegir ART. DEX independiente comienza con `dex\n`. WebAssembly empieza con `\0asm`; CRX con `Cr24`, pero reconocer el encabezado no verifica firma, publicador ni permisos. Una PWA es una aplicación web descrita por un manifiesto y recursos web, no un formato binario detectado por magic bytes; requiere un navegador o shell web compatible. La capa correcta depende también de API, arquitectura, servicios, drivers y licencia.
 
 ## Fuentes de diseño
 
@@ -53,4 +53,4 @@ La detección de magic bytes no autentica ni valida una imagen ejecutable. PE/EL
 
 ## Alcance no validado
 
-El primer CI valida solo el arranque UEFI de un kernel x86_64 mínimo en QEMU. No valida una shell, drivers, syscall real, ELF/PE/Mach-O/APK loader, Windows/macOS/Android ABI, aplicaciones gráficas ni ARM64. Emulación/traducción de ISA y compatibilidad de ABI tienen costes y límites; no se promete “latencia cero” ni compatibilidad total.
+El primer CI valida el arranque UEFI de un kernel x86_64 mínimo en QEMU y pruebas unitarias de firmas. No valida una shell, drivers, syscall real, parsers completos, firma CRX, runtime WASI, PWA, Windows/macOS/Android/ChromeOS ABI, aplicaciones gráficas ni ARM64. Emulación/traducción de ISA y compatibilidad de ABI tienen costes y límites; no se promete “latencia cero” ni compatibilidad total.

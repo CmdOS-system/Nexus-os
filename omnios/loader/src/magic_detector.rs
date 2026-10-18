@@ -8,6 +8,8 @@ pub enum BinaryFormat {
     MachOFat,
     Dex,
     ZipContainer,
+    WebAssemblyCandidate,
+    CrxCandidate,
     Unknown,
 }
 
@@ -17,6 +19,8 @@ pub enum Subsystem {
     WindowsCompatibility,
     DarwinCompatibility,
     AndroidRuntime,
+    WasmRuntime,
+    ChromeExtensionManager,
     ContainerInspector,
     None,
 }
@@ -36,6 +40,22 @@ const UNKNOWN: Detection = Detection {
 
 /// Inspects a prefix supplied by a bounded file reader; extensions are ignored.
 pub fn detect_magic(bytes: &[u8]) -> Detection {
+    if bytes.starts_with(b"\0asm") {
+        return Detection {
+            format: BinaryFormat::WebAssemblyCandidate,
+            subsystem: Subsystem::WasmRuntime,
+            note: "Firma WebAssembly reconocida; validar versión, secciones, imports y límites antes de ejecutar en un runtime WASI aislado.",
+        };
+    }
+
+    if bytes.starts_with(b"Cr24") {
+        return Detection {
+            format: BinaryFormat::CrxCandidate,
+            subsystem: Subsystem::ChromeExtensionManager,
+            note: "Cabecera CRX reconocida; comprobar versión y longitudes, verificar firma/publicador y permisos antes de instalar.",
+        };
+    }
+
     if bytes.starts_with(b"\x7fELF") {
         return Detection {
             format: BinaryFormat::Elf,
@@ -138,6 +158,20 @@ mod tests {
         assert_eq!(detect_magic(&[0xca, 0xfe, 0xba, 0xbe]).format, BinaryFormat::MachOFat);
         assert_eq!(detect_magic(b"dex\n035\0").format, BinaryFormat::Dex);
         assert_eq!(detect_magic(b"PK\x03\x04").format, BinaryFormat::ZipContainer);
+    }
+
+    #[test]
+    fn detects_wasm_and_crx_as_unverified_candidates() {
+        let wasm = detect_magic(b"\0asm\x01\0\0\0");
+        assert_eq!(wasm.format, BinaryFormat::WebAssemblyCandidate);
+        assert_eq!(wasm.subsystem, Subsystem::WasmRuntime);
+
+        let crx2 = detect_magic(b"Cr24\x02\0\0\0");
+        let crx3 = detect_magic(b"Cr24\x03\0\0\0");
+        assert_eq!(crx2.format, BinaryFormat::CrxCandidate);
+        assert_eq!(crx3.format, BinaryFormat::CrxCandidate);
+        assert_eq!(crx3.subsystem, Subsystem::ChromeExtensionManager);
+        assert!(crx3.note.contains("verificar firma"));
     }
 
     #[test]
