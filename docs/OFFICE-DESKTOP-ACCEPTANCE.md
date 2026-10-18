@@ -42,3 +42,30 @@ Aprobación de laboratorio representa solo base técnica. Word web, LibreOffice 
 2. Resolver el primer bloqueo reproducible o decidir backend alternativo con evidencia.
 3. Integrar en Nexus el backend que funcione y repetir los siete requisitos arriba.
 4. MantenerOffice como P0 funcional de compatibilidad; APK/Linux siguen en alcance sin porcentaje ficticio.
+
+## Primer bloqueo reproducido
+
+Run39091083886 y artefacto12122462178 inspeccionados: hashODT correcto, extracción7z25.01 falla con `Incorrect reparse stream` sobre configuration-Office365-x64.xml (salida2). ODT contiene CABMSZip embebido en offset263168. No llegó a ejecutar setup.exe ni instalarOffice; no clasificarlo como incompatibilidadWord. Se usa ahora el propio autoextractor oficial, cuyas opciones `/quiet` y `/extract:path` se verificaron en el textoUsage embebido del mismo binarioMicrosoft. Wineboot se prepara antes de extraer; el resultado del siguiente intento está pendiente. Sin nuevaISO ni cambios al catálogo deNexus.
+
+
+## Extracción oficial aprobada; bloqueo en configuración
+
+Run39091221952 falló por timeout720s en `setup.exe /configure`; artefacto12123107597 descargado. ODT oficial se extrajo correctamente; setupSHA25650facf295f357d8230b4d50678536148e32f34b4ac33387269d5a72c93ff810a. No hayWINWORD instalado y capturaoffice-failure muestra solo una ventanaMicrosoftincompleta. Stdout/stderr vacíos no permiten atribuirlo a red, COM o servicio específico; no declarar causa resuelta.
+
+Siguiente diagnóstico usa /download y después /configure, presupuestos360+360s (sin aumentar total). Exige archivosOffice/Data antes de configurar, registra entradas de versión/payload y recoge logs %TEMP%/%WINDIR%Temp antes de destruir perfil; máximo24logs×256KiB. Añade inventario de procesos/ventanas y consulta de ClickToRunSvc, con erroresWine habilitados. Fuente: https://learn.microsoft.com/en-us/microsoft-365-apps/deploy/overview-office-deployment-tool . Un fallo/timeout es fallo del caso, nunca aceptaciónWord.
+
+
+## Bloqueo RPC identificado y ensayo NTLM — 17/10/2026,22:38 Bogotá
+
+Run39092259454 y artefacto12123641098 descargados e inspeccionados. /download terminó y Office/Data contiene16.0.20430.20182, v32.cab y su manifiesto versionado. /configure vence360s sin instalarWord. El logOfficeworker registra fallo fatal `RpcBindingSetAuthInfo failed`,1747/0x6d3, y salida17006. Microsoft define1747 como RPC_S_UNKNOWN_AUTHN_SERVICE; Wine registra `ntlm_auth was not found` y deshabilita NTLM. Los avisos de catálogo188 se declaran no fatales en el propio log; no atribuirles sin prueba el bloqueo principal.
+
+Hipótesis acotada: ausencia de NTLM en Wine impide autenticar el RPC local deClickToRun. Wine10 `dlls/msv1_0/main.c` comprueba ntlm_auth al inicializar el paquete; `dlls/rpcrt4/rpc_binding.c` retorna1747 si no encuentra servicioSSPI. El paqueteDebianTrixie winbind contiene /usr/bin/ntlm_auth: https://packages.debian.org/trixie/amd64/winbind/filelist . Código primario: https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/msv1_0/main.c . ErrorMicrosoft: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--1700-3999- .
+
+Se añade únicamente winbind al laboratorio y se exige registrar `ntlm_auth --version` antes de wineboot. Se fija Office16.0.20430.20182 para comparar con el intento observado, manteniendo arquitectura32, canalCurrent y límites360+360s. CompilaciónPython aprobada; instalación/tarea real pendiente. No es activaciónOffice ni bypass de credenciales. No añadir a laISO hasta probar necesidad/resultado. Si desaparece1747 pero aparece otra barrera, registrar la nueva fase en lugar de declarar compatibilidad general.
+
+
+## NTLM habilitado; siguiente barrera: inicio de servicio — 17/10/2026,22:50 Bogotá
+
+Run39094394466 falló; artefacto12124121862 descargado e inspeccionado. Registra ntlm_auth4.22.11 y Wine10, descarga Office16.0.20430.20182. El errorRPC1747 y la advertencia dehelperausente ya no aparecen en registros recogidos. El worker avanza a creación de configuración, pero ClickToRunSvc no inicia: error1053, tarea no encolada, UI1053-44-30068. ConsultaSC posterior: servicio registrado, STOPPED, salida1077. Word no está instalado. Esto supera la barrera anterior observada, no demuestra corrección completa deOffice.
+
+No repetir el mismo timeout: el laboratorio detecta la frase fatal específica de1053 en logsUTF16/UTF8 mientras corre configure y falla inmediatamente, conservando diagnósticos. No aborta por avisos no fatales de catálogo188. Tres pruebas locales aprobadas: falloUTF16, aviso benigno y enlace externo/ausencia de logs. Se añade SCqc para ruta/configuración y trazasWine de servicios/procesos; no se aumenta el presupuesto ni se cambia otra dependencia. Próximo ensayo es diagnóstico del inicio de servicio, no una afirmación de compatibilidad.

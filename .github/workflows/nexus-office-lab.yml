@@ -1,0 +1,39 @@
+name: Nexus Microsoft Word Desktop Lab
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'agent/tests/windows_office_lab.py'
+      - '.github/workflows/nexus-office-lab.yml'
+permissions:
+  contents: read
+concurrency:
+  group: office-lab-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  word-desktop:
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    timeout-minutes: 30
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Prepare disposable Debian Wine laboratory
+        run: |
+          dpkg --add-architecture i386
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates wine wine64 wine32:i386 fonts-wine winbind xvfb xauth x11-utils xdotool python3 python3-pil
+          useradd --create-home nexuslab
+      - uses: actions/checkout@v4
+      - name: Attempt official Office installation and real Word document task
+        run: |
+          mkdir -p office-evidence
+          chown nexuslab:nexuslab office-evidence
+          runuser -u nexuslab -- xvfb-run -a -s '-screen 0 1920x1080x24' python3 agent/tests/windows_office_lab.py
+      - name: Preserve actual result including failed stage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-word-desktop-evidence
+          path: office-evidence/
+          if-no-files-found: warn
