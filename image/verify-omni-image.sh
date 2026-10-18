@@ -13,7 +13,22 @@ ISO="$(realpath "$1")"
 TEMP="$(mktemp -d)"
 trap 'rm -rf "$TEMP"' EXIT
 xorriso -osirrox on -indev "$ISO" -extract /live/filesystem.squashfs "$TEMP/filesystem.squashfs"
-unsquashfs -f -d "$TEMP/rootfs" "$TEMP/filesystem.squashfs" >/dev/null
+# Extract only the regular files and one symlink verified below. This avoids
+# creating /dev character/block nodes or restoring privileged ownership/xattrs.
+VERIFY_PATHS=(
+  usr/bin/nexus-omniloader
+  usr/bin/wasmtime
+  usr/lib/nexus/nexus-waydroid-preflight
+  usr/lib/nexus/nexus-wine-office-profile
+  usr/share/applications/nexus-wine-office-profile.desktop
+  etc/modules-load.d/nexus-waydroid.conf
+  etc/systemd/system/nexus-omnios-binfmt.service
+  etc/systemd/system/multi-user.target.wants/nexus-omnios-binfmt.service
+  var/lib/dpkg/arch
+  var/lib/dpkg/status
+)
+unsquashfs -no-xattrs -no-progress -f -d "$TEMP/rootfs" \
+  "$TEMP/filesystem.squashfs" "${VERIFY_PATHS[@]}" >/dev/null
 
 ROOTFS="$TEMP/rootfs" python3 - <<'PY'
 import os
