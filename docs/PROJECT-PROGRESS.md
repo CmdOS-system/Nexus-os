@@ -89,3 +89,10 @@ Se agrega ChromeOS como módulo independiente de peso1 y 0% validado. Para mante
 | ChromeOS | 1 | 0% | Probar por separado Nexus instalado/arrancando en equipo compatible y apps Linux dentro del entorno Linux de Chromebook; soporte Android depende de modelo. |
 
 La tabla de módulos vigente queda con estos cambios respecto al corte anterior: macOS1%, ChromeOS1%, Seguridad/hardware/entrega2%, peso total100%. Los porcentajes ChromeOS/macOS se mantienen en0 hasta pruebas reales. El alcance detallado y fuentes primarias quedan en MULTIPLATFORM-APPLICATIONS.md. No confundir ChromeOS con Linux de escritorio genérico ni macOS con Linux/Wine.
+
+
+## Visión del proyecto: máxima compatibilidad — 2026-10-17
+
+El objetivo de producto se amplía a cubrir la mayor cantidad posible de aplicaciones Linux, Windows, Android/APK, macOS y ChromeOS con una experiencia común. “Todas las aplicaciones” es una visión, no una garantía de ejecución universal: los programas requieren arquitecturas, APIs, controladores, servicios, DRM, licencias y hardware distintos. Se mantendrá una matriz verificable por app/versión/dispositivo y niveles de aceptación. Véase MULTIPLATFORM-APPLICATIONS.md.
+
+El porcentaje global de Nexus mide etapas de construcción del sistema; no representa la proporción de aplicaciones del mundo que funcionan. La métrica de catálogo se publicará aparte una vez exista una lista de prueba versionada. Esta ampliación no cambia todavía pesos ni porcentajes: macOS0%, ChromeOS0%, Linux instalador0%, Android/APK0%, Windows50%; global ≈38%. Cualquier cambio futuro de peso debe documentar el cálculo y la causa.

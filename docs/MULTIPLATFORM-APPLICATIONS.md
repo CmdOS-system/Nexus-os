@@ -2,7 +2,7 @@
 Fecha: 2026-10-17 (America/Bogota).
 
 ## Requisito central
-Nexus debe ofrecer una experiencia sencilla para aplicaciones Linux, Windows y Android/APK; y una ruta de compatibilidad claramente delimitada para macOS y ChromeOS. El usuario debe poder abrir un paquete desde el explorador, revisar nombre/origen/permisos, instalar gráficamente y abrirlo desde el menú cuando el formato y el adaptador lo permitan. La compatibilidad se declara por aplicación, versión, arquitectura y equipo probado; reconocer una extensión no demuestra que funcione.
+La visión de Nexus es ofrecer acceso al catálogo más amplio posible de aplicaciones de Linux, Windows, Android/APK, macOS y ChromeOS desde una experiencia sencilla. Cada formato tendrá su adaptador adecuado y una matriz pública de aplicaciones/versiones probadas. «Todas las aplicaciones» es la meta de cobertura; no se puede prometer que cada programa funcione en cada equipo mientras dependa de controladores, servicios propietarios, arquitectura, licencias, DRM, antitrampas o funciones en la nube. El usuario debe poder abrir un paquete desde el explorador, revisar nombre/origen/permisos, instalar gráficamente y abrirlo desde el menú cuando el formato y el adaptador lo permitan. La compatibilidad se declara por aplicación, versión, arquitectura y equipo probado; reconocer una extensión no demuestra que funcione.
 
 ## Estado comprobado
 - Global estimado: 38%, conforme a PROJECT-PROGRESS.md. Este documento no cambia la puntuación.
@@ -63,3 +63,32 @@ Cada plataforma requiere evidencia de instalación, apertura, tarea útil, persi
 
 ## Instrucción para la siguiente IA
 Conéctate al repositorio CmdOS-system/Nexus-os, consulta la rama main y los PR abiertos, lee AGENTS.md si existe, PROJECT-CONTINUITY.md, PROJECT-PROGRESS.md, AI-HANDOFF.md y este documento. Comprueba los resultados actuales de Actions y sus artefactos antes de atribuir éxitos. Continúa con implementación y pruebas reales del siguiente punto pendiente; preserva cambios ajenos y no confundas este diseño con una función implementada. Mantén el porcentaje global y el estado de cada plataforma ligados a evidencia. Prioridades centrales: Linux, Windows y APK con instalación gráfica sencilla; compatibilidad macOS y ChromeOS explícita, sin prometer ejecución binaria fuera de soporte; Word es la aceptación relevante de Office.
+
+
+## Visión ampliada: máximo catálogo compatible — 2026-10-17
+
+La meta del proyecto es que Nexus facilite encontrar, instalar y abrir la mayor cantidad posible de aplicaciones pertenecientes a Linux, Windows, Android/APK, macOS y ChromeOS. La compatibilidad total literal de cada aplicación no se puede asegurar: depende de arquitectura CPU, APIs, drivers, servicios externos, licencias, hardware, DRM y decisiones del fabricante. El producto debe ser transparente: cada entrada informa versión probada, equipo, motor, nivel y fallos conocidos. Mantener “cobertura universal” como visión; usar resultados de matriz para afirmar soporte.
+
+### Capas de compatibilidad
+
+| Camino | Tecnologías a evaluar | Alcance esperado y límite |
+| --- | --- | --- |
+| Nativa / multiplataforma | paquetes Linux, Flatpak, AppImage, web/PWA | Mejor opción cuando el fabricante publica una build compatible; aún validar dependencias, arquitectura y permisos. |
+| Traducción / runtime | Wine/Proton para Windows; Waydroid para APK; Darling en investigación para binarios macOS | Traduce o reimplementa interfaces del sistema. No reproduce automáticamente cada driver, framework, servicio, DRM o interfaz. Darling declara limitaciones gráficas relevantes y el soporte se comprueba app por app. |
+| Sistema invitado o servicio remoto | KVM/QEMU para Windows; macOS VM únicamente bajo condiciones permitidas; aplicaciones alojadas en servicios oficiales | Mayor aislamiento, consumo de recursos y requisitos de licencia. La ejecución remota depende de Internet y cuenta; no equivale a instalación local. |
+| ChromeOS | PWA/navegador; entorno Linux Crostini; Android solo en equipos compatibles | ChromeOS es otra plataforma anfitriona. Compatibilidad de Nexus en Chromebook, Linux dentro de ChromeOS y Android del Chromebook son pruebas distintas. |
+
+No presentar una capa como “emulador universal”. Wine permite muchas apps Windows a través de APIs; Waydroid integra Android como contenedor en Linux; Darling es una opción experimental con límites, especialmente GUI; las guías de Chromebook muestran que Linux/Android dependen de características y compatibilidad del dispositivo.
+
+### Métrica de cobertura
+
+Publicar dos medidas diferentes: (1) avance de construcción de Nexus, calculado en PROJECT-PROGRESS.md; (2) cobertura del catálogo, calculada solo sobre una lista versionada de aplicaciones representativas por plataforma. Para cada app: sin probar, abre, tarea básica, tarea útil, persistencia/actualización y aceptación. Desglosar además por CPU/dispositivo. No convertir una app aprobada en un porcentaje de “todas las aplicaciones”; añadir cobertura de categorías prioritarias (oficina, navegador, comunicación, diseño, utilidades, juegos) y permitir que el usuario consulte antes de descargar.
+
+### Fuentes primarias adicionales
+
+- WineHQ, funcionamiento y traducción de llamadas: https://www.winehq.org/about/
+- Darling, estado y limitaciones: https://github.com/darlinghq/darling y https://docs.darlinghq.org/installing-software.html
+- Waydroid, arquitectura y aplicaciones: https://docs.waydro.id/usage/install-and-run-android-applications
+- Chromebook, disponibilidad Linux y Android: https://support.google.com/chromebook/answer/9145439 y https://support.google.com/chromebook/answer/7021273
+
+La visión de catálogo máximo queda incorporada. La implementación y los porcentajes siguen ligados a evidencia; este acuerdo de alcance no eleva avance por sí mismo.
