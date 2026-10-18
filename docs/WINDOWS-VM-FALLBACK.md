@@ -26,3 +26,10 @@ Run39092711537 success; artefacto12123421036 descargado y revisado: usuario norm
 Inspeccionar ambos informes; elegir un entorno apropiado y configurar el backend en un laboratorio aislado. Después instalar Windows/Office legítimos en disco virtual desechable y probar RemoteApp y Word. No exponer RDP públicamente ni guardar credenciales en logs.
 
 Criterios finales: [OFFICE-DESKTOP-ACCEPTANCE.md](OFFICE-DESKTOP-ACCEPTANCE.md). Global≈38%, Windows50%, Word0/7. Este preflight no aumenta los porcentajes.
+
+
+## Siguiente prueba: ejecución KVM real, sin Windows
+
+Se añade job aislado `exercise-kvm`: instala QEMU y FreeRDP3 en runnerUbuntu24.04 desechable y ejecuta `agent/tests/windows_vm_kvm_smoke.py` con opt-in explícito. Crea máquina q35/KVM,256MiB y una CPU virtual, sin discos, ISO ni red; consultaQMP para confirmar aceleración, continúaCPU, confirma estado running, pausa y cierraQEMU limpiamente. Conserva versiones y resultadoJSON. FreeRDP3 se verifica con /version, sin conectarse a ningúnservidor.
+
+Fuentes: esquemaQEMU qapi/run-state.json, referenciaQMP query-kvm/query-status/cont/stop/quit, paqueteoficialUbuntu freerdp3-x11. La API/query disponible no basta: esta prueba exige ejecución deCPU virtual. El estado running de esta máquina sinOS no es arranqueWindows, RemoteApp o aceptaciónWord. No hay copia deWindows/Office, licencia ocredenciales en esta prueba. Guardias deentornodesechable y compilaciónPython comprobadaslocalmente; ejecuciónKVM realpendiente. No se añaden herramientas a laISO deNexus por este ensayo.
