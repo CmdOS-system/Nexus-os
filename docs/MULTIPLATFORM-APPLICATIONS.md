@@ -92,3 +92,10 @@ Publicar dos medidas diferentes: (1) avance de construcción de Nexus, calculado
 - Chromebook, disponibilidad Linux y Android: https://support.google.com/chromebook/answer/9145439 y https://support.google.com/chromebook/answer/7021273
 
 La visión de catálogo máximo queda incorporada. La implementación y los porcentajes siguen ligados a evidencia; este acuerdo de alcance no eleva avance por sí mismo.
+
+
+## Primera pieza creada: asesor de compatibilidad de paquetes
+
+En `agent/compatibility_advisor.py` hay un módulo inicial que inspecciona solo metadatos locales de un archivo y sugiere una ruta: gestor nativo Linux, Flatpak, Wine/VM Windows, Waydroid Android, candidato AppImage o herramienta de extensiones Chromium. No extrae archivos, contacta repositorios, instala ni ejecuta paquetes. Detecta formatos con firmas/cabeceras y verifica estructura básica de APK y .deb; el nombre y la extensión no bastan. Para desconocidos devuelve una explicación y no una orden de ejecución. La recomendación nunca equivale a compatibilidad aprobada.
+
+Ocho pruebas unitarias cubren PE/arquitectura, APK válido e inválido, miembros de .deb, CRX, archivo mal etiquetado, enlace simbólico, archivo inexistente e imagen .dmg. Ejecutadas localmente con Python: 8/8 aprobadas. La próxima etapa es conectar el asesor al selector Nexus Install; después añadir pruebas con paquetes oficiales y adaptadores reales, inicialmente Linux Flatpak/.deb. Aún no está integrado en la ISO ni disponible al usuario final.
