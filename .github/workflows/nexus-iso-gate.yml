@@ -52,14 +52,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils
 
-      - name: Install Rust stable for the Linux loader
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install project Rust nightly for the Linux loader
+        uses: dtolnay/rust-toolchain@nightly
         with:
           targets: x86_64-unknown-linux-gnu
 
       - name: Test real Linux loader
         run: |
-          cargo test --manifest-path omnios/Cargo.toml -p omni-loader
+          cargo +nightly test --manifest-path omnios/Cargo.toml -p omni-loader
 
       - name: Compile loader and stage checksum-verified Wasmtime
         run: bash image/stage-omni-subsystem.sh

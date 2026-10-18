@@ -31,10 +31,10 @@ Gestor de archivos / execve
 
 | Ruta | Comportamiento implementado | Requisitos y límites pendientes |
 |---|---|---|
-| PE `.exe` / MSI | Wine vía `binfmt_misc` o asociación MIME | No se redirige automáticamente a Proton: Steam/Proton no es una API genérica para todo instalador. No acredita Office/Word ni periféricos. |
+| PE `.exe` / MSI | Wine para PE; los MSI válidos se pasan a `wine msiexec /i` vía `binfmt_misc` o asociación MIME | No se redirige automáticamente a Proton: Steam/Proton no es una API genérica para todo instalador. No acredita Office/Word ni periféricos. |
 | APK | Comprueba ZIP y entradas Android; pide confirmación, instala en Waydroid e intenta abrir el package ID con `aapt` | Waydroid debe inicializarse, tener imagen Android, Binder y sesión Wayland funcional. La ISO instala componentes; no descarga ni configura imágenes Android durante el build. Aceptación GUI Live pendiente. |
 | DEX independiente | Explica por qué no es un APK instalable | Requiere ART/framework Android; no se inventa un paquete alrededor del DEX. |
-| Mach-O | Llama a `darling` si existe en el sistema | Darling no se distribuye con la ISO por ser externo al archive Debian usado aquí; aplicaciones, GUI, arquitectura y versión no son universalmente compatibles. |
+| Mach-O | Llama a `darling shell` si existe; traduce la ruta del host a `/Volumes/SystemRoot` y cita los argumentos para el shell del prefix | Darling no se distribuye con la ISO por ser externo al archive Debian usado aquí; aplicaciones, GUI, arquitectura y versión no son universalmente compatibles. |
 | WASM | Ejecuta Wasmtime sin conceder preopens de filesystem | El comportamiento WASI depende de imports y versión. El usuario sigue siendo responsable de ejecutar el módulo escogido. |
 | CRX | Abre gestor de extensiones Chromium en perfil dedicado | No instala a ciegas extensiones de terceros. CRX es extensión del navegador, no una app independiente; verificación de editor/permisos e instalación manual pendiente. |
 | `.deb` | Pide confirmación y solicita autenticación de escritorio antes de apt | Requiere red/repositorios válidos y privilegios aceptados. Los paquetes locales no se instalan solo por descargarlos. |
@@ -43,11 +43,11 @@ No se descargan binarios de Darling/Proton/Wine fuera de los repositorios config
 
 ## Ejecución local reproducible
 
-En Debian x86_64 con Rust estable:
+En Debian x86_64 con Rust nightly, requerido porque el workspace también contiene la base UEFI:
 
 ```sh
-cargo fmt --manifest-path omnios/Cargo.toml --package omni-loader -- --check
-cargo test --manifest-path omnios/Cargo.toml -p omni-loader
+cargo +nightly fmt --manifest-path omnios/Cargo.toml --package omni-loader -- --check
+cargo +nightly test --manifest-path omnios/Cargo.toml -p omni-loader
 bash image/stage-omni-subsystem.sh
 docker run --rm --privileged --mount type=bind,source="$PWD",target=/src --workdir /src debian:trixie bash image/build.sh
 ```
@@ -62,3 +62,4 @@ La compilación requiere red para paquetes Debian y descargar el artefacto fijad
 - [Debian Trixie Backports: Waydroid](https://packages.debian.org/trixie-backports/utils/waydroid).
 - [Waydroid: instalar y ejecutar aplicaciones](https://docs.waydro.id/usage/install-and-run-android-applications).
 - [Wasmtime releases](https://github.com/bytecodealliance/wasmtime/releases): release inmutable y digest de artefactos.
+- [Darling shell](https://docs.darlinghq.org/darling-shell.html) y [límites de instalación de software](https://docs.darlinghq.org/installing-software.html).

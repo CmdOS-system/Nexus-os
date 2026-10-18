@@ -15,6 +15,7 @@ const LOADER: &str = "/usr/bin/nexus-omniloader";
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Route {
     Windows,
+    WindowsInstaller,
     AndroidApk,
     AndroidDex,
     MacOs,
@@ -73,16 +74,16 @@ fn registration_bytes(rule: &BinfmtRule) -> Vec<u8> {
 fn route(path: &Path, prefix: &[u8]) -> Route {
     let extension = path.extension().and_then(OsStr::to_str).unwrap_or("").to_ascii_lowercase();
     match extension.as_str() {
-        "msi" if prefix.starts_with(&[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) => return Route::Windows,
+        "msi" if prefix.starts_with(&[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) => return Route::WindowsInstaller,
         "apk" if prefix.starts_with(b"PK\x03\x04") => return Route::AndroidApk,
-        "dex" if nexus_loader::magic_detector::detect_magic(prefix).format == nexus_loader::magic_detector::BinaryFormat::Dex => return Route::AndroidDex,
+        "dex" if omni_loader::magic_detector::detect_magic(prefix).format == omni_loader::magic_detector::BinaryFormat::Dex => return Route::AndroidDex,
         "deb" if prefix.starts_with(b"!<arch>\n") => return Route::DebianPackage,
         "wasm" | "wat" => return Route::Wasm,
         "crx" if prefix.starts_with(b"Cr24") => return Route::ChromeExtension,
         _ => {}
     }
-    let detection = nexus_loader::magic_detector::detect_magic(prefix);
-    use nexus_loader::magic_detector::{BinaryFormat, Subsystem};
+    let detection = omni_loader::magic_detector::detect_magic(prefix);
+    use omni_loader::magic_detector::{BinaryFormat, Subsystem};
     match (detection.format, detection.subsystem) {
         (BinaryFormat::Elf, _) => Route::NativeElf,
         (BinaryFormat::PeCandidate, _) => Route::Windows,
@@ -158,6 +159,12 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
             args.extend_from_slice(extra);
             run("wine", args)
         }
+        Route::WindowsInstaller => {
+            require_program("wine", "instalar paquetes MSI mediante Windows Installer de Wine")?;
+            let mut args = vec![OsString::from("msiexec"), OsString::from("/i"), absolute.into_os_string()];
+            args.extend_from_slice(extra);
+            run("wine", args)
+        }
         Route::AndroidApk => {
             require_program("unzip", "comprobar que el ZIP tiene estructura APK")?;
             let mut child = Command::new("unzip")
@@ -210,9 +217,17 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
         Route::AndroidDex => Err(io::Error::other("Un .dex aislado no es una aplicación Android instalable. Usa el .apk original con manifiesto, recursos y firma.")),
         Route::MacOs => {
             require_program("darling", "intentar ejecutar un binario Mach-O en Darling")?;
-            let mut args = vec![absolute.into_os_string()];
-            args.extend_from_slice(extra);
-            run("darling", args)
+            let path_inside_prefix = Path::new("/Volumes/SystemRoot")
+                .join(absolute.strip_prefix("/").map_err(|_| io::Error::other("La ruta Mach-O debe ser absoluta."))?);
+            let executable = path_inside_prefix.to_str()
+                .ok_or_else(|| io::Error::other("Darling solo puede recibir rutas UTF-8 en esta versión."))?;
+            let mut command = vec![shell_quote(executable)];
+            for argument in extra {
+                let argument = argument.to_str()
+                    .ok_or_else(|| io::Error::other("Darling solo puede recibir argumentos UTF-8 en esta versión."))?;
+                command.push(shell_quote(argument));
+            }
+            run("darling", [OsString::from("shell"), OsString::from(command.join(" "))])
         }
         Route::Wasm => {
             require_program("wasmtime", "ejecutar un módulo WebAssembly/WASI")?;
@@ -297,6 +312,10 @@ fn parse_aapt_package(line: &str) -> Option<&str> {
     (!package.is_empty() && package.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_')).then_some(package)
 }
 
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
 struct OpenOptionsWrite;
 impl OpenOptionsWrite {
     fn open(path: &Path) -> io::Result<File> {
@@ -331,7 +350,7 @@ mod tests {
     #[test]
     fn routes_supported_magics_and_extensions() {
         assert_eq!(route(Path::new("run.exe"), b"MZ"), Route::Windows);
-        assert_eq!(route(Path::new("install.msi"), &[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Route::Windows);
+        assert_eq!(route(Path::new("install.msi"), &[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Route::WindowsInstaller);
         assert_eq!(route(Path::new("app.apk"), b"PK\x03\x04"), Route::AndroidApk);
         assert_eq!(route(Path::new("APP.APK"), b"PK\x03\x04"), Route::AndroidApk);
         assert_eq!(route(Path::new("classes.dex"), b"dex\n035\0"), Route::AndroidDex);
@@ -355,7 +374,7 @@ mod tests {
         assert_eq!(RULES.len(), 11);
         assert!(RULES.iter().all(|r| r.name.starts_with("nexus-")));
         assert!(RULES.iter().all(|r| registration_bytes(r).windows(LOADER.len()).any(|w| w == LOADER.as_bytes())));
-        assert!(registration_bytes(&RULES[4]).windows(4).any(|w| w == [0xfe, 0xed, 0xfa, 0xcf]));
+        assert!(registration_bytes(&RULES[7]).windows(4).any(|w| w == [0xfe, 0xed, 0xfa, 0xcf]));
     }
 
     #[test]
@@ -363,5 +382,11 @@ mod tests {
         assert_eq!(parse_aapt_package("package: name='com.example.reader' versionCode='4'"), Some("com.example.reader"));
         assert_eq!(parse_aapt_package("package: name='; touch /tmp/pwned'"), None);
         assert_eq!(parse_aapt_package("application: label='Sample'"), None);
+    }
+
+    #[test]
+    fn darling_shell_arguments_are_single_quoted() {
+        assert_eq!(shell_quote("/Volumes/SystemRoot/home/My App/run"), "'/Volumes/SystemRoot/home/My App/run'");
+        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
     }
 }

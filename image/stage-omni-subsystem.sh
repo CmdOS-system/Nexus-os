@@ -12,7 +12,7 @@ for tool in cargo curl jq sha256sum tar install; do
   command -v "$tool" >/dev/null || { echo "Required build tool missing: $tool" >&2; exit 1; }
 done
 
-cargo build --manifest-path "$PROJECT_ROOT/omnios/Cargo.toml" --release --target x86_64-unknown-linux-gnu -p omni-loader --bin nexus-omniloader
+cargo +nightly build --manifest-path "$PROJECT_ROOT/omnios/Cargo.toml" --release --target x86_64-unknown-linux-gnu -p omni-loader --bin nexus-omniloader
 mkdir -p "$STAGING/usr/bin"
 install -m 0755 "$PROJECT_ROOT/omnios/target/x86_64-unknown-linux-gnu/release/nexus-omniloader" "$STAGING/usr/bin/nexus-omniloader"
 
