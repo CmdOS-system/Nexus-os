@@ -181,3 +181,5 @@ jobs:
             image/work/*.iso
             image/work/SHA256SUMS
             nexus-qemu-serial.log
+
+# Operational trigger: refresh the ISO Gate runner after the queued run #163.
