@@ -443,3 +443,12 @@ PR #31 integrada99854c2e: instalador crea GDI0 automáticamente paraNotepad++ an
 Se detectó que Nexus ISO Gate no incluía agent/app_installer.py entre paths; por eso integrarPR31 NO construyó automáticamente ISO. No describirla como ISO ya reconstruida. Se añaden el módulo instalador y el propio workflow a paths; cambioCIpropuesto debe disparar una construcción al integrarse y seguirá cambiosfuturos de ese módulo. No ampliar a todos los tests para evitar reconstrucciones por pruebas/docs.
 
 Office actual: run39091221952 falló a720s de setup/configure tras extraerODT correctamente; no hayWordinstalado. Artefacto12123107597 inspeccionado, capturaMicrosoftincompleta. PR #32 prepara /download y /configure separados (360+360s), captura de logsTEMP/procesos/ventanas y diagnósticoWine; no incrementar tiempos ni declarar causaexacta. RequisitoWord/Office sigue0/7 enNexus, global≈38%.
+
+
+## Nueva ISO y adaptador automático confirmados — 17/10/2026,22:40 Bogotá
+
+ISO Gate39092332072 success, fuente28c66b58474091cbc4789db36de66073aa807229. Captura39093608994 success; artefacto12124062163 descargado e inspeccionado. ISO SHA256:3f511d725a01cbb863fa199903a30dfb7a2921823e2539c36788cb6edc26f4a7. Serial contiene NEXUS_NOTEPAD_PACKAGED_GDI_PASS, apertura/menú deNotepad++ y WINDOWS_ISO_PASS; no NEXUS_NOTEPAD_GDI_TRIAL. Captura real muestra editor visible correcto. El ajusteGDI lo creó el instalador empaquetado, no elprobe.7-Zip también completa su flujo; diez capturasFullHD y cobertura aprobadas. No prueba edición/guardadoNotepad++ enLive ni persistencia tras reinicioOS. Evidencia: docs/evidence/2026-10-17/notepad-packaged-gdi.png.
+
+Office: run39092259454 descarga build16.0.20430.20182, pero configure falla tras fatalRpcBindingSetAuthInfo1747/0x6d3; Wine informa falta de ntlm_auth. Artefacto12123641098/logs internos revisados. FuenteWine10 msv1_0 exige helperNTLM al inicializar y rpcrt4 devuelve1747 si no hayservicioSSPI. Ensayoacotado enPR #32: Debianwinbind, ntlm_auth --version anteswineboot y versiónOfficefijada a16.0.20430.20182; límites360+360s sin aumento. Run39094394466 en curso al registrar; no atribuir éxito ni instalarWinbind enISO antes de validar. Word0/7, global≈38%.
+
+AlternativaWindowsVM: PR #34 integradadbb6a273; cuatrotests y CIpreflight aprobados. KVM API12 responde en consultaadministrativa delrunner; usuario normal sinpermisos. QEMU/FreeRDP yWindows/Word siguen sininstalar; no confundir requisitos detectados concompatibilidad.

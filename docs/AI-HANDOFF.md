@@ -21,6 +21,14 @@ El usuario exige demostrar instalación y uso de **Microsoft Word/Office de escr
 
 BloqueoNotepad++: captura sincronizada39087177796 y artefacto12121412527 inspeccionados; editor visiblecorrecto con ensayoGDI0, apertura/menú de ambos programas. PR #30 integrada7c804462. PR #31 implementa GDI automático en instalador;19unitarias, Fast Checks39090854682 y WineLab39090852630 aprobados; artefacto12122523119 inspeccionado. Falta nuevaISO con adaptador empaquetado; capturaPR39090854665 todavía usa fixtureantigua. No confundir ensayoGDI delprobe conISOactualizada. Global37.75≈38%, Windows50/asistente50/APK0.
 
+## Corte vigente — 17/10/2026,22:40 Bogotá
+
+Este corte sustituye los pendientes antiguos sobre la ISO y Notepad++. ISO Gate39092332072 y captura39093608994 aprobados para candidato28c66b58. Artefacto12124062163 inspeccionado: Notepad++ visible y NEXUS_NOTEPAD_PACKAGED_GDI_PASS confirma ajuste creado por instalador integrado; ambos programas abren desde menú. No repetir el diagnóstico de editor negro sin nueva regresión. Persistencia/ediciónLive siguen aparte.
+
+Prioridad ahora: Word/Office real. Descarga del build16.0.20430.20182 aprobada en39092259454, configuración bloqueada porRpcBindingSetAuthInfo1747, Wine sin ntlm_auth. PR #32 añadeWinbind solo al laboratorio y valida helper anteswineboot; ejecución39094394466 pendiente. Consultar resultado/logs antes de modificar otra dependencia o reconstruir. No afirmar que la hipótesis NTLM haya resuelto Office. Word0/7; global37.75≈38%, Windows50/asistente50/APK0.
+
+FallbackWindowsVM: preflight integradoPR #34/dbb6a273, KVM API12 disponible bajo administrador delrunner, no bajo usuario. Todavía faltan herramientas, VMWindows yWord. Leer WINDOWS-VM-FALLBACK.md. Registrar por separado Wine y VM.
+
 ## Entrada única y alcance
 
 Repositorio: https://github.com/CmdOS-system/Nexus-os
