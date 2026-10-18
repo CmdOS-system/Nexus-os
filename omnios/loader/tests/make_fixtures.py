@@ -90,10 +90,15 @@ def make(output: pathlib.Path) -> None:
     with zipfile.ZipFile(output / "extension.zip", "w", compression=zipfile.ZIP_STORED) as archive:
         archive.writestr("manifest.json", json.dumps({"manifest_version": 3, "name": "Nexus CI structural fixture", "version": "1.0.0"}))
     zip_bytes = (output / "extension.zip").read_bytes()
-    # CRX3 envelope with empty structural protobuf fields. The fixture is
-    # unsigned on purpose and therefore must never be installable.
-    crx_header = b"\x12\x00\x1a\x00"
-    (output / "unsigned-extension.crx").write_bytes(b"Cr24" + struct.pack("<II", 3, len(crx_header)) + crx_header + zip_bytes)
+    # CRX3 protobuf field 10000 (signed_header_data), encoded as empty bytes.
+    # No proof/signature is included; this structural fixture is not installable.
+    crx_header = b"\x82\xf1\x04\x00"
+    crx = b"Cr24" + struct.pack("<II", 3, len(crx_header)) + crx_header + zip_bytes
+    zip_offset = 12 + len(crx_header)
+    assert crx[:4] == b"Cr24" and struct.unpack_from("<I", crx, 4)[0] == 3
+    assert struct.unpack_from("<I", crx, 8)[0] == len(crx_header)
+    assert crx[zip_offset:zip_offset + 4] == b"PK\x03\x04"
+    (output / "unsigned-extension.crx").write_bytes(crx)
 
 
 if __name__ == "__main__":

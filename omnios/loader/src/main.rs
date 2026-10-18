@@ -3,8 +3,10 @@
 
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File};
-use std::io::{self, IsTerminal, Read, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, IsTerminal, Read, Seek, SeekFrom, Write};
+use std::os::unix::fs::OpenOptionsExt;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
@@ -14,6 +16,7 @@ const LOADER: &str = "/usr/bin/nexus-omniloader";
 const WAYDROID_PREFLIGHT: &str = "/usr/lib/nexus/nexus-waydroid-preflight";
 const MAX_ZIP_LISTING: usize = 8 * 1024 * 1024;
 const MAX_MANIFEST_SIZE: usize = 4 * 1024 * 1024;
+const MAX_CRX_SIZE: u64 = 512 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Route {
@@ -170,6 +173,43 @@ fn zip_member(path: &Path, member: &str, limit: usize) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+struct TempCrxZip(PathBuf);
+
+impl Drop for TempCrxZip {
+    fn drop(&mut self) { let _ = fs::remove_file(&self.0); }
+}
+
+static TEMP_CRX_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// Remove the CRX envelope before invoking Info-ZIP: Info-ZIP warns about the
+/// prepended bytes and exits 1 even when it can list the embedded ZIP.
+fn materialize_crx_zip(path: &Path, offset: usize) -> io::Result<TempCrxZip> {
+    let size = fs::metadata(path)?.len();
+    if size > MAX_CRX_SIZE { return Err(io::Error::other("CRX supera el límite de inspección de 512 MiB.")); }
+    let offset = u64::try_from(offset).map_err(|_| io::Error::other("Offset ZIP CRX fuera de rango."))?;
+    if size <= offset + 4 { return Err(io::Error::other("CRX no contiene datos ZIP completos.")); }
+    for _ in 0..32 {
+        let sequence = TEMP_CRX_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let temp_path = env::temp_dir().join(format!("nexus-crx-{}-{sequence}.zip", std::process::id()));
+        let mut output = match OpenOptions::new().write(true).create_new(true).mode(0o600).open(&temp_path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        };
+        let guard = TempCrxZip(temp_path);
+        let mut input = File::open(path)?;
+        input.seek(SeekFrom::Start(offset))?;
+        let mut signature = [0u8; 4];
+        input.read_exact(&mut signature)?;
+        if signature != *b"PK\\x03\\x04" { return Err(io::Error::other("El payload CRX no comienza con una cabecera ZIP local.")); }
+        input.seek(SeekFrom::Start(offset))?;
+        if io::copy(&mut input, &mut output)? != size - offset { return Err(io::Error::other("Copia incompleta del payload ZIP CRX.")); }
+        output.flush()?;
+        return Ok(guard);
+    }
+    Err(io::Error::new(io::ErrorKind::AlreadyExists, "No se pudo crear un archivo temporal seguro para CRX."))
+}
+
 fn zip_member_prefix(path: &Path, member: &str, count: usize) -> io::Result<Vec<u8>> {
     let mut child = Command::new("unzip")
         .args(["-p"])
@@ -221,11 +261,12 @@ fn inspect_crx(path: &Path) -> io::Result<()> {
     header.truncate(count);
     let offset = omni_loader::package_inspector::crx_zip_offset(&header)
         .map_err(io::Error::other)?;
-    let entries = zip_listing(path)?;
+    let zip = materialize_crx_zip(path, offset)?;
+    let entries = zip_listing(&zip.0)?;
     if entries.iter().filter(|entry| entry.as_str() == "manifest.json").count() != 1 {
         return Err(io::Error::other("CRX estructuralmente incompleto: no contiene manifest.json."));
     }
-    let manifest = zip_member(path, "manifest.json", 1024 * 1024)?;
+    let manifest = zip_member(&zip.0, "manifest.json", 1024 * 1024)?;
     let text = std::str::from_utf8(&manifest)
         .map_err(|_| io::Error::other("manifest.json del CRX no es UTF-8."))?;
     if !text.trim_start().starts_with('{')

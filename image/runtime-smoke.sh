@@ -24,7 +24,10 @@ grep -Fq 'package=com.example.nexus.smoke' <<< "$apk_result"
 grep -Fq 'classes.dex=valid' <<< "$apk_result"
 echo "APK AXML package and DEX header inspection passed. (Structural fixture; not installed.)"
 
-crx_result="$("$LOADER" --inspect-crx "$TEMP/fixtures/unsigned-extension.crx" 2>&1)"
+if ! crx_result="$("$LOADER" --inspect-crx "$TEMP/fixtures/unsigned-extension.crx" 2>&1)"; then
+  printf 'CRX inspection failed:\\n%s\\n' "$crx_result" >&2
+  exit 1
+fi
 grep -Fq 'CRX v3' <<< "$crx_result"
 grep -Fq 'manifest.json' <<< "$crx_result"
 echo "CRX envelope and extension manifest inspection passed. (Unsigned fixture; never installed.)"
