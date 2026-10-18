@@ -29,6 +29,12 @@ Prioridad ahora: Word/Office real. Descarga del build16.0.20430.20182 aprobada e
 
 FallbackWindowsVM: preflight integradoPR #34/dbb6a273, KVM API12 disponible bajo administrador delrunner, no bajo usuario. Todavía faltan herramientas, VMWindows yWord. Leer WINDOWS-VM-FALLBACK.md. Registrar por separado Wine y VM.
 
+## Estado prioritario — 17/10/2026,22:52 Bogotá
+
+Sustituye los estados pendientes antiguos sobre NTLM. Word39094394466: con winbind desaparece1747 de los logs, pero ClickToRunSvc falla1053 y Word no instala. PR #32 añade diagnóstico del servicio y fallo temprano (tres tests aprobados); revisar su siguiente ejecución antes de nuevos cambios. No repetir el mismo timeout.
+
+KVM39094951752 y Fast Checks39094953980 aprobados: QEMU8.2.2 ejecuta y pausa una CPU virtual real, FreeRDP3.32.1 confirmado. Artefacto12123709566 revisado; no Windows/Word en esa máquina. La ISO anterior sigue validada para7-Zip/Notepad++ con GDI automático. Word continúa0/7 y global≈38%.
+
 ## Entrada única y alcance
 
 Repositorio: https://github.com/CmdOS-system/Nexus-os

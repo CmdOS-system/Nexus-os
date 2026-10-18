@@ -452,3 +452,10 @@ ISO Gate39092332072 success, fuente28c66b58474091cbc4789db36de66073aa807229. Cap
 Office: run39092259454 descarga build16.0.20430.20182, pero configure falla tras fatalRpcBindingSetAuthInfo1747/0x6d3; Wine informa falta de ntlm_auth. Artefacto12123641098/logs internos revisados. FuenteWine10 msv1_0 exige helperNTLM al inicializar y rpcrt4 devuelve1747 si no hayservicioSSPI. Ensayoacotado enPR #32: Debianwinbind, ntlm_auth --version anteswineboot y versiónOfficefijada a16.0.20430.20182; límites360+360s sin aumento. Run39094394466 en curso al registrar; no atribuir éxito ni instalarWinbind enISO antes de validar. Word0/7, global≈38%.
 
 AlternativaWindowsVM: PR #34 integradadbb6a273; cuatrotests y CIpreflight aprobados. KVM API12 responde en consultaadministrativa delrunner; usuario normal sinpermisos. QEMU/FreeRDP yWindows/Word siguen sininstalar; no confundir requisitos detectados concompatibilidad.
+
+
+## NTLM y motor KVM: resultado concreto — 17/10/2026,22:52 Bogotá
+
+Office39094394466 no termina la instalación. ntlm_auth4.22.11 se registra correctamente y desaparece el errorRPC1747 de los logs recogidos; la nueva barrera es ClickToRunSvc1053, tarea no encolada y servicio STOPPED/salida1077. Artefacto12124121862 inspeccionado. PR #32 incorpora detección inmediata de esa frase fatal en logs, tres pruebas aprobadas, SCqc y trazas de servicios/procesos. No aumentar tiempos ni añadir más dependencias sin revisar ese diagnóstico. Word0/7; siguiente acción revisar la ejecución de ese nuevo diagnóstico.
+
+Prueba realKVM39094951752 y Fast Checks39094953980 aprobados. Artefacto12123709566 inspeccionado: QEMU8.2.2, FreeRDP3.32.1, KVM enabled=true, CPU running→paused y cierre correcto. Sin Windows, discos, red ni Word; confirma motor del laboratorio, no compatibilidadOffice. Global≈38%, Windows50%, asistente50%, APK0% sin incremento.
