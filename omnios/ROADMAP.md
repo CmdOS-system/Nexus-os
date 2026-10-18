@@ -4,7 +4,7 @@ Este archivo es la fuente de verdad del avance del prototipo. Los porcentajes de
 
 ## Estado general
 
-- **OmniOS (proyecto completo): 5% estimado.** Existe la base experimental x86_64 y CI ya construye y arranca el prototipo UEFI en QEMU. No es un sistema operativo de uso diario.
+- **OmniOS (proyecto completo): 6% estimado.** Existe la base experimental x86_64 y CI ya construye y arranca el prototipo UEFI en QEMU. Este cambio añade algoritmos reales de frames, paginación y planificación con pruebas; todavía no existe una experiencia de sistema operativo de uso diario.
 - **Nexus (repositorio anfitrión): 38% reportado anteriormente.** Es un proyecto distinto y este cambio no modifica su implementación.
 
 ## Componentes
@@ -12,7 +12,7 @@ Este archivo es la fuente de verdad del avance del prototipo. Los porcentajes de
 | Área | Avance | Hecho | Siguiente | Pendiente / límite |
 |---|---:|---|---|---|
 | Repositorio y CI | 45% | Estructura inicial, workflow verde, imágenes UEFI/BIOS y artefacto publicado | Añadir caché/lockfile y pruebas repetibles para cambios de kernel | Protección de ramas y matriz ARM64 |
-| OmniKernel / arranque | 8% | Entrada `no_std`, arranque UEFI confirmado en QEMU, salida serial y comprobación de tablas | Gestor de memoria física a partir del mapa UEFI | Excepciones, interrupciones, paginación, scheduler, IPC y drivers |
+| OmniKernel / arranque | 17% | Entrada `no_std`, arranque UEFI confirmado en QEMU, allocator fijo basado en mapa UEFI con reserva/liberación, backend de tablas x86_64 de cuatro niveles con aislamiento, scheduler RR/Fair y pruebas unitarias | Ejecutar CI y conectar el allocator a `BootInfo`; configurar direct map para tablas activas | IDT, timer ISR/context restore, activación de CR3 en arranque, IPC y drivers |
 | OmniLoader | 6% | Detección acotada de ELF/MZ/Mach-O/DEX/ZIP/WASM/CRX y pruebas unitarias | Parser ELF y validadores por formato con límites | No verifica firmas CRX, no interpreta secciones WASM ni carga/ejecuta formatos |
 | Dispatcher ABI | 2% | Tablas ilustrativas Linux y rutas internas OmniBridge Windows/Darwin | Definir contrato de ABI y entrada de trap | No hay syscalls reales; no prometer compatibilidad NT/XNU |
 | OmniLang | 2% | Borrador de sintaxis y objetivos de diseño | Prototipo lexer/parser y decisiones de tipos/ownership | No existe compilador, UIR, LLVM backend ni runtime |
@@ -25,7 +25,7 @@ El porcentaje global es una estimación ponderada del plan técnico, no una mét
 ## Fases de entrega
 
 1. **Base compilable y arranque UEFI x86_64 — completada en CI.** Run #4 pasó tests, construcción BIOS/UEFI, arranque OVMF/QEMU con `OMNIOS_BOOT_OK`, staging y publicación de artefactos: https://github.com/CmdOS-system/Nexus-os/actions/runs/39099281130 .
-2. **Memoria e interrupciones — pendiente.** Mapa UEFI, allocator de frames con pruebas, paginación, IDT/excepciones y temporizador.
+2. **Base de memoria — 45% de fase.** Ya hay allocator de frames 4 KiB, gestor 4 niveles, backend direct-map opt-in y scheduler RR/Fair con contexto guardado; pruebas unitarias añadidas. Falta pasar el mapa real de `BootInfo` a un allocator persistente, habilitar/configurar direct map/NX, e integrar IDT, timer y restauración hardware del contexto.
 3. **Loader Linux — pendiente.** Parser ELF defensivo, espacio de usuario, carga de un binario de prueba y ABI Linux mínima documentada.
 4. **Compatibilidad Windows y formatos adicionales — pendiente.** Parser PE, puente Win32 incremental y pruebas con aplicaciones Windows legales/de muestra; Mach-O, Android/APK, ChromeOS y ARM64 requieren proyectos separados y revisión técnica/legal.
 5. **OmniLang — pendiente.** Lexer, parser, AST, verificador de tipos/seguridad, UIR versionada y backend LLVM; primero compilar y ejecutar ejemplos en host.
@@ -41,10 +41,12 @@ El porcentaje global es una estimación ponderada del plan técnico, no una mét
 
 ## Pendiente inmediato
 
-1. Programar `kernel/src/memory/frame_allocator.rs` con allocator de frames probado sobre mapas UEFI sintéticos.
-2. Añadir parsers WASM/CRX acotados, validando versión y longitudes; nunca instalar basándose solo en magic bytes.
-3. Después de disponer de memoria e IPC, integrar runtime WASI en usuario con capacidades/cuotas; planear PWA como shell web separada.
-4. Añadir caché/lockfile y medir el tiempo de CI para evitar reinstalaciones costosas en cada cambio.
+1. Ejecutar CI del cambio y resolver cualquier fallo de compilación o test antes de dar por cerrados los tres módulos.
+2. Instanciar allocator persistente desde `BootInfo.memory_regions`; configurar en el bootloader el mapeo físico, probarlo en QEMU y activar CR3 de forma controlada.
+3. Añadir IDT de x86_64, timer ISR y epílogo que consuma `SwitchDecision` para alternar el marco de registros real.
+4. Añadir parsers WASM/CRX acotados, validando versión y longitudes; nunca instalar basándose solo en magic bytes.
+5. Después de disponer de memoria e IPC, integrar runtime WASI en usuario con capacidades/cuotas; planear PWA como shell web separada.
+6. Añadir caché/lockfile y medir el tiempo de CI para evitar reinstalaciones costosas en cada cambio.
 
 ## Registro de validación
 
@@ -54,3 +56,4 @@ El porcentaje global es una estimación ponderada del plan técnico, no una mét
 - CI #4: https://github.com/CmdOS-system/Nexus-os/actions/runs/39099281130 terminó verde; tests, imágenes, arranque serial y artefactos pasaron.
 - CI #5: https://github.com/CmdOS-system/Nexus-os/actions/runs/39099561789 terminó verde sobre el estado actualizado de la hoja de ruta.
 - ChromeOS/WASM (este cambio): añadidas firmas candidatas y pruebas; aún falta parser, verificación CRX, runtime WASI, navegador/PWA y pruebas de aplicaciones.
+- Memoria/scheduler: implementación `no_std` de rangos de frames 4 KiB inicializados desde regiones UEFI, reserva/liberación con detección de doble liberación, mapeo/desmapeo y traducción de páginas 4 niveles con permisos R/W/X/User y W^X, y selección RR/Fair guardando contexto/personality. Se añadieron tests simulados para los tres módulos y smoke checks de allocator/scheduler al arranque; pendiente CI y conexión a IDT/timer/CR3 activo.

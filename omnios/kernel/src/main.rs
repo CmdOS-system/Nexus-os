@@ -110,8 +110,35 @@ fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
         exit_qemu(QemuExitCode::Failure);
     }
 
+    let memory_map = [kernel::memory::frame_allocator::UefiRegion {
+        start: 0x10_0000,
+        end: 0x10_4000,
+        kind: kernel::memory::frame_allocator::RegionKind::Usable,
+    }];
+    let memory_ok = kernel::memory::frame_allocator::FrameAllocator::<8>::from_memory_map(&memory_map)
+        .and_then(|mut allocator| allocator.allocate().and_then(|frame| allocator.release(frame)))
+        .is_ok();
+    let mut scheduler = kernel::sched::scheduler::Scheduler::<2>::new(
+        kernel::sched::scheduler::SchedulingPolicy::RoundRobin,
+    );
+    let scheduler_ok = scheduler.add_task(kernel::sched::scheduler::TaskStruct::new(
+        1,
+        kernel::sched::scheduler::CpuContext::default(),
+        kernel::sched::scheduler::Personality::LinuxPOSIX,
+    )).is_ok() && scheduler.schedule(
+        None,
+        None,
+        0,
+        kernel::sched::scheduler::ScheduleReason::TimerPreemption,
+    ).is_ok();
+    if !memory_ok || !scheduler_ok {
+        let _ = writeln!(uart, "OMNIOS_KERNEL_PANIC: memory/scheduler self-check failed");
+        exit_qemu(QemuExitCode::Failure);
+    }
+
     let _ = writeln!(uart, "OmniKernel: UEFI/BIOS entry reached");
     let _ = writeln!(uart, "OmniKernel: personality dispatcher self-check passed");
+    let _ = writeln!(uart, "OmniKernel: frame allocator and scheduler self-check passed");
     let _ = writeln!(uart, "OMNIOS_BOOT_OK");
     exit_qemu(QemuExitCode::Success);
 }
