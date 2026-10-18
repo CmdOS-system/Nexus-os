@@ -18,7 +18,10 @@ jobs:
         run: |
           python3 -m unittest discover -s agent/tests -p test_windows_vm_preflight.py
           python3 agent/windows_vm_preflight.py > windows-vm-prerequisites.json
+      - name: Distinguish runner KVM permissions from unavailable hardware
+        run: |
+          sudo -n /usr/bin/python3 agent/windows_vm_preflight.py > windows-vm-prerequisites-admin.json
       - uses: actions/upload-artifact@v4
         with:
           name: windows-vm-readonly-prerequisites
-          path: windows-vm-prerequisites.json
+          path: windows-vm-prerequisites*.json
