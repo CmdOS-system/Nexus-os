@@ -46,3 +46,10 @@ Aprobación de laboratorio representa solo base técnica. Word web, LibreOffice 
 ## Primer bloqueo reproducido
 
 Run39091083886 y artefacto12122462178 inspeccionados: hashODT correcto, extracción7z25.01 falla con `Incorrect reparse stream` sobre configuration-Office365-x64.xml (salida2). ODT contiene CABMSZip embebido en offset263168. No llegó a ejecutar setup.exe ni instalarOffice; no clasificarlo como incompatibilidadWord. Se usa ahora el propio autoextractor oficial, cuyas opciones `/quiet` y `/extract:path` se verificaron en el textoUsage embebido del mismo binarioMicrosoft. Wineboot se prepara antes de extraer; el resultado del siguiente intento está pendiente. Sin nuevaISO ni cambios al catálogo deNexus.
+
+
+## Extracción oficial aprobada; bloqueo en configuración
+
+Run39091221952 falló por timeout720s en `setup.exe /configure`; artefacto12123107597 descargado. ODT oficial se extrajo correctamente; setupSHA25650facf295f357d8230b4d50678536148e32f34b4ac33387269d5a72c93ff810a. No hayWINWORD instalado y capturaoffice-failure muestra solo una ventanaMicrosoftincompleta. Stdout/stderr vacíos no permiten atribuirlo a red, COM o servicio específico; no declarar causa resuelta.
+
+Siguiente diagnóstico usa /download y después /configure, presupuestos360+360s (sin aumentar total). Exige archivosOffice/Data antes de configurar, registra entradas de versión/payload y recoge logs %TEMP%/%WINDIR%Temp antes de destruir perfil; máximo24logs×256KiB. Añade inventario de procesos/ventanas y consulta de ClickToRunSvc, con erroresWine habilitados. Fuente: https://learn.microsoft.com/en-us/microsoft-365-apps/deploy/overview-office-deployment-tool . Un fallo/timeout es fallo del caso, nunca aceptaciónWord.

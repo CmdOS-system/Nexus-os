@@ -96,6 +96,9 @@ with tempfile.TemporaryDirectory(prefix='nexus-gui-lab-') as directory:
         app.confirm.invoke()
         wait_until(app, lambda: not app.busy)
         assert service.installed, app.status.get()
+        config = service.root / 'prefix/drive_c/users' / Path.home().name / 'AppData/Roaming/Notepad++/config.xml'
+        import xml.etree.ElementTree as ET
+        assert ET.parse(config).find("./GUIConfigs/GUIConfig[@name='MISC']").get('writeTechnologyEngine') == '0'
         assert (seven_root / 'install-receipt.json').read_bytes() == seven_receipt
         app.open_button.invoke()
         app.update()

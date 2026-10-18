@@ -1,11 +1,12 @@
 """Early Nexus graphical app installer: two pinned Windows packages.
 
-Does not install APK/Linux formats or prepare Wine automatically yet.
+Does not install APK/Linux formats yet. Wine must be included in the system.
 """
 from __future__ import annotations
 import hashlib
 import json
 import os
+import pwd
 from pathlib import Path
 import queue
 import shutil
@@ -13,6 +14,7 @@ import stat
 import subprocess
 import tempfile
 import threading
+import xml.etree.ElementTree as ET
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -187,11 +189,45 @@ class Installer:
             binary = self.binary()
             if not binary.is_file():
                 raise PackageError('El instalador terminó, pero no se encontró la aplicación esperada.')
+            self.apply_compatibility_settings()
             self.record_installation()
             self.register_menu_entry()
             self.installed = True
         finally:
             lock.unlink(missing_ok=True)
+
+    def apply_compatibility_settings(self):
+        """Select upstream GDI for the pinned Notepad++ profile, before first launch."""
+        if self.package_id != 'notepadpp':
+            return
+        prefix = self.root / 'prefix'
+        username = pwd.getpwuid(os.getuid()).pw_name
+        config = prefix / 'drive_c/users' / username / 'AppData/Roaming/Notepad++/config.xml'
+        if not config.resolve().is_relative_to(prefix.resolve()):
+            raise PackageError('La configuración de la aplicación está fuera de su perfil.')
+        if config.exists() and (not config.is_file() or config.is_symlink() or config.stat().st_size > 1024 * 1024):
+            raise PackageError('La configuración de la aplicación no es un archivo admitido.')
+        try:
+            tree = ET.parse(config) if config.exists() else ET.ElementTree(ET.Element('NotepadPlus'))
+        except ET.ParseError as error:
+            raise PackageError('La configuración de Notepad++ no es válida; se conserva sin sobrescribir.') from error
+        if tree.getroot().tag != 'NotepadPlus':
+            raise PackageError('La configuración de Notepad++ no tiene el formato esperado.')
+        settings = tree.getroot().find('GUIConfigs')
+        if settings is None:
+            settings = ET.SubElement(tree.getroot(), 'GUIConfigs')
+        misc = settings.find("GUIConfig[@name='MISC']")
+        if misc is None:
+            misc = ET.SubElement(settings, 'GUIConfig', name='MISC')
+        misc.set('writeTechnologyEngine', '0')
+        config.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=config.parent, delete=False) as output:
+            temporary = Path(output.name)
+        try:
+            tree.write(temporary, encoding='utf-8', xml_declaration=True)
+            os.replace(temporary, config)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def launch(self):
         if not self.installed or not self.has_verified_installation():

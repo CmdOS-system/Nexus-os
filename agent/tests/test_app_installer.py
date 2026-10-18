@@ -9,6 +9,66 @@ import app_installer as module
 
 
 class InstallerTests(unittest.TestCase):
+    def test_notepad_gdi_preserves_other_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = module.Installer(Path(directory) / 'notepad', package_id='notepadpp')
+            try:
+                config = service.root / 'prefix/drive_c/users' / module.pwd.getpwuid(module.os.getuid()).pw_name / 'AppData/Roaming/Notepad++/config.xml'
+                config.parent.mkdir(parents=True)
+                config.write_text('<NotepadPlus><GUIConfigs><GUIConfig name="MISC" keep="yes" writeTechnologyEngine="1"/><GUIConfig name="Other">retain</GUIConfig></GUIConfigs></NotepadPlus>')
+                service.apply_compatibility_settings()
+                tree = module.ET.parse(config)
+                misc = tree.find("./GUIConfigs/GUIConfig[@name='MISC']")
+                self.assertEqual(misc.get('writeTechnologyEngine'), '0')
+                self.assertEqual(misc.get('keep'), 'yes')
+                self.assertEqual(tree.find("./GUIConfigs/GUIConfig[@name='Other']").text, 'retain')
+            finally:
+                service.close()
+
+    def test_notepad_gdi_creates_fresh_configuration_without_running_wine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = module.Installer(Path(directory) / 'notepad', package_id='notepadpp')
+            try:
+                with patch.object(module.subprocess, 'run') as run:
+                    service.apply_compatibility_settings()
+                    run.assert_not_called()
+                configs = list(service.root.rglob('config.xml'))
+                self.assertEqual(len(configs), 1)
+                self.assertEqual(module.ET.parse(configs[0]).find('./GUIConfigs/GUIConfig').get('writeTechnologyEngine'), '0')
+            finally:
+                service.close()
+
+    def test_notepad_invalid_config_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = module.Installer(Path(directory) / 'notepad', package_id='notepadpp')
+            try:
+                config = service.root / 'prefix/drive_c/users' / module.pwd.getpwuid(module.os.getuid()).pw_name / 'AppData/Roaming/Notepad++/config.xml'
+                config.parent.mkdir(parents=True)
+                config.write_text('<broken')
+                with self.assertRaises(module.PackageError):
+                    service.apply_compatibility_settings()
+                self.assertEqual(config.read_text(), '<broken')
+            finally:
+                service.close()
+
+    def test_renderer_does_not_modify_seven_zip_or_external_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = module.Installer(Path(directory) / '7zip')
+            try:
+                service.apply_compatibility_settings()
+                self.assertFalse(service.root.exists())
+                service.package_id = 'notepadpp'
+                config = service.root / 'prefix/drive_c/users' / module.pwd.getpwuid(module.os.getuid()).pw_name / 'AppData/Roaming/Notepad++/config.xml'
+                config.parent.mkdir(parents=True)
+                outside = Path(directory) / 'outside.xml'
+                outside.write_text('retain')
+                config.symlink_to(outside)
+                with self.assertRaises(module.PackageError):
+                    service.apply_compatibility_settings()
+                self.assertEqual(outside.read_text(), 'retain')
+            finally:
+                service.close()
+
     def test_unapproved_file_never_becomes_ready(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(module.shutil, 'which', return_value='/usr/bin/wine'):
             source = Path(directory) / 'fake.exe'

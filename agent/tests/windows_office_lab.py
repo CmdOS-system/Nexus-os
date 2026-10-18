@@ -32,7 +32,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='nexus-office-') as directory:
         root = Path(directory)
         env = dict(os.environ, WINEPREFIX=str(root / 'prefix'), WINEARCH='win64',
-                   WINEDLLOVERRIDES='mscoree,mshtml,winemenubuilder.exe=', WINEDEBUG='-all')
+                   WINEDLLOVERRIDES='mscoree,mshtml,winemenubuilder.exe=',
+                   WINEDEBUG='-all,err+all,warn+seh')
 
         def run(stage, args, timeout):
             result['stage'] = stage
@@ -42,6 +43,42 @@ def main():
 
         def screenshot(name):
             ImageGrab.grab(xdisplay=os.environ['DISPLAY']).save(evidence / name)
+
+        def collect_diagnostics():
+            for label, command in [('processes', ['ps', '-eo', 'pid,etimes,args']),
+                                   ('windows', ['xwininfo', '-root', '-tree']),
+                                   ('clicktorun-service', ['wine', 'sc', 'query', 'ClickToRunSvc'])]:
+                try:
+                    output = subprocess.run(command, env=env, text=True, errors='replace',
+                                            capture_output=True, timeout=10)
+                    (evidence / (label + '.txt')).write_text(
+                        (output.stdout + output.stderr)[-262144:], encoding='utf-8')
+                except Exception as error:
+                    (evidence / (label + '.txt')).write_text(str(error), encoding='utf-8')
+            # Microsoft directs ODT troubleshooting to user/system TEMP logs.
+            users = root / 'prefix/drive_c/users'
+            locations = [root / 'prefix/drive_c/windows/temp']
+            if users.is_dir():
+                for user in users.iterdir():
+                    locations.extend([user / 'AppData/Local/Temp', user / 'Temp'])
+            exported = []
+            for location in locations:
+                if not location.is_dir():
+                    continue
+                for path in sorted(location.rglob('*')):
+                    if len(exported) >= 24:
+                        break
+                    if path.is_symlink() or not path.is_file() or path.suffix.lower() not in ('.log', '.txt'):
+                        continue
+                    if not path.resolve().is_relative_to(root.resolve()):
+                        continue
+                    with path.open('rb') as source:
+                        source.seek(max(0, path.stat().st_size - 262144))
+                        tail = source.read(262144)
+                    name = f'office-temp-{len(exported):02}.log'
+                    (evidence / name).write_bytes(tail)
+                    exported.append({'source': str(path.relative_to(root)), 'artifact': name})
+            (evidence / 'temp-log-index.json').write_text(json.dumps(exported, indent=2))
 
         def word_window(label, seconds=90):
             end = time.monotonic() + seconds
@@ -84,9 +121,21 @@ def main():
  </Add>
  <Display Level="Full" AcceptEULA="TRUE"/>
 </Configuration>''', encoding='utf-8')
+            payload = root / 'payload'
+            windows_payload = subprocess.check_output(['winepath', '-w', str(payload)], env=env, text=True).strip()
+            configuration = ET.parse(config)
+            configuration.find('Add').set('SourcePath', windows_payload)
+            configuration.write(config, encoding='utf-8', xml_declaration=True)
             # This setup belongs only to a temporary lab profile; no OS root access.
             windows_config = subprocess.check_output(['winepath', '-w', str(config)], env=env, text=True).strip()
-            run('office-configure', ['wine', str(setup), '/configure', windows_config], 720)
+            # Keep total installation budget at 720 seconds; isolate CDN download
+            # from local installation instead of extending the previous timeout.
+            run('office-download', ['wine', str(setup), '/download', windows_config], 360)
+            versions = payload / 'Office/Data'
+            if not versions.is_dir() or not any(versions.iterdir()):
+                raise RuntimeError('ODT download returned without Office payload evidence')
+            result['download_entries'] = sorted(path.name for path in versions.iterdir())
+            run('office-configure', ['wine', str(setup), '/configure', windows_config], 360)
             binaries = [p for p in (root / 'prefix/drive_c').rglob('*')
                         if p.is_file() and p.name.lower() == 'winword.exe']
             if len(binaries) != 1:
@@ -137,6 +186,10 @@ def main():
                 pass
             raise
         finally:
+            try:
+                collect_diagnostics()
+            except Exception as error:
+                result['diagnostic_error'] = str(error)
             # No keys, credentials, installer binaries or complete Wine profile in artifacts.
             (evidence / 'result.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
             subprocess.run(['wineserver', '-k'], env=env, check=False, timeout=20)

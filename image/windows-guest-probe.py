@@ -94,17 +94,25 @@ for package_id, url, title, marker in cases:
             # in the QEMU VGA fixture. Upstream MISC writeTechnologyEngine=0 is GDI.
             config = (service.root / 'prefix/drive_c/users' / Path.home().name /
                       'AppData/Roaming/Notepad++/config.xml')
-            config.parent.mkdir(parents=True, exist_ok=True)
-            tree = ET.parse(config) if config.exists() else ET.ElementTree(ET.Element('NotepadPlus'))
-            settings = tree.getroot().find('GUIConfigs')
-            if settings is None:
-                settings = ET.SubElement(tree.getroot(), 'GUIConfigs')
-            misc = settings.find("GUIConfig[@name='MISC']")
-            if misc is None:
-                misc = ET.SubElement(settings, 'GUIConfig', name='MISC')
-            misc.set('writeTechnologyEngine', '0')
-            tree.write(config, encoding='utf-8', xml_declaration=True)
-            print('NEXUS_NOTEPAD_GDI_TRIAL ' + str(config), flush=True)
+            if hasattr(service, 'apply_compatibility_settings'):
+                # New images must already contain the setting from the installer.
+                tree = ET.parse(config)
+                misc = tree.find("./GUIConfigs/GUIConfig[@name='MISC']")
+                assert misc is not None and misc.get('writeTechnologyEngine') == '0'
+                print('NEXUS_NOTEPAD_PACKAGED_GDI_PASS', flush=True)
+            else:
+                # Explicit old fixture only; never repair a new adapter in the probe.
+                config.parent.mkdir(parents=True, exist_ok=True)
+                tree = ET.parse(config) if config.exists() else ET.ElementTree(ET.Element('NotepadPlus'))
+                settings = tree.getroot().find('GUIConfigs')
+                if settings is None:
+                    settings = ET.SubElement(tree.getroot(), 'GUIConfigs')
+                misc = settings.find("GUIConfig[@name='MISC']")
+                if misc is None:
+                    misc = ET.SubElement(settings, 'GUIConfig', name='MISC')
+                misc.set('writeTechnologyEngine', '0')
+                tree.write(config, encoding='utf-8', xml_declaration=True)
+                print('NEXUS_NOTEPAD_GDI_TRIAL ' + str(config), flush=True)
         launched = []
         original_launch = service.launch
         def observed_launch():
