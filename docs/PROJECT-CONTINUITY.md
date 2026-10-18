@@ -434,3 +434,12 @@ Run39087177796 success, artefacto12121412527 descargado e inspeccionado. notepad
 Se implementa siguiente entrega: adaptador Notepad++ escribe MISC/writeTechnologyEngine=0 después de instalar y antes de crear recibo/menú. Conserva otros ajustes; rechaza XML inválido, archivos especiales, symlinks o rutas externas; escritura atómica. No cambia perfil7-Zip.19 unit tests locales aprobados, incluidos cuatro casos del adaptador. GUI Lab ahora exige configuración creada por instalador. Nuevas imágenes con adaptador deben pasar comprobación GDI sin que el probe repare ajustes; fixture antigua conserva ensayo explícito para diagnóstico.
 
 Pendiente: CI/WineLab de adaptador, integración y unaISO nueva para confirmar NEXUS_NOTEPAD_PACKAGED_GDI_PASS. Global≈38%, Windows50%, asistente50%, APK0%; este éxito limitado no completa módulos amplios.
+
+
+## Adaptador integrado y corrección del disparo ISO — 2026-10-17, 22:03 Bogotá
+
+PR #31 integrada99854c2e: instalador crea GDI0 automáticamente paraNotepad++ antes de recibo/menú.19unitarias locales, Fast Checks39090854682 y WineLab39090852630 aprobados, artefacto12122523119 inspeccionado; captura39090854665 aprobada sobre fixtureantigua. Main99854c también Fast Checks39091944514 y WineLab39091944529 success. Falta aceptación de imagen nueva con NEXUS_NOTEPAD_PACKAGED_GDI_PASS.
+
+Se detectó que Nexus ISO Gate no incluía agent/app_installer.py entre paths; por eso integrarPR31 NO construyó automáticamente ISO. No describirla como ISO ya reconstruida. Se añaden el módulo instalador y el propio workflow a paths; cambioCIpropuesto debe disparar una construcción al integrarse y seguirá cambiosfuturos de ese módulo. No ampliar a todos los tests para evitar reconstrucciones por pruebas/docs.
+
+Office actual: run39091221952 falló a720s de setup/configure tras extraerODT correctamente; no hayWordinstalado. Artefacto12123107597 inspeccionado, capturaMicrosoftincompleta. PR #32 prepara /download y /configure separados (360+360s), captura de logsTEMP/procesos/ventanas y diagnósticoWine; no incrementar tiempos ni declarar causaexacta. RequisitoWord/Office sigue0/7 enNexus, global≈38%.
