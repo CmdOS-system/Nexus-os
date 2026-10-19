@@ -10,11 +10,11 @@ WEBAPP="${3:?built PWA directory is required}"
 if [[ "${NEXUS_REAL_GUI_SESSION:-0}" != "1" ]]; then
   if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     NEXUS_REAL_GUI_SESSION=1 xvfb-run -a -s '-screen 0 1920x1080x24' \
-      "$0" "$LOADER" "$WIN32_APP" "$WEBAPP"
+      bash "$0" "$LOADER" "$WIN32_APP" "$WEBAPP"
   else
     NEXUS_REAL_GUI_SESSION=1 dbus-run-session -- \
       xvfb-run -a -s '-screen 0 1920x1080x24' \
-      "$0" "$LOADER" "$WIN32_APP" "$WEBAPP"
+      bash "$0" "$LOADER" "$WIN32_APP" "$WEBAPP"
   fi
   exit $?
 fi
