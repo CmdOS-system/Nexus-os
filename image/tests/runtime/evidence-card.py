@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Show live user-mode runtime output in a small Cyber-Glass GTK window and capture it."""
-import os
 import sys
 from pathlib import Path
 
 import gi
+gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, Gtk, GLib
-from PIL import ImageGrab
 
 if len(sys.argv) != 4:
     raise SystemExit("usage: evidence-card.py TITLE OUTPUT DESTINATION")
@@ -58,16 +57,27 @@ window.add(outer)
 window.connect("destroy", Gtk.main_quit)
 
 def capture():
-    window.get_window().process_updates(True)
-    Path(destination).parent.mkdir(parents=True, exist_ok=True)
-    image = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).convert("RGB")
-    image.save(destination, "PNG")
-    Gtk.main_quit()
+    try:
+        gdk_window = window.get_window()
+        if gdk_window is None:
+            raise RuntimeError("GTK window is not mapped; cannot capture runtime evidence")
+        gdk_window.process_updates(True)
+        pixbuf = Gdk.pixbuf_get_from_window(
+            gdk_window, 0, 0, gdk_window.get_width(), gdk_window.get_height()
+        )
+        if pixbuf is None:
+            raise RuntimeError("GDK could not read pixels from the GTK runtime window")
+        Path(destination).parent.mkdir(parents=True, exist_ok=True)
+        pixbuf.savev(destination, "png", [], [])
+    except Exception as error:
+        print(f"GTK evidence capture failed: {error}", file=sys.stderr)
+    finally:
+        Gtk.main_quit()
     return GLib.SOURCE_REMOVE
 
 window.show_all()
 GLib.timeout_add(500, capture)
 Gtk.main()
-if Path(destination).stat().st_size < 4096:
+if not Path(destination).is_file() or Path(destination).stat().st_size < 4096:
     raise SystemExit("GTK screenshot is unexpectedly small")
 print(f"Captured live GTK runtime output: {destination}")
