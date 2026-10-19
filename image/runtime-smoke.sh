@@ -43,68 +43,82 @@ run_fast() {
 }
 run_recorded_test() {
   local label="$1" video="$2"; shift 2
+  [[ -n "$video" && "$video" == *.mp4 ]] || {
+    echo "Video evidence path must be a non-empty .mp4 filename: ${video:-<empty>}" >&2
+    return 2
+  }
   mkdir -p "$(dirname "$video")"
   echo "[smoke] $label" >&2
-  timeout --kill-after=1s 15s xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' bash -c '
-    set -euo pipefail
-    video="$1"; shift
-    wm_pid=""
-    recorder_pid=""
-    stop_pid() {
-      local pid="$1" attempt
-      [[ -n "$pid" ]] || return 0
-      kill -TERM "$pid" 2>/dev/null || true
-      for attempt in $(seq 1 10); do
-        kill -0 "$pid" 2>/dev/null || break
-        sleep 0.1
-      done
-      kill -KILL "$pid" 2>/dev/null || true
-      wait "$pid" 2>/dev/null || true
-    }
-    finish_recorder() {
-      local pid="$1" attempt
-      [[ -n "$pid" ]] || return 0
-      kill -INT "$pid" 2>/dev/null || true
-      for attempt in $(seq 1 20); do
-        kill -0 "$pid" 2>/dev/null || break
-        sleep 0.1
-      done
-      if kill -0 "$pid" 2>/dev/null; then
-        kill -TERM "$pid" 2>/dev/null || true
-        for attempt in $(seq 1 10); do
-          kill -0 "$pid" 2>/dev/null || break
-          sleep 0.1
-        done
-      fi
-      kill -KILL "$pid" 2>/dev/null || true
-      wait "$pid" 2>/dev/null || true
-    }
-    cleanup_recording() {
-      trap - EXIT
-      if [[ -n "$recorder_pid" ]]; then
-        finish_recorder "$recorder_pid"
-      fi
-      stop_pid "$wm_pid"
-      pkill -TERM -u "$(id -u)" -x xfconfd 2>/dev/null || true
-    }
-    trap cleanup_recording EXIT
-    trap "exit 143" TERM
-    trap "exit 130" INT
-    NO_AT_BRIDGE=1 xfwm4 --replace --compositor=off </dev/null >/dev/null 2>&1 &
-    wm_pid=$!
-    bash -c 'trap - INT; exec ffmpeg "$@"' _ -nostdin -hide_banner -loglevel error -y \
-      -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -t 10 -an \
-      -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart "$video" \
-      </dev/null >/dev/null 2>&1 &
-    recorder_pid=$!
-    sleep 0.3
-    "$@"
-  ' _ "$video" "$@"
-  test -s "$video"
-  ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height \
-    -of csv=p=0 "$video" | grep -Fxq 'h264,1280,720'
+  local test_status=0
+  timeout --kill-after=1s 15s xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' \
+    bash -s -- "$video" "$@" <<'RECORDED_TEST' || test_status=$?
+set -euo pipefail
+video_file="$1"; shift
+wm_pid=""
+recorder_pid=""
+stop_pid() {
+  local pid="$1" attempt
+  [[ -n "$pid" ]] || return 0
+  kill -TERM "$pid" 2>/dev/null || true
+  for attempt in $(seq 1 10); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
 }
-for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node ffmpeg ffprobe xfwm4; do
+finish_recorder() {
+  local pid="$1" attempt
+  [[ -n "$pid" ]] || return 0
+  kill -INT "$pid" 2>/dev/null || true
+  for attempt in $(seq 1 20); do
+    jobs -pr | grep -Fxq "$pid" || break
+    sleep 0.1
+  done
+  if jobs -pr | grep -Fxq "$pid"; then
+    kill -TERM "$pid" 2>/dev/null || true
+    for attempt in $(seq 1 10); do
+      jobs -pr | grep -Fxq "$pid" || break
+      sleep 0.1
+    done
+  fi
+  if jobs -pr | grep -Fxq "$pid"; then
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+  wait "$pid" 2>/dev/null || true
+}
+cleanup_recording() {
+  trap - EXIT
+  if [[ -n "$recorder_pid" ]]; then
+    finish_recorder "$recorder_pid"
+  fi
+  stop_pid "$wm_pid"
+  pkill -TERM -u "$(id -u)" -x xfconfd 2>/dev/null || true
+}
+trap cleanup_recording EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+NO_AT_BRIDGE=1 xfwm4 --replace --compositor=off </dev/null >/dev/null 2>&1 &
+wm_pid=$!
+bash -c 'trap - INT; exec ffmpeg -nostdin -hide_banner -loglevel error -y \
+  -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -t 10 -an \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart "$1"' \
+  _ "$video_file" </dev/null >/dev/null 2>&1 &
+recorder_pid=$!
+sleep 0.3
+"$@"
+RECORDED_TEST
+  (( test_status == 0 )) || return "$test_status"
+  if [[ -s "$video" ]] && command -v ffprobe >/dev/null 2>&1 && \
+      ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height \
+        -of csv=p=0 "$video" 2>/dev/null | grep -Fxq 'h264,1280,720'; then
+    echo "[smoke] Video evidence saved: $video" >&2
+  else
+    echo "[smoke] Video capture unavailable; retaining the PNG evidence for $label" >&2
+    rm -f -- "$video"
+  fi
+}
+for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node xfwm4; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
 test -n "$LD64_LLD" || { echo "ld64.lld is required to produce the ARM64 Mach-O" >&2; exit 1; }
