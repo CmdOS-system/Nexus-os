@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.nexus.realapp">
     <application android:theme="@android:style/Theme.Material.NoActionBar" android:label="Nexus Android Runtime">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
