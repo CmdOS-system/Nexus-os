@@ -7,7 +7,7 @@ async function main() {
   const screenshot = process.env.NEXUS_PWA_SCREENSHOT;
   if (!url || !screenshot) throw new Error("NEXUS_PWA_URL and NEXUS_PWA_SCREENSHOT are required");
 
-  const browser = await chromium.launch({
+  const launchOptions = {
     headless: false,
     args: [
       "--no-sandbox",
@@ -18,7 +18,10 @@ async function main() {
       "--no-first-run",
       "--no-default-browser-check",
     ],
-  });
+  };
+  const systemChromium = process.env.CHROMIUM_PATH || "/usr/local/bin/chromium";
+  if (fs.existsSync(systemChromium)) launchOptions.executablePath = systemChromium;
+  const browser = await chromium.launch(launchOptions);
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
