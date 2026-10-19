@@ -55,7 +55,7 @@ cleanup() {
   fi
   kill "$SESSION_PID" 2>/dev/null || true
   wait "$SESSION_PID" 2>/dev/null || true
-  rm -rf -- "$SESSION_ROOT"
+  rm -rf -- "$SESSION_ROOT" 2>/dev/null || true
 }
 trap cleanup EXIT
 
