@@ -224,4 +224,5 @@ run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests
 run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TEMP/pe-exit-zero.exe"
 WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
 run_test "Compile real Win32 GUI PE" x86_64-w64-mingw32-gcc -Os -municode -mwindows "$ROOT/tests/fixtures/pe-dynamic-gui.c" -o "$TEMP/nexus-live-win32.exe"
-run_test "Capture live Win32 and PWA GUI" bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"
+echo "[smoke] Capture live Win32 and PWA GUI (single Xvfb session, max 30s)" >&2
+timeout --kill-after=1s 30s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"
