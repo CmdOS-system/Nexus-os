@@ -51,11 +51,11 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils \\
-            gcc-mingw-w64-x86-64 wine wine64 winetricks cabextract winbind fonts-liberation xvfb file unzip \\
-            dbus-x11 xauth xfce4-session xfdesktop4 xfce4-panel xfwm4 xfce4-settings desktop-base \\
+          sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils \
+            gcc-mingw-w64-x86-64 wine wine64 winetricks cabextract winbind fonts-liberation xvfb file unzip \
+            dbus-x11 xauth xfce4-session xfdesktop4 xfce4-panel xfwm4 xfce4-settings \
             python3-pil python3-gi gir1.2-gtk-3.0 x11-utils xdotool arc-theme papirus-icon-theme fonts-inter librsvg2-common
-          sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \\
+          sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
             /usr/share/backgrounds/nexus/horizon-aurora.svg
 
       - name: Install project Rust nightly for the Linux loader
@@ -150,6 +150,9 @@ jobs:
             fi
             if test -s evidence/boot/desktop-boot.png; then
               echo 'XFCE desktop screenshot: evidence/boot/desktop-boot.png'
+              echo 'Windows GUI screenshot: evidence/windows/wine-gui-running.png'
+              echo 'Android APK response: evidence/android/apk-running.png'
+              echo 'Web/CRX/PWA/WASI response: evidence/web/crx-pwa-running.png'
             else
               echo 'XFCE desktop screenshot: not produced'
             fi
@@ -175,11 +178,13 @@ jobs:
           retention-days: 7
           path: |
             nexus-qemu-serial.log
-            evidence/boot/desktop-boot.png
-            evidence/windows/wine-gui-running.png
             nexus-qemu-debug.log
             nexus-iso-grub-files.txt
             nexus-iso-*
+            evidence/boot/desktop-boot.png
+            evidence/windows/wine-gui-running.png
+            evidence/android/apk-running.png
+            evidence/web/crx-pwa-running.png
 
       - name: Upload verified candidate evidence
         if: success()
@@ -192,6 +197,9 @@ jobs:
             image/work/*.iso
             image/work/SHA256SUMS
             nexus-qemu-serial.log
+            evidence/boot/desktop-boot.png
             evidence/windows/wine-gui-running.png
+            evidence/android/apk-running.png
+            evidence/web/crx-pwa-running.png
 
 # Operational trigger: refresh the ISO Gate runner after the queued run #163.
