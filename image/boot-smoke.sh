@@ -31,7 +31,9 @@ fi
 TIMEOUT="${NEXUS_BOOT_TIMEOUT:-90}"
 LOG="${NEXUS_BOOT_LOG:-nexus-qemu-serial.log}"
 DEBUG_LOG="${NEXUS_QEMU_DEBUG_LOG:-nexus-qemu-debug.log}"
-SCREENSHOT="${NEXUS_BOOT_SCREENSHOT:-evidence/boot/desktop-boot.png}"
+# Keep the raw QEMU framebuffer diagnostic separate from the clean XFCE session
+# screenshot written by the real desktop runtime smoke.
+SCREENSHOT="${NEXUS_BOOT_SCREENSHOT:-nexus-qemu-boot-framebuffer.png}"
 SETTLE_SECONDS="${NEXUS_SCREENSHOT_SETTLE_SECONDS:-5}"
 SCREENSHOT="$(realpath -m "$SCREENSHOT")"
 mkdir -p "$(dirname "$SCREENSHOT")"
