@@ -57,6 +57,9 @@ export WINEDEBUG=-all
 xvfb-run -a "$LOADER" "$TEMP/pe-exit-zero.exe"
 echo "x86_64 PE executable ran through nexus-omniloader and Wine with exit 0."
 
+# Open Wine's real Notepad GUI on the Nexus XFCE desktop and capture it.
+bash "$ROOT/wine-gui-smoke.sh" "$LOADER"
+
 # Exercise the macOS and PWA wrappers without claiming either platform app runs.
 mkdir "$TEMP/fake-bin"
 cat > "$TEMP/fake-bin/darling" <<'SH'
