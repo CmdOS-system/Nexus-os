@@ -15,56 +15,12 @@ on:
       - "omnios/loader/**"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  linux-windows-and-web:
+  linux-real-runtimes:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Wine, XFCE, and test dependencies
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64 wine32:i386 fonts-wine \
-            xvfb xauth x11-utils xdotool dbus-x11 xfce4-session xfdesktop4 xfce4-panel \
-            xfwm4 xfce4-settings xfconf python3-pil python3-gi gir1.2-gtk-3.0 unzip file curl
-          sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
-            /usr/share/backgrounds/nexus/horizon-aurora.svg
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: x86_64-unknown-linux-gnu
-      - name: Install Chromium with safe Xvfb rendering flags
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install real Chromium
-        run: |
-          npm install --prefix "$RUNNER_TEMP/nexus-playwright" playwright
-          "$RUNNER_TEMP/nexus-playwright/node_modules/.bin/playwright" install --with-deps chromium
-          chrome="$(find "$HOME/.cache/ms-playwright" -type f -name chrome -perm /111 -print -quit)"
-          test -n "$chrome"
-          sudo ln -sfn "$chrome" /usr/local/bin/chromium
-      - name: Test and stage Nexus loader and Wasmtime
-        run: |
-          cargo +nightly -Z bindeps test --manifest-path omnios/Cargo.toml -p omni-loader
-          bash image/stage-omni-subsystem.sh
-      - name: Run real PE and PWA runtimes
-        run: bash image/runtime-smoke.sh
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: nexus-evidence-linux
-          if-no-files-found: warn
-          path: |
-            evidence/boot/desktop-boot.png
-            evidence/windows/wine-gui-running.png
-            evidence/web/crx-pwa-running.png
-
-  android-apk:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -74,119 +30,56 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Use the runner Android SDK
-        run: |
-          set -euo pipefail
-          test -d "$ANDROID_HOME/cmdline-tools"
-          sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -perm /111 | sort -V | tail -n 1)"
-          test -n "$sdkmanager"
-          echo "$(dirname "$sdkmanager")" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+      - name: Install user-mode runtime and GUI tools (no system emulator)
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64 wine32:i386 fonts-wine \
+            xvfb xauth x11-utils xdotool dbus-x11 xfce4-session xfdesktop4 xfce4-panel \
+            xfwm4 xfce4-settings xfconf python3-pil python3-gi gir1.2-gtk-3.0 unzip zip file curl \
+            gcc-aarch64-linux-gnu qemu-user-static clang lld llvm
+          sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
+            /usr/share/backgrounds/nexus/horizon-aurora.svg
+      - name: Install Android build SDK only (no AVD or emulator image)
+        run: |
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -perm /111 | sort -V | tail -n 1)"
+          test -n "$sdkmanager_path"
+          echo "$(dirname "$sdkmanager_path")" >> "$GITHUB_PATH"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Install real Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/nexus-playwright" playwright
+          "$RUNNER_TEMP/nexus-playwright/node_modules/.bin/playwright" install --with-deps chromium
+          chrome="$(find "$HOME/.cache/ms-playwright" -type f -name chrome -perm /111 -print -quit)"
+          test -n "$chrome"
+          sudo ln -sfn "$chrome" /usr/local/bin/chromium
       - uses: dtolnay/rust-toolchain@nightly
-      - name: Install Android SDK and emulator image
-        run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools" \
-            "emulator" "system-images;android-35;google_apis;x86_64"
-      - name: Compile the Android app with real Java bytecode
-        run: gradle -p image/android-real assembleDebug
-      - name: Build nexus-omniloader for the Android device bridge
-        run: cargo +nightly -Z bindeps build --manifest-path omnios/Cargo.toml -p omni-loader --release
-      - name: Enable hardware acceleration for Android Emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Install, launch, and capture the real APK in Android Emulator
-        uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          emulator-boot-timeout: 900
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot -no-snapshot-save
-          disable-animations: true
-          script: bash image/android-real/smoke.sh image/android-real/app/build/outputs/apk/debug/app-debug.apk omnios/target/release/nexus-omniloader
+          targets: x86_64-unknown-linux-gnu
+      - name: Test and stage Nexus loader and Wasmtime
+        run: |
+          cargo +nightly -Z bindeps test --manifest-path omnios/Cargo.toml -p omni-loader
+          bash image/stage-omni-subsystem.sh
+      - name: Run Windows, WebAssembly, Android payload, and iOS payload user-mode tests
+        env:
+          NODE_PATH: ${{ runner.temp }}/nexus-playwright/node_modules
+        run: bash image/runtime-smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nexus-evidence-android
-          if-no-files-found: warn
-          path: evidence/android/apk-running.png
-
-  ios-arm64-simulator:
-    runs-on: macos-15
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build and run native iOS ARM64 app in Simulator
-        run: bash image/ios-real/smoke.sh
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: nexus-evidence-ios
+          name: nexus-real-runtime-evidence
           if-no-files-found: warn
           path: |
+            evidence/boot/desktop-boot.png
+            evidence/windows/wine-gui-running.png
+            evidence/android/apk-running.png
+            evidence/web/crx-pwa-running.png
             evidence/ios/ipa-running.png
-            evidence/ios/nexus-ios-arm64-smoke.ipa
-
-  collect-five-images:
-    runs-on: ubuntu-24.04
-    needs: [linux-windows-and-web, android-apk, ios-arm64-simulator]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: nexus-evidence-linux
-          path: ${{ runner.temp }}/linux-evidence
-      - uses: actions/download-artifact@v4
-        with:
-          name: nexus-evidence-android
-          path: ${{ runner.temp }}/android-evidence
-      - uses: actions/download-artifact@v4
-        with:
-          name: nexus-evidence-ios
-          path: ${{ runner.temp }}/ios-evidence
-      - name: Assemble and verify the five real runtime captures
-        run: |
-          set -euo pipefail
-          mkdir -p evidence/boot evidence/windows evidence/android evidence/web evidence/ios
-          find "$RUNNER_TEMP/linux-evidence" -name desktop-boot.png -exec cp {} evidence/boot/desktop-boot.png \;
-          find "$RUNNER_TEMP/linux-evidence" -name wine-gui-running.png -exec cp {} evidence/windows/wine-gui-running.png \;
-          find "$RUNNER_TEMP/android-evidence" -name apk-running.png -exec cp {} evidence/android/apk-running.png \;
-          find "$RUNNER_TEMP/linux-evidence" -name crx-pwa-running.png -exec cp {} evidence/web/crx-pwa-running.png \;
-          find "$RUNNER_TEMP/ios-evidence" -name ipa-running.png -exec cp {} evidence/ios/ipa-running.png \;
-          for image in evidence/boot/desktop-boot.png evidence/windows/wine-gui-running.png \
-            evidence/android/apk-running.png evidence/web/crx-pwa-running.png evidence/ios/ipa-running.png; do
-            test -s "$image"
-            file "$image" | grep -F 'PNG image data'
-          done
-      - name: Commit runtime screenshots to the PR branch
-        env:
-          PR_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add evidence/boot/desktop-boot.png evidence/windows/wine-gui-running.png \
-            evidence/android/apk-running.png evidence/web/crx-pwa-running.png evidence/ios/ipa-running.png
-          if git diff --cached --quiet; then
-            echo "Runtime screenshots are already committed."
-            exit 0
-          fi
-          git commit -m "test(evidence): add verified runtime screenshots"
-          git push origin "HEAD:${PR_BRANCH}"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nexus-real-runtime-evidence-${{ github.run_id }}
-          if-no-files-found: error
-          retention-days: 30
-          path: evidence/
+            evidence/ios/nexus-arm64-runtime.ipa

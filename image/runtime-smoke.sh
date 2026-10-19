@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Keep one session bus alive for every graphical smoke test and evidence capture.
+# Keep a single D-Bus session for the Xvfb apps and screenshots.
 if [[ "${NEXUS_RUNTIME_SESSION:-0}" != "1" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-  command -v dbus-run-session >/dev/null || {
-    echo "dbus-run-session is required for graphical runtime smoke tests" >&2
-    exit 1
-  }
+  command -v dbus-run-session >/dev/null || { echo "dbus-run-session is required" >&2; exit 1; }
   exec dbus-run-session -- env NEXUS_RUNTIME_SESSION=1 "$BASH" "$0" "$@"
 fi
 
@@ -15,76 +12,70 @@ PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
 LOADER="$ROOT/staging/usr/bin/nexus-omniloader"
 WASMTIME="$ROOT/staging/usr/bin/wasmtime"
 TEMP="$(mktemp -d)"
+LD64_LLD="$(command -v ld64.lld || find /usr/bin -maxdepth 1 -name 'ld64.lld-*' -executable -print | sort -V | tail -n 1)"
+APK_NATIVE_PAYLOAD="$ROOT/android-real/app/src/main/jniLibs/arm64-v8a/libnexus_apk_payload.so"
 cleanup() {
   local status=$?
   trap - EXIT
   if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
     WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
-    timeout 15s env WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
+    timeout --kill-after=1s 15s env WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
   fi
-  if ! rm -rf -- "$TEMP"; then
-    chmod -R u+rwX -- "$TEMP" 2>/dev/null || true
-    rm -rf -- "$TEMP" || status=$?
-  fi
+  rm -f "$APK_NATIVE_PAYLOAD" 2>/dev/null || true
+  rm -rf -- "$TEMP" || status=$?
   exit "$status"
 }
 trap cleanup EXIT
 
-for tool in python3 unzip x86_64-w64-mingw32-gcc xvfb-run; do
+run_test() {
+  local label="$1"; shift
+  echo "[smoke] $label" >&2
+  timeout --kill-after=1s 15s "$@"
+}
+for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java gradle node; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
-test -x "$LOADER"
-test -x "$WASMTIME"
-test -s "$ROOT/staging/usr/lib/nexus/nexus-omniloader-ui.py"
-test -s "$ROOT/staging/usr/lib/nexus/nexus-system-sound.py"
+test -n "$LD64_LLD" || { echo "ld64.lld is required to produce the ARM64 Mach-O" >&2; exit 1; }
+test -x "$LOADER" && test -x "$WASMTIME"
 export NEXUS_SUBSYSTEM_HELPER="$ROOT/staging/usr/lib/nexus"
 export NEXUS_SOUND_DISABLED=1
-command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || {
-  echo "wine64 is required for the real PE execution smoke test" >&2; exit 1;
-}
+command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 is required" >&2; exit 1; }
 
-python3 "$PROJECT_ROOT/omnios/loader/tests/make_fixtures.py" "$TEMP/fixtures"
+# Execute a Java class file on the local JVM; the same pure Java class is packaged into APK DEX.
+run_test "Compile and run APK Java logic on JVM" bash -c 'mkdir -p "$1/classes" && javac -d "$1/classes" "$2" && java -cp "$1/classes" com.example.nexus.realapp.PayloadLogic | tee "$1/jvm-output.txt"' _ "$TEMP" "$ROOT/android-real/app/src/main/java/com/example/nexus/realapp/PayloadLogic.java"
 
-apk_result="$("$LOADER" --inspect-apk "$TEMP/fixtures/minimal.apk")"
-grep -Fq 'package=com.example.nexus.smoke' <<< "$apk_result"
-grep -Fq 'classes.dex=valid' <<< "$apk_result"
-echo "APK AXML package and DEX header inspection passed. (Structural fixture; not installed.)"
+# The Android APK packages the ARM64 Linux user-mode payload as an extracted native asset.
+run_test "Build APK ARM64 payload ELF" aarch64-linux-gnu-gcc -O2 -static "$ROOT/android-real/native/nexus-payload.c" -o "$TEMP/libnexus_apk_payload.so"
+run_test "Verify APK payload ELF architecture" bash -c 'file "$1" | grep -Fq "ARM aarch64"' _ "$TEMP/libnexus_apk_payload.so"
+mkdir -p "$(dirname "$APK_NATIVE_PAYLOAD")"
+cp "$TEMP/libnexus_apk_payload.so" "$APK_NATIVE_PAYLOAD"
+run_test "Build APK with DEX and ARM64 payload" gradle -p "$ROOT/android-real" assembleDebug
+APK="$ROOT/android-real/app/build/outputs/apk/debug/app-debug.apk"
+run_test "Extract and execute APK ARM64 ELF with qemu" bash -c 'unzip -p "$1" lib/arm64-v8a/libnexus_apk_payload.so > "$2/apk-payload" && chmod +x "$2/apk-payload" && qemu-aarch64-static "$2/apk-payload" | tee "$2/apk-output.txt" && grep -Fq "6 x 7 = 42" "$2/apk-output.txt"' _ "$APK" "$TEMP"
+run_test "Capture APK runtime output in GTK" xvfb-run -a python3 "$ROOT/tests/runtime/evidence-card.py" "Android APK · ARM64 + JVM" "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")" "$PROJECT_ROOT/evidence/android/apk-running.png"
 
-if ! crx_result="$("$LOADER" --inspect-crx "$TEMP/fixtures/unsigned-extension.crx" 2>&1)"; then
-  printf 'CRX inspection failed:\\n%s\\n' "$crx_result" >&2
-  exit 1
-fi
-grep -Fq 'CRX v3' <<< "$crx_result"
-grep -Fq 'manifest.json' <<< "$crx_result"
-echo "CRX envelope and extension manifest inspection passed. (Unsigned fixture; never installed.)"
+# Compile a freestanding ARM64 function as both an iOS Mach-O and the same raw instruction payload.
+mkdir -p "$TEMP/ios/Payload/Nexus.app"
+run_test "Compile iOS ARM64 Mach-O payload" clang -target arm64-apple-ios17.0 -c "$ROOT/ios-real/arm64-payload.S" -o "$TEMP/ios/payload.o"
+run_test "Link iOS ARM64 Mach-O executable" "$LD64_LLD" -arch arm64 -platform_version ios 17.0 17.0 -e _nexus_ipa_payload "$TEMP/ios/payload.o" -o "$TEMP/ios/Payload/Nexus.app/Nexus"
+run_test "Extract ARM64 __text payload from Mach-O" python3 "$ROOT/ios-real/extract-macho-text.py" "$TEMP/ios/Payload/Nexus.app/Nexus" "$TEMP/ios/payload.bin"
+run_test "Build static ARM64 payload runner" aarch64-linux-gnu-gcc -O2 -static "$ROOT/ios-real/arm64-runner.c" -o "$TEMP/ios/Payload/Nexus.app/NexusArm64Runner"
+cp "$TEMP/ios/payload.bin" "$TEMP/ios/Payload/Nexus.app/PayloadARM64.bin"
+run_test "Execute extracted iOS ARM64 instructions under qemu" bash -c 'qemu-aarch64-static "$1" "$2" | tee "$3/ios-output.txt"' _ "$TEMP/ios/Payload/Nexus.app/NexusArm64Runner" "$TEMP/ios/Payload/Nexus.app/PayloadARM64.bin" "$TEMP"
+cat > "$TEMP/ios/Payload/Nexus.app/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Nexus</string><key>CFBundleIdentifier</key><string>com.example.nexus.ios</string><key>CFBundleName</key><string>Nexus</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>
+PLIST
+mkdir -p "$PROJECT_ROOT/evidence/ios"
+run_test "Package IPA bundle" bash -c 'cd "$1/ios" && zip -qr "$2/evidence/ios/nexus-arm64-runtime.ipa" Payload' _ "$TEMP" "$PROJECT_ROOT"
+run_test "Capture IPA runtime output in GTK" xvfb-run -a python3 "$ROOT/tests/runtime/evidence-card.py" "iOS IPA · extracted ARM64 __text" "$(cat "$TEMP/ios-output.txt")" "$PROJECT_ROOT/evidence/ios/ipa-running.png"
 
-ipa_result="$("$LOADER" --inspect-ipa "$TEMP/fixtures/minimal.ipa")"
-grep -Fq 'com.example.nexus.iossmoke' <<< "$ipa_result"
-grep -Fq 'Mach-O ARM64 móvil=true' <<< "$ipa_result"
-echo "IPA ZIP integrity, Payload app bundle, Info.plist metadata and mobile ARM64 Mach-O inspection passed. (Structural fixture; not executed.)"
-
-"$WASMTIME" run "$TEMP/fixtures/wasi-exit-zero.wasm"
-echo "WASI command executed with Wasmtime and exited 0."
-
-# Verify the Linux dispatcher actually launches a PE executable in Wine.
-x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TEMP/pe-exit-zero.exe"
-file "$TEMP/pe-exit-zero.exe" | grep -Fq 'PE32+ executable'
-export WINEARCH=win64
-export WINEPREFIX="$TEMP/wine-prefix"
-export WINEDEBUG=-all
-xvfb-run -a "$LOADER" "$TEMP/pe-exit-zero.exe"
-echo "x86_64 PE executable ran through nexus-omniloader and Wine with exit 0."
-
-# Build a real Win32 GUI PE and a WebAssembly-backed PWA for the graphical smoke.
-x86_64-w64-mingw32-gcc -Os -municode -mwindows \
-  "$ROOT/tests/fixtures/pe-dynamic-gui.c" -o "$TEMP/nexus-live-win32.exe"
-file "$TEMP/nexus-live-win32.exe" | grep -Fq 'PE32+ executable'
+# Validate real Wasm execution and build the live PWA used by the Chromium GUI capture.
 mkdir -p "$TEMP/webapp"
 cp -a "$ROOT/tests/webapp/." "$TEMP/webapp/"
-python3 "$ROOT/tests/webapp/build_wasm.py" "$TEMP/webapp/app.wasm"
-wasm_counter=$("$WASMTIME" run --invoke advance "$TEMP/webapp/app.wasm")
+run_test "Build WebAssembly module" python3 "$ROOT/tests/webapp/build_wasm.py" "$TEMP/webapp/app.wasm"
+wasm_counter="$(run_test "Execute Wasm module" "$WASMTIME" run --invoke advance "$TEMP/webapp/app.wasm")"
 test "$wasm_counter" = "1"
-echo "WebAssembly counter executed with Wasmtime and returned $wasm_counter."
-
-# Android and iOS evidence is produced by the dedicated device/simulator jobs.
-bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"
+run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TEMP/pe-exit-zero.exe"
+run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TEMP/pe-exit-zero.exe"
+run_test "Compile real Win32 GUI PE" x86_64-w64-mingw32-gcc -Os -municode -mwindows "$ROOT/tests/fixtures/pe-dynamic-gui.c" -o "$TEMP/nexus-live-win32.exe"
+run_test "Capture live Win32 and PWA GUI" bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"

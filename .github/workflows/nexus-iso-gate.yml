@@ -43,6 +43,9 @@ jobs:
     needs: desktop-preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,9 +57,25 @@ jobs:
           sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils \
             gcc-mingw-w64-x86-64 wine wine64 winetricks cabextract winbind fonts-liberation xvfb file unzip \
             dbus-x11 xauth xfce4-session xfdesktop4 xfce4-panel xfwm4 xfce4-settings \
-            python3-pil python3-gi gir1.2-gtk-3.0 x11-utils xdotool arc-theme papirus-icon-theme fonts-inter librsvg2-common zenity
+            python3-pil python3-gi gir1.2-gtk-3.0 x11-utils xdotool gcc-aarch64-linux-gnu \
+            qemu-user-static clang lld arc-theme papirus-icon-theme fonts-inter librsvg2-common zenity
           sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
             /usr/share/backgrounds/nexus/horizon-aurora.svg
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+      - name: Install Android build SDK only (no system emulator)
+        run: |
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -perm /111 | sort -V | tail -n 1)"
+          test -n "$sdkmanager_path"
+          echo "$(dirname "$sdkmanager_path")" >> "$GITHUB_PATH"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Install real Chromium for the PWA and WebAssembly smoke
         uses: actions/setup-node@v4
@@ -84,7 +103,7 @@ jobs:
       - name: Compile loader and stage checksum-verified Wasmtime
         run: bash image/stage-omni-subsystem.sh
 
-      - name: Inspect package fixtures and run real PE, WASI, and Chromium PWA smoke tests
+      - name: Run real Windows, WebAssembly, Android payload, and iOS payload tests
         run: bash image/runtime-smoke.sh
 
       - name: Preflight and build inside Debian Trixie

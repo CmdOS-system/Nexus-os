@@ -23,13 +23,13 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", error => pageErrors.push(error.message));
-    await page.goto(url, { waitUntil: "load", timeout: 30_000 });
+    await page.goto(url, { waitUntil: "load", timeout: 10_000 });
     await page.waitForFunction(() => {
       const title = document.title;
       const status = document.querySelector("#runtime")?.textContent ?? "";
       const match = title.match(/frame\s+(\d+)/i);
       return match && Number(match[1]) >= 10 && /WebAssembly is executing/.test(status);
-    }, { timeout: 30_000 });
+    }, { timeout: 10_000 });
 
     const state = await page.evaluate(() => {
       const canvas = document.querySelector("canvas");

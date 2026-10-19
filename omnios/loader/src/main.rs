@@ -294,27 +294,13 @@ fn inspect_apk(path: &Path) -> io::Result<String> {
         return Err(io::Error::other("El APK no incluye classes.dex; no se puede validar el payload Android."));
     }
     let manifest = zip_member(path, "AndroidManifest.xml", MAX_MANIFEST_SIZE)?;
-    let package = match omni_loader::package_inspector::android_package_id(&manifest) {
-        Ok(package) => package,
-        Err(parse_error) => aapt_package_id(path).map_err(|_| io::Error::other(parse_error))?,
-    };
+    let package = omni_loader::package_inspector::android_package_id(&manifest)
+        .map_err(io::Error::other)?;
     let dex = zip_member_prefix(path, "classes.dex", 112)?;
     if !omni_loader::package_inspector::valid_dex_header(&dex) {
         return Err(io::Error::other("classes.dex no tiene una cabecera DEX válida."));
     }
     Ok(package)
-}
-
-fn aapt_package_id(path: &Path) -> io::Result<String> {
-    let output = Command::new("aapt").args(["dump", "badging"]).arg(path).output()?;
-    if !output.status.success() {
-        return Err(io::Error::other("aapt could not read APK package metadata"));
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let line = text.lines().find(|line| line.starts_with("package: "))
-        .ok_or_else(|| io::Error::other("aapt output has no package metadata"))?;
-    parse_aapt_package(line).map(str::to_owned)
-        .ok_or_else(|| io::Error::other("aapt package metadata is malformed"))
 }
 
 fn inspect_crx(path: &Path) -> io::Result<()> {
@@ -670,6 +656,7 @@ fn register_binfmt() -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
 fn parse_aapt_package(line: &str) -> Option<&str> {
     let value = line.strip_prefix("package: name='")?;
     let end = value.find('\'')?;

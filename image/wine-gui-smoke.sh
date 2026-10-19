@@ -29,7 +29,6 @@ for tool in xfce4-session xdotool python3 curl; do
 done
 
 SESSION_ROOT="$(mktemp -d)"
-PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/.cache/ms-playwright}"
 export HOME="$SESSION_ROOT/home"
 export XDG_CONFIG_HOME="$SESSION_ROOT/config"
 export XDG_CACHE_HOME="$SESSION_ROOT/cache"
@@ -55,17 +54,17 @@ cleanup() {
   fi
   kill "$SESSION_PID" 2>/dev/null || true
   wait "$SESSION_PID" 2>/dev/null || true
-  rm -rf -- "$SESSION_ROOT" 2>/dev/null || true
+  rm -rf -- "$SESSION_ROOT"
 }
 trap cleanup EXIT
 
 ready=0
-for attempt in $(seq 1 60); do
+for attempt in $(seq 1 20); do
   if xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -q '/last-image$'; then
     ready=1
     break
   fi
-  sleep 1
+  sleep 0.5
 done
 if [[ "$ready" -ne 1 ]]; then
   cat "$SESSION_ROOT/xfce-session.log" >&2 || true
@@ -115,10 +114,10 @@ test -n "$NOTEPAD" && test -f "$NOTEPAD" || {
 "$LOADER" "$NOTEPAD" > "$SESSION_ROOT/notepad.log" 2>&1 &
 APP_PID=$!
 notepad_window=""
-for attempt in $(seq 1 60); do
+for attempt in $(seq 1 20); do
   notepad_window="$(xdotool search --onlyvisible --name '[Nn]otepad' 2>/dev/null | head -n 1 || true)"
   [[ -n "$notepad_window" ]] && break
-  sleep 1
+  sleep 0.5
 done
 [[ -n "$notepad_window" ]] || { cat "$SESSION_ROOT/notepad.log" >&2; exit 1; }
 xdotool windowclose "$notepad_window" 2>/dev/null || true
@@ -130,7 +129,7 @@ APP_PID=$!
 win_window=""
 win_title=""
 win_tick=0
-for attempt in $(seq 1 60); do
+for attempt in $(seq 1 20); do
   win_window="$(xdotool search --onlyvisible --name 'Nexus Win32 live app - tick' 2>/dev/null | head -n 1 || true)"
   if [[ -n "$win_window" ]]; then
     win_title="$(xdotool getwindowname "$win_window" 2>/dev/null || true)"
@@ -139,7 +138,7 @@ for attempt in $(seq 1 60); do
       (( win_tick >= 3 )) && break
     fi
   fi
-  sleep 1
+  sleep 0.5
 done
 [[ -n "$win_window" && "$win_tick" -ge 3 ]] || {
   cat "$SESSION_ROOT/win32.log" >&2 || true
@@ -160,15 +159,14 @@ PORT=18943
 python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$WEBAPP" \
   > "$SESSION_ROOT/web-server.log" 2>&1 &
 SERVER_PID=$!
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 20); do
   if curl -fsS "http://127.0.0.1:$PORT/" >/dev/null; then break; fi
-  sleep 1
+  sleep 0.5
 done
 curl -fsS "http://127.0.0.1:$PORT/app.wasm" -o "$SESSION_ROOT/app.wasm"
 cmp -s "$SESSION_ROOT/app.wasm" "$WEBAPP/app.wasm"
 NODE_PATH="$RUNNER_TEMP/nexus-playwright/node_modules${NODE_PATH:+:$NODE_PATH}" \
-  PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" \
   NEXUS_PWA_URL="http://127.0.0.1:$PORT/" \
   NEXUS_PWA_SCREENSHOT="$PROJECT_ROOT/evidence/web/crx-pwa-running.png" \
-  node "$PROJECT_ROOT/image/tests/webapp/runtime-smoke.cjs"
+  timeout --kill-after=1s 10s node "$PROJECT_ROOT/image/tests/webapp/runtime-smoke.cjs"
 echo "Real Chromium rendered Canvas and executed the live WebAssembly PWA in Xvfb."

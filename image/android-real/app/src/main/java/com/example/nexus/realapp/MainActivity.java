@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
             canvas.drawText("NEXUS / ANDROID RUNTIME", 30, 70, paint);
             paint.setColor(0xffedf7ff);
             paint.setTextSize(24f);
-            canvas.drawText("Real APK code is executing", 30, cy + 70, paint);
+            canvas.drawText("APK Java logic: 6 x 7 = " + PayloadLogic.calculate(6, 7), 30, cy + 70, paint);
             paint.setColor(0xff70f5ff);
             paint.setTypeface(Typeface.create("monospace", Typeface.NORMAL));
             canvas.drawText("Live DEX frame: " + frame, 30, cy + 112, paint);
