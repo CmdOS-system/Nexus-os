@@ -15,7 +15,7 @@ on:
       - "omnios/loader/**"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   linux-windows-and-web:
@@ -141,6 +141,8 @@ jobs:
     needs: [linux-windows-and-web, android-apk, ios-arm64-simulator]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/download-artifact@v4
         with:
           name: nexus-evidence-linux
@@ -167,6 +169,21 @@ jobs:
             test -s "$image"
             file "$image" | grep -F 'PNG image data'
           done
+      - name: Commit runtime screenshots to the PR branch
+        env:
+          PR_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add evidence/boot/desktop-boot.png evidence/windows/wine-gui-running.png \
+            evidence/android/apk-running.png evidence/web/crx-pwa-running.png evidence/ios/ipa-running.png
+          if git diff --cached --quiet; then
+            echo "Runtime screenshots are already committed."
+            exit 0
+          fi
+          git commit -m "test(evidence): add verified runtime screenshots"
+          git push origin "HEAD:${PR_BRANCH}"
       - uses: actions/upload-artifact@v4
         with:
           name: nexus-real-runtime-evidence-${{ github.run_id }}
