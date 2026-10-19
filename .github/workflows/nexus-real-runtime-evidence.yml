@@ -33,9 +33,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10.2"
       - name: Install user-mode runtime and GUI tools (no system emulator)
         run: |
           sudo dpkg --add-architecture i386

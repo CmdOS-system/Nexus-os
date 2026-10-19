@@ -14,6 +14,9 @@ WASMTIME="$ROOT/staging/usr/bin/wasmtime"
 TEMP="$(mktemp -d)"
 LD64_LLD="$(command -v ld64.lld || find /usr/bin -maxdepth 1 -name 'ld64.lld-*' -executable -print | sort -V | tail -n 1)"
 APK_NATIVE_PAYLOAD="$ROOT/android-real/app/src/main/jniLibs/arm64-v8a/libnexus_apk_payload.so"
+ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
 cleanup() {
   local status=$?
   trap - EXIT
@@ -32,26 +35,54 @@ run_test() {
   echo "[smoke] $label" >&2
   timeout --kill-after=1s 15s "$@"
 }
-for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java gradle node; do
+run_fast() {
+  local label="$1"; shift
+  echo "[smoke] $label (max 3s)" >&2
+  timeout --kill-after=250ms 3s "$@"
+}
+for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
 test -n "$LD64_LLD" || { echo "ld64.lld is required to produce the ARM64 Mach-O" >&2; exit 1; }
+for tool in "$BUILD_TOOLS/aapt2" "$BUILD_TOOLS/d8" "$BUILD_TOOLS/zipalign"; do
+  test -x "$tool" || { echo "Android SDK tool missing: $tool" >&2; exit 1; }
+done
+test -s "$ANDROID_JAR" || { echo "Android SDK android.jar is missing: $ANDROID_JAR" >&2; exit 1; }
 test -x "$LOADER" && test -x "$WASMTIME"
 export NEXUS_SUBSYSTEM_HELPER="$ROOT/staging/usr/lib/nexus"
 export NEXUS_SOUND_DISABLED=1
 command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 is required" >&2; exit 1; }
 
-# Execute a Java class file on the local JVM; the same pure Java class is packaged into APK DEX.
-run_test "Compile and run APK Java logic on JVM" bash -c 'mkdir -p "$1/classes" && javac -d "$1/classes" "$2" && java -cp "$1/classes" com.example.nexus.realapp.PayloadLogic | tee "$1/jvm-output.txt"' _ "$TEMP" "$ROOT/android-real/app/src/main/java/com/example/nexus/realapp/PayloadLogic.java"
-
-# The Android APK packages the ARM64 Linux user-mode payload as an extracted native asset.
-run_test "Build APK ARM64 payload ELF" aarch64-linux-gnu-gcc -O2 -static "$ROOT/android-real/native/nexus-payload.c" -o "$TEMP/libnexus_apk_payload.so"
+# Compile the actual app Java sources to JVM classes and DEX, plus the ARM64 payload, under one 3s ceiling.
+mkdir -p "$TEMP/classes" "$TEMP/dex"
+run_fast "Compile APK DEX and ARM64 payload" bash -c '
+  set -euo pipefail
+  javac -source 8 -target 8 -classpath "$1" -d "$3/classes" \
+    "$2/android-real/app/src/main/java/com/example/nexus/realapp/MainActivity.java" \
+    "$2/android-real/app/src/main/java/com/example/nexus/realapp/PayloadLogic.java"
+  "$4/d8" --lib "$1" --min-api 23 --output "$3/dex" "$3/classes"
+  aarch64-linux-gnu-gcc -O2 -static "$2/android-real/native/nexus-payload.c" -o "$3/libnexus_apk_payload.so"
+' _ "$ANDROID_JAR" "$ROOT" "$TEMP" "$BUILD_TOOLS"
+run_test "Execute APK Java bytecode logic in JVM" bash -c 'java -cp "$1/classes" com.example.nexus.realapp.PayloadLogic | tee "$1/jvm-output.txt"' _ "$TEMP"
 run_test "Verify APK payload ELF architecture" bash -c 'file "$1" | grep -Fq "ARM aarch64"' _ "$TEMP/libnexus_apk_payload.so"
 mkdir -p "$(dirname "$APK_NATIVE_PAYLOAD")"
 cp "$TEMP/libnexus_apk_payload.so" "$APK_NATIVE_PAYLOAD"
-run_test "Build APK with DEX and ARM64 payload" gradle -p "$ROOT/android-real" assembleDebug
-APK="$ROOT/android-real/app/build/outputs/apk/debug/app-debug.apk"
+
+# Assemble a valid APK directly with aapt2, D8 output, and zipalign; with no external build system or dependency resolution.
+APK="$TEMP/nexus-runtime.apk"
+run_test "Link APK manifest with aapt2" "$BUILD_TOOLS/aapt2" link -o "$TEMP/resources.apk" \
+  --manifest "$ROOT/android-real/app/src/main/AndroidManifest.xml" -I "$ANDROID_JAR" \
+  --min-sdk-version 23 --target-sdk-version 28
+mkdir -p "$TEMP/apk/lib/arm64-v8a"
+run_test "Assemble APK bytecode and native payload" bash -c '
+  unzip -q "$1/resources.apk" -d "$1/apk"
+  cp "$1/dex/classes.dex" "$1/apk/classes.dex"
+  cp "$1/libnexus_apk_payload.so" "$1/apk/lib/arm64-v8a/libnexus_apk_payload.so"
+  (cd "$1/apk" && zip -qr "$1/unsigned.apk" .)
+' _ "$TEMP"
+run_test "Align APK package" "$BUILD_TOOLS/zipalign" -f 4 "$TEMP/unsigned.apk" "$APK"
 run_test "Extract and execute APK ARM64 ELF with qemu" bash -c 'unzip -p "$1" lib/arm64-v8a/libnexus_apk_payload.so > "$2/apk-payload" && chmod +x "$2/apk-payload" && qemu-aarch64-static "$2/apk-payload" | tee "$2/apk-output.txt" && grep -Fq "6 x 7 = 42" "$2/apk-output.txt"' _ "$APK" "$TEMP"
+
 run_test "Capture APK runtime output in GTK" xvfb-run -a python3 "$ROOT/tests/runtime/evidence-card.py" "Android APK · ARM64 + JVM" "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")" "$PROJECT_ROOT/evidence/android/apk-running.png"
 
 # Compile a freestanding ARM64 function as both an iOS Mach-O and the same raw instruction payload.
