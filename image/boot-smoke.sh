@@ -45,12 +45,30 @@ cleanup() {
 }
 trap cleanup EXIT
 
-timeout "$TIMEOUT" qemu-system-x86_64 \\
-  -machine q35,accel=tcg -m 2048 -smp 2 -boot d \\
-  -drive if=pflash,format=raw,readonly=on,file="$OVMF" \\
-  -cdrom "$ISO" -display vnc=127.0.0.1:0 -serial "file:$LOG" \\
-  -qmp "unix:$QMP_SOCKET,server=on,wait=off" \\
-  -monitor none -no-reboot -snapshot -D "$DEBUG_LOG" -d guest_errors,unimp &
+qemu_args=(
+  -machine q35,accel=tcg
+  -m 2048
+  -smp 2
+  -boot d
+  -drive "if=pflash,format=raw,readonly=on,file=$OVMF"
+  -cdrom "$ISO"
+  -display vnc=127.0.0.1:0
+  -serial "file:$LOG"
+  -qmp "unix:$QMP_SOCKET,server=on,wait=off"
+  -monitor none
+  -no-reboot
+  -snapshot
+  -D "$DEBUG_LOG"
+  -d guest_errors,unimp
+)
+for qemu_arg in "${qemu_args[@]}"; do
+  if [[ -z "$qemu_arg" || "$qemu_arg" == *\\* ]]; then
+    echo "Invalid empty or backslash-containing QEMU argument: [$qemu_arg]" >&2
+    exit 2
+  fi
+done
+
+timeout "$TIMEOUT" qemu-system-x86_64 "${qemu_args[@]}" &
 QEMU_PID=$!
 
 deadline=$((SECONDS + TIMEOUT))
