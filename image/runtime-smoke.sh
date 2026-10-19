@@ -14,6 +14,8 @@ WASMTIME="$ROOT/staging/usr/bin/wasmtime"
 TEMP="$(mktemp -d)"
 LD64_LLD="$(command -v ld64.lld || find /usr/bin -maxdepth 1 -name 'ld64.lld-*' -executable -print | sort -V | tail -n 1)"
 APK_NATIVE_PAYLOAD="$ROOT/android-real/app/src/main/jniLibs/arm64-v8a/libnexus_apk_payload.so"
+export WINEPREFIX="${WINEPREFIX:-$TEMP/wine-prefix}"
+export WINEARCH="${WINEARCH:-win64}"
 ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
 ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
 BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
@@ -22,7 +24,6 @@ cleanup() {
   trap - EXIT
   if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
     WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
-    timeout --kill-after=1s 15s env WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
   fi
   rm -f "$APK_NATIVE_PAYLOAD" 2>/dev/null || true
   rm -rf -- "$TEMP" || status=$?
@@ -40,7 +41,70 @@ run_fast() {
   echo "[smoke] $label (max 25s)" >&2
   timeout --kill-after=1s 25s "$@"
 }
-for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node; do
+run_recorded_test() {
+  local label="$1" video="$2"; shift 2
+  mkdir -p "$(dirname "$video")"
+  echo "[smoke] $label" >&2
+  timeout --kill-after=1s 15s xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' bash -c '
+    set -euo pipefail
+    video="$1"; shift
+    wm_pid=""
+    recorder_pid=""
+    stop_pid() {
+      local pid="$1" attempt
+      [[ -n "$pid" ]] || return 0
+      kill -TERM "$pid" 2>/dev/null || true
+      for attempt in $(seq 1 10); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.1
+      done
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+    }
+    finish_recorder() {
+      local pid="$1" attempt
+      [[ -n "$pid" ]] || return 0
+      kill -INT "$pid" 2>/dev/null || true
+      for attempt in $(seq 1 20); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.1
+      done
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -TERM "$pid" 2>/dev/null || true
+        for attempt in $(seq 1 10); do
+          kill -0 "$pid" 2>/dev/null || break
+          sleep 0.1
+        done
+      fi
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+    }
+    cleanup_recording() {
+      trap - EXIT
+      if [[ -n "$recorder_pid" ]]; then
+        finish_recorder "$recorder_pid"
+      fi
+      stop_pid "$wm_pid"
+      pkill -TERM -u "$(id -u)" -x xfconfd 2>/dev/null || true
+    }
+    trap cleanup_recording EXIT
+    trap "exit 143" TERM
+    trap "exit 130" INT
+    NO_AT_BRIDGE=1 xfwm4 --replace --compositor=off </dev/null >/dev/null 2>&1 &
+    wm_pid=$!
+    bash -c 'trap - INT; exec ffmpeg "$@"' _ -nostdin -hide_banner -loglevel error -y \
+      -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -t 10 -an \
+      -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart "$video" \
+      </dev/null >/dev/null 2>&1 &
+    recorder_pid=$!
+    sleep 0.3
+    "$@"
+  ' _ "$video" "$@"
+  test -s "$video"
+  ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height \
+    -of csv=p=0 "$video" | grep -Fxq 'h264,1280,720'
+}
+for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node ffmpeg ffprobe xfwm4; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
 test -n "$LD64_LLD" || { echo "ld64.lld is required to produce the ARM64 Mach-O" >&2; exit 1; }
@@ -84,7 +148,7 @@ run_test "Assemble APK bytecode and native payload" bash -c '
 run_test "Align APK package" "$BUILD_TOOLS/zipalign" -f 4 "$TEMP/unsigned.apk" "$APK"
 run_test "Extract and execute APK ARM64 ELF with qemu" bash -c 'unzip -p "$1" lib/arm64-v8a/libnexus_apk_payload.so > "$2/apk-payload" && chmod +x "$2/apk-payload" && qemu-aarch64-static "$2/apk-payload" | tee "$2/apk-output.txt" && grep -Fq "6 x 7 = 42" "$2/apk-output.txt"' _ "$APK" "$TEMP"
 
-run_test "Capture APK runtime output in GTK" xvfb-run -a env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "Android APK · ARM64 + JVM" "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")" "$PROJECT_ROOT/evidence/android/apk-running.png"
+run_recorded_test "Capture APK runtime output in GTK and MP4" "$PROJECT_ROOT/evidence/android/apk-running.mp4" env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "Android APK · ARM64 + JVM" "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")" "$PROJECT_ROOT/evidence/android/apk-running.png"
 
 # Compile a freestanding ARM64 function as both an iOS Mach-O and the same raw instruction payload.
 mkdir -p "$TEMP/ios/Payload/Nexus.app"
@@ -99,7 +163,7 @@ cat > "$TEMP/ios/Payload/Nexus.app/Info.plist" <<'PLIST'
 PLIST
 mkdir -p "$PROJECT_ROOT/evidence/ios"
 run_test "Package IPA bundle" bash -c 'cd "$1/ios" && zip -qr "$2/evidence/ios/nexus-arm64-runtime.ipa" Payload' _ "$TEMP" "$PROJECT_ROOT"
-run_test "Capture IPA runtime output in GTK" xvfb-run -a env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "iOS IPA · extracted ARM64 __text" "$(cat "$TEMP/ios-output.txt")" "$PROJECT_ROOT/evidence/ios/ipa-running.png"
+run_recorded_test "Capture IPA runtime output in GTK and MP4" "$PROJECT_ROOT/evidence/ios/ipa-running.mp4" env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "iOS IPA · extracted ARM64 __text" "$(cat "$TEMP/ios-output.txt")" "$PROJECT_ROOT/evidence/ios/ipa-running.png"
 
 # Validate real Wasm execution and build the live PWA used by the Chromium GUI capture.
 mkdir -p "$TEMP/webapp"
@@ -109,5 +173,6 @@ wasm_counter="$(run_test "Execute Wasm module" "$WASMTIME" run --invoke advance 
 test "$wasm_counter" = "1"
 run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TEMP/pe-exit-zero.exe"
 run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TEMP/pe-exit-zero.exe"
+WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
 run_test "Compile real Win32 GUI PE" x86_64-w64-mingw32-gcc -Os -municode -mwindows "$ROOT/tests/fixtures/pe-dynamic-gui.c" -o "$TEMP/nexus-live-win32.exe"
 run_test "Capture live Win32 and PWA GUI" bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"

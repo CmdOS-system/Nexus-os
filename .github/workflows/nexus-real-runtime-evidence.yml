@@ -38,8 +38,8 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64 wine32:i386 fonts-wine \
-            xvfb xauth x11-utils xdotool dbus-x11 xfce4-session xfdesktop4 xfce4-panel \
-            xfwm4 xfce4-settings xfconf python3-pil python3-gi gir1.2-gtk-3.0 unzip zip file curl \
+            xvfb xauth x11-utils xdotool dbus-x11 xfwm4 xfconf ffmpeg \
+            python3-pil python3-gi gir1.2-gtk-3.0 unzip zip file curl \
             gcc-aarch64-linux-gnu qemu-user-static clang lld llvm
           sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
             /usr/share/backgrounds/nexus/horizon-aurora.svg
@@ -76,7 +76,11 @@ jobs:
           path: |
             evidence/boot/desktop-boot.png
             evidence/windows/wine-gui-running.png
+            evidence/windows/wine-gui-running.mp4
             evidence/android/apk-running.png
+            evidence/android/apk-running.mp4
             evidence/web/crx-pwa-running.png
+            evidence/web/crx-pwa-running.mp4
             evidence/ios/ipa-running.png
+            evidence/ios/ipa-running.mp4
             evidence/ios/nexus-arm64-runtime.ipa

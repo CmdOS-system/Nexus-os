@@ -57,7 +57,7 @@ jobs:
           sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils \
             gcc-mingw-w64-x86-64 wine wine64 winetricks cabextract winbind fonts-liberation xvfb file unzip \
             dbus-x11 xauth xfce4-session xfdesktop4 xfce4-panel xfwm4 xfce4-settings \
-            python3-pil python3-gi gir1.2-gtk-3.0 x11-utils xdotool gcc-aarch64-linux-gnu \
+            ffmpeg python3-pil python3-gi gir1.2-gtk-3.0 x11-utils xdotool gcc-aarch64-linux-gnu \
             qemu-user-static clang lld arc-theme papirus-icon-theme fonts-inter librsvg2-common zenity
           sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
             /usr/share/backgrounds/nexus/horizon-aurora.svg
@@ -214,9 +214,13 @@ jobs:
             nexus-iso-*
             evidence/boot/desktop-boot.png
             evidence/windows/wine-gui-running.png
+            evidence/windows/wine-gui-running.mp4
             evidence/android/apk-running.png
+            evidence/android/apk-running.mp4
             evidence/web/crx-pwa-running.png
+            evidence/web/crx-pwa-running.mp4
             evidence/ios/ipa-running.png
+            evidence/ios/ipa-running.mp4
 
       - name: Upload verified candidate evidence
         if: success()
@@ -231,8 +235,12 @@ jobs:
             nexus-qemu-serial.log
             evidence/boot/desktop-boot.png
             evidence/windows/wine-gui-running.png
+            evidence/windows/wine-gui-running.mp4
             evidence/android/apk-running.png
+            evidence/android/apk-running.mp4
             evidence/web/crx-pwa-running.png
+            evidence/web/crx-pwa-running.mp4
             evidence/ios/ipa-running.png
+            evidence/ios/ipa-running.mp4
 
 # Operational trigger: refresh the ISO Gate runner after the queued run #163.

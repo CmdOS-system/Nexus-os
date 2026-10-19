@@ -9,11 +9,11 @@ WEBAPP="${3:?built PWA directory is required}"
 
 if [[ "${NEXUS_REAL_GUI_SESSION:-0}" != "1" ]]; then
   if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-    NEXUS_REAL_GUI_SESSION=1 xvfb-run -a -s '-screen 0 1920x1080x24' \
+    NEXUS_REAL_GUI_SESSION=1 xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' \
       bash "$0" "$LOADER" "$WIN32_APP" "$WEBAPP"
   else
     NEXUS_REAL_GUI_SESSION=1 dbus-run-session -- \
-      xvfb-run -a -s '-screen 0 1920x1080x24' \
+      xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' \
       bash "$0" "$LOADER" "$WIN32_APP" "$WEBAPP"
   fi
   exit $?
@@ -24,7 +24,7 @@ test -n "${DBUS_SESSION_BUS_ADDRESS:-}" || { echo "D-Bus session is missing" >&2
 test -x "$LOADER"
 test -s "$WIN32_APP"
 test -s "$WEBAPP/index.html"
-for tool in xfce4-session xdotool python3 curl; do
+for tool in xfwm4 xdotool python3 curl ffmpeg ffprobe; do
   command -v "$tool" >/dev/null || { echo "Missing GUI smoke dependency: $tool" >&2; exit 1; }
 done
 
@@ -41,39 +41,57 @@ export WINEARCH=win64
 export WINEPREFIX="$SESSION_ROOT/wine-prefix"
 export WINEDEBUG=-all
 
-xfce4-session > "$SESSION_ROOT/xfce-session.log" 2>&1 &
-SESSION_PID=$!
+WM_PID=""
 APP_PID=""
 SERVER_PID=""
+stop_pid() {
+  local pid="$1" attempt
+  [[ -n "$pid" ]] || return 0
+  kill -TERM "$pid" 2>/dev/null || true
+  for attempt in $(seq 1 10); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+finish_recorder() {
+  local pid="$1" attempt
+  [[ -n "$pid" ]] || return 0
+  kill -INT "$pid" 2>/dev/null || true
+  for attempt in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null || true
+    for attempt in $(seq 1 10); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+  fi
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
 cleanup() {
-  if [[ -n "$APP_PID" ]]; then kill "$APP_PID" 2>/dev/null || true; fi
-  if [[ -n "$SERVER_PID" ]]; then kill "$SERVER_PID" 2>/dev/null || true; fi
+  trap - EXIT INT TERM
+  stop_recording || true
+  stop_pid "$APP_PID"
+  stop_pid "$SERVER_PID"
   if command -v wineserver >/dev/null 2>&1; then
     WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
-    timeout 15s env WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
   fi
-  kill "$SESSION_PID" 2>/dev/null || true
-  wait "$SESSION_PID" 2>/dev/null || true
+  stop_pid "$WM_PID"
+  pkill -TERM -u "$(id -u)" -x xfconfd 2>/dev/null || true
+  pkill -TERM -u "$(id -u)" -x tumblerd 2>/dev/null || true
   rm -rf -- "$SESSION_ROOT"
 }
 trap cleanup EXIT
 
-ready=0
-for attempt in $(seq 1 20); do
-  if xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -q '/last-image$'; then
-    ready=1
-    break
-  fi
-  sleep 0.5
-done
-if [[ "$ready" -ne 1 ]]; then
-  cat "$SESSION_ROOT/xfce-session.log" >&2 || true
-  echo "XFCE desktop session did not initialize" >&2
-  exit 1
-fi
-/bin/sh "$PROJECT_ROOT/image/includes/usr/local/libexec/nexus-horizon-appearance"
-dbus-update-activation-environment DISPLAY XAUTHORITY XDG_CONFIG_HOME XDG_CACHE_HOME
-sleep 2
+NO_AT_BRIDGE=1 xfwm4 --replace --compositor=off </dev/null >/dev/null 2>&1 &
+WM_PID=$!
+sleep 0.3
+kill -0 "$WM_PID" 2>/dev/null || { echo "xfwm4 did not stay running on Xvfb" >&2; exit 1; }
 
 capture_desktop() {
   python3 - "$1" <<'PY'
@@ -83,7 +101,7 @@ from pathlib import Path
 from PIL import ImageGrab
 
 image = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).convert("RGB")
-if image.size != (1920, 1080):
+if image.size != (1280, 720):
     raise RuntimeError(f"Unexpected Xvfb desktop size: {image.size}")
 path = Path(sys.argv[1])
 image.save(path, format="PNG")
@@ -96,13 +114,34 @@ PY
 
 reap_app() {
   local pid="$1"
-  if ! timeout 10s tail --pid="$pid" -f /dev/null 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-  fi
-  wait "$pid" 2>/dev/null || true
+  stop_pid "$pid"
+  WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
 }
 
-# This is a freshly started target XFCE session, captured before any test app.
+RECORDER_PID=""
+RECORDER_OUTPUT=""
+start_recording() {
+  RECORDER_OUTPUT="$1"
+  mkdir -p "$(dirname "$RECORDER_OUTPUT")"
+  bash -c 'trap - INT; exec ffmpeg "$@"' _ -nostdin -hide_banner -loglevel error -y \
+    -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -t 10 -an \
+    -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart "$RECORDER_OUTPUT" \
+    </dev/null >/dev/null 2>&1 &
+  RECORDER_PID=$!
+  sleep 0.3
+  kill -0 "$RECORDER_PID" 2>/dev/null || { echo "ffmpeg could not record DISPLAY=$DISPLAY" >&2; return 1; }
+}
+
+stop_recording() {
+  [[ -n "$RECORDER_PID" ]] || return 0
+  finish_recorder "$RECORDER_PID"
+  RECORDER_PID=""
+  test -s "$RECORDER_OUTPUT"
+  ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height \
+    -of csv=p=0 "$RECORDER_OUTPUT" | grep -Fxq 'h264,1280,720'
+}
+
+# Capture the clean Xvfb desktop before launching the test applications.
 capture_desktop "$PROJECT_ROOT/evidence/boot/desktop-boot.png"
 
 # Confirm Wine's bundled Notepad remains launchable, then capture our real app.
@@ -124,6 +163,7 @@ xdotool windowclose "$notepad_window" 2>/dev/null || true
 reap_app "$APP_PID"
 APP_PID=""
 
+start_recording "$PROJECT_ROOT/evidence/windows/wine-gui-running.mp4"
 "$LOADER" "$WIN32_APP" > "$SESSION_ROOT/win32.log" 2>&1 &
 APP_PID=$!
 win_window=""
@@ -145,9 +185,11 @@ done
   echo "Native Win32 GUI did not advance its live timer" >&2
   exit 1
 }
-xdotool windowmove "$win_window" 420 250 2>/dev/null || true
+xdotool windowmove "$win_window" 80 55 2>/dev/null || true
 sleep 1
 capture_desktop "$PROJECT_ROOT/evidence/windows/wine-gui-running.png"
+sleep 1
+stop_recording
 xdotool windowclose "$win_window" 2>/dev/null || true
 reap_app "$APP_PID"
 APP_PID=""
@@ -165,8 +207,10 @@ for attempt in $(seq 1 20); do
 done
 curl -fsS "http://127.0.0.1:$PORT/app.wasm" -o "$SESSION_ROOT/app.wasm"
 cmp -s "$SESSION_ROOT/app.wasm" "$WEBAPP/app.wasm"
+start_recording "$PROJECT_ROOT/evidence/web/crx-pwa-running.mp4"
 NODE_PATH="$RUNNER_TEMP/nexus-playwright/node_modules${NODE_PATH:+:$NODE_PATH}" \
   NEXUS_PWA_URL="http://127.0.0.1:$PORT/" \
   NEXUS_PWA_SCREENSHOT="$PROJECT_ROOT/evidence/web/crx-pwa-running.png" \
   timeout --kill-after=1s 10s node "$PROJECT_ROOT/image/tests/webapp/runtime-smoke.cjs"
+stop_recording
 echo "Real Chromium rendered Canvas and executed the live WebAssembly PWA in Xvfb."
