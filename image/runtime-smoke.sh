@@ -82,7 +82,9 @@ file "$TEMP/nexus-live-win32.exe" | grep -Fq 'PE32+ executable'
 mkdir -p "$TEMP/webapp"
 cp -a "$ROOT/tests/webapp/." "$TEMP/webapp/"
 python3 "$ROOT/tests/webapp/build_wasm.py" "$TEMP/webapp/app.wasm"
-"$WASMTIME" validate "$TEMP/webapp/app.wasm"
+wasm_counter=$("$WASMTIME" run --invoke advance "$TEMP/webapp/app.wasm")
+test "$wasm_counter" = "1"
+echo "WebAssembly counter executed with Wasmtime and returned $wasm_counter."
 
 # Android and iOS evidence is produced by the dedicated device/simulator jobs.
 bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"
