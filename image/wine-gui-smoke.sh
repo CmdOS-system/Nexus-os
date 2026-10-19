@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "@{BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-LOADER="@{1:-$SCRIPT_DIR/staging/usr/bin/nexus-omniloader}"
-APK="@{2:-}"
-CRX="@{3:-}"
-WASM="@{4:-}"
+LOADER="${1:-$SCRIPT_DIR/staging/usr/bin/nexus-omniloader}"
+APK="${2:-}"
+CRX="${3:-}"
+WASM="${4:-}"
+IPA="${5:-}"
 
-if [[ "@{NEXUS_WINE_GUI_SESSION:-0}" != "1" ]]; then
+if [[ "${NEXUS_WINE_GUI_SESSION:-0}" != "1" ]]; then
   test -x "$LOADER" || { echo "nexus-omniloader is missing: $LOADER" >&2; exit 1; }
-  for fixture in "$APK" "$CRX" "$WASM"; do
+  for fixture in "$APK" "$CRX" "$WASM" "$IPA"; do
     test -s "$fixture" || { echo "Required visual smoke fixture is missing: $fixture" >&2; exit 1; }
   done
   BROWSER_BIN="$(command -v chromium || command -v google-chrome || command -v google-chrome-stable || true)"
@@ -24,12 +25,12 @@ if [[ "@{NEXUS_WINE_GUI_SESSION:-0}" != "1" ]]; then
   chmod 0755 "$SHIM_DIR/chromium"
   NEXUS_WINE_GUI_SESSION=1 PATH="$SHIM_DIR:$PATH" \
     dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' \
-    "$0" "$LOADER" "$APK" "$CRX" "$WASM"
+    "$0" "$LOADER" "$APK" "$CRX" "$WASM" "$IPA"
   exit $?
 fi
 
-test -n "@{DISPLAY:-}" || { echo "Xvfb did not set DISPLAY" >&2; exit 1; }
-test -n "@{DBUS_SESSION_BUS_ADDRESS:-}" || { echo "D-Bus session is missing" >&2; exit 1; }
+test -n "${DISPLAY:-}" || { echo "Xvfb did not set DISPLAY" >&2; exit 1; }
+test -n "${DBUS_SESSION_BUS_ADDRESS:-}" || { echo "D-Bus session is missing" >&2; exit 1; }
 command -v xfce4-session >/dev/null
 command -v xdotool >/dev/null
 command -v python3 >/dev/null
@@ -41,7 +42,7 @@ export XDG_CONFIG_HOME="$SESSION_ROOT/config"
 export XDG_CACHE_HOME="$SESSION_ROOT/cache"
 export XDG_RUNTIME_DIR="$SESSION_ROOT/runtime"
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR" \
-  "$PROJECT_ROOT/evidence/windows" "$PROJECT_ROOT/evidence/android" "$PROJECT_ROOT/evidence/web"
+  "$PROJECT_ROOT/evidence/windows" "$PROJECT_ROOT/evidence/android" "$PROJECT_ROOT/evidence/web" "$PROJECT_ROOT/evidence/ios"
 chmod 0700 "$XDG_RUNTIME_DIR"
 cp -a "$PROJECT_ROOT/image/includes/etc/skel/.config/." "$XDG_CONFIG_HOME/"
 
@@ -220,4 +221,28 @@ open_app_page "android.html" "Android APK response" "$PROJECT_ROOT/evidence/andr
 open_app_page "web.html" "Web PWA" "$PROJECT_ROOT/evidence/web/crx-pwa-running.png" \
   "$SESSION_ROOT/web-home" "$SESSION_ROOT/web-app.log"
 
-echo "Android APK inspection response and CRX/WASI/PWA Chromium evidence captured through nexus-omniloader."
+# Launch only the package inspector; iOS ARM64 code is not executed on Linux.
+IOS_REPORT="$("$LOADER" --inspect-ipa "$IPA")"
+grep -Fq 'com.example.nexus.iossmoke' <<< "$IOS_REPORT"
+"$LOADER" "$IPA" > "$SESSION_ROOT/ios-ipa.log" 2>&1 &
+APP_PID=$!
+ios_window=""
+for attempt in $(seq 1 60); do
+  ios_window="$(xdotool search --onlyvisible --name 'Nexus iOS IPA response' 2>/dev/null | head -n 1 || true)"
+  [ -n "$ios_window" ] && break
+  sleep 1
+done
+if [ -z "$ios_window" ]; then
+  cat "$SESSION_ROOT/ios-ipa.log" >&2 || true
+  echo "iOS IPA inspection response did not open a visible XFCE window" >&2
+  exit 1
+fi
+xdotool windowmove "$ios_window" 520 300 2>/dev/null || true
+sleep 2
+capture_desktop "$PROJECT_ROOT/evidence/ios/ipa-running.png"
+xdotool windowactivate --sync "$ios_window" 2>/dev/null || true
+xdotool key Return 2>/dev/null || true
+wait "$APP_PID" || { cat "$SESSION_ROOT/ios-ipa.log" >&2; exit 1; }
+APP_PID=""
+
+echo "iOS IPA inspection response captured over XFCE; structural fixture was not executed."

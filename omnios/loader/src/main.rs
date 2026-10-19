@@ -24,6 +24,7 @@ enum Route {
     WindowsInstaller,
     AndroidApk,
     AndroidDex,
+    IosIpa,
     MacOs,
     Wasm,
     ChromeExtension,
@@ -56,6 +57,8 @@ const RULES: &[BinfmtRule] = &[
     BinfmtRule { name: "nexus-macho-le", matcher: Matcher::Magic(&[0xcf, 0xfa, 0xed, 0xfe]) },
     BinfmtRule { name: "nexus-wasm", matcher: Matcher::Magic(b"\0asm\x01\0\0\0") },
     BinfmtRule { name: "nexus-crx", matcher: Matcher::Magic(b"Cr24") },
+    BinfmtRule { name: "nexus-ipa", matcher: Matcher::Extension("ipa") },
+    BinfmtRule { name: "nexus-ipa-upper", matcher: Matcher::Extension("IPA") },
 ];
 
 fn registration_bytes(rule: &BinfmtRule) -> Vec<u8> {
@@ -82,6 +85,7 @@ fn route(path: &Path, prefix: &[u8]) -> Route {
     match extension.as_str() {
         "msi" if prefix.starts_with(&[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) => return Route::WindowsInstaller,
         "apk" if prefix.starts_with(b"PK\x03\x04") => return Route::AndroidApk,
+        "ipa" if prefix.starts_with(b"PK\x03\x04") => return Route::IosIpa,
         "dex" if omni_loader::magic_detector::detect_magic(prefix).format == omni_loader::magic_detector::BinaryFormat::Dex => return Route::AndroidDex,
         "deb" if prefix.starts_with(b"!<arch>\n") => return Route::DebianPackage,
         "wasm" | "wat" => return Route::Wasm,
@@ -280,6 +284,93 @@ fn inspect_crx(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+struct IpaInspection {
+    bundle_path: String,
+    bundle_id: String,
+    display_name: String,
+    executable: String,
+    arm64_macho: bool,
+}
+
+impl IpaInspection {
+    fn report(&self) -> String {
+        format!("iOS IPA estructural válido: app={} ({}); ejecutable={}; Mach-O ARM64 móvil={}",
+            self.display_name, self.bundle_id, self.executable, self.arm64_macho)
+    }
+}
+
+fn is_mobile_arm64_macho(prefix: &[u8]) -> bool {
+    if prefix.len() < 8 { return false; }
+    let cpu = if prefix.starts_with(&[0xcf, 0xfa, 0xed, 0xfe]) {
+        u32::from_le_bytes(prefix[4..8].try_into().unwrap_or([0; 4]))
+    } else if prefix.starts_with(&[0xfe, 0xed, 0xfa, 0xcf]) {
+        u32::from_be_bytes(prefix[4..8].try_into().unwrap_or([0; 4]))
+    } else { return false; };
+    cpu == 0x0100_000c
+}
+
+fn inspect_ipa(path: &Path) -> io::Result<IpaInspection> {
+    let prefix = read_prefix(path)?;
+    if !prefix.starts_with(b"PK\x03\x04") {
+        return Err(io::Error::other("El archivo .ipa no comienza con una firma ZIP local válida."));
+    }
+    if fs::metadata(path)?.len() > 2 * 1024 * 1024 * 1024 {
+        return Err(io::Error::other("IPA supera el límite de inspección de 2 GiB."));
+    }
+    if !Command::new("unzip").args(["-tqq"]).arg(path).status()?.success() {
+        return Err(io::Error::other("La comprobación de integridad ZIP del IPA falló."));
+    }
+    let entries = zip_listing(path)?;
+    let info_plists: Vec<&str> = entries.iter().map(String::as_str).filter(|entry| {
+        let parts: Vec<&str> = entry.split('/').collect();
+        parts.len() == 3 && parts[0] == "Payload" && parts[1].ends_with(".app") && parts[2] == "Info.plist"
+    }).collect();
+    if info_plists.len() != 1 {
+        return Err(io::Error::other("El IPA debe contener exactamente Payload/<app>.app/Info.plist."));
+    }
+    let info_path = info_plists[0];
+    let bundle_path = info_path.strip_suffix("/Info.plist").unwrap_or(info_path);
+    let plist = zip_member(path, info_path, MAX_MANIFEST_SIZE)?;
+    let parser = "import plistlib,sys\np=plistlib.load(sys.stdin.buffer)\ndef clean(v): return str(v or '').replace('\\t',' ').replace('\\r',' ').replace('\\n',' ')[:256]\nsys.stdout.write('\\t'.join((clean(p.get('CFBundleIdentifier')), clean(p.get('CFBundleDisplayName') or p.get('CFBundleName')), clean(p.get('CFBundleExecutable')))))";
+    let mut child = Command::new("python3").args(["-c", parser])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
+    child.stdin.take().ok_or_else(|| io::Error::other("No se pudo enviar Info.plist al parser."))?.write_all(&plist)?;
+    let parsed = child.wait_with_output()?;
+    if !parsed.status.success() {
+        return Err(io::Error::other("Payload/<app>.app/Info.plist no se pudo interpretar."));
+    }
+    let values = String::from_utf8(parsed.stdout).map_err(|_| io::Error::other("Los metadatos Info.plist no son UTF-8."))?;
+    let mut fields = values.splitn(3, '\t');
+    let bundle_id = fields.next().unwrap_or("").trim().to_owned();
+    let display_name = fields.next().unwrap_or("").trim().to_owned();
+    let executable = fields.next().unwrap_or("").trim().to_owned();
+    if bundle_id.is_empty() || executable.is_empty() || executable.contains('/') || executable == "." || executable == ".." {
+        return Err(io::Error::other("Info.plist no declara un CFBundleIdentifier y CFBundleExecutable seguros."));
+    }
+    let executable_path = format!("{bundle_path}/{executable}");
+    let arm64_macho = entries.iter().any(|entry| entry == &executable_path)
+        && is_mobile_arm64_macho(&zip_member_prefix(path, &executable_path, 32)?);
+    Ok(IpaInspection {
+        bundle_path: bundle_path.to_owned(), bundle_id,
+        display_name: if display_name.is_empty() { bundle_path.rsplit('/').next().unwrap_or("iOS app").trim_end_matches(".app").to_owned() } else { display_name },
+        executable, arm64_macho,
+    })
+}
+
+fn show_ipa_response(path: &Path, inspection: &IpaInspection) -> io::Result<()> {
+    let text = format!("{}\n\nPaquete: {}\nEjecutable: {}\nMach-O ARM64 móvil validado: {}\n\nEsta ruta inspecciona el contenedor y metadatos; el binario iOS no se ejecuta en Linux.",
+        inspection.display_name, inspection.bundle_id, inspection.executable, inspection.arm64_macho);
+    if command_exists("zenity") {
+        let status = Command::new("zenity")
+            .args(["--info", "--width=620", "--title=Nexus iOS IPA response", "--text"])
+            .arg(text).status()?;
+        if !status.success() { return Err(io::Error::other("La ventana de respuesta iOS se cerró con error.")); }
+    } else {
+        eprintln!("{}\nArchivo: {}", text, path.display());
+    }
+    Ok(())
+}
+
 fn pe_machine(prefix: &[u8]) -> Option<u16> {
     if !prefix.starts_with(b"MZ") || prefix.len() < 64 { return None; }
     let offset = u32::from_le_bytes(prefix.get(0x3c..0x40)?.try_into().ok()?) as usize;
@@ -393,6 +484,12 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
             run("waydroid", [OsString::from("app"), OsString::from("launch"), OsString::from(package)])
         }
         Route::AndroidDex => Err(io::Error::other("Un .dex aislado no es una aplicación Android instalable. Usa el .apk original con manifiesto, recursos y firma.")),
+        Route::IosIpa => {
+            let inspection = inspect_ipa(&absolute)?;
+            eprintln!("{}", inspection.report());
+            show_ipa_response(&absolute, &inspection)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Route::MacOs => {
             require_program("darling", "intentar ejecutar un binario Mach-O en Darling")?;
             let path_inside_prefix = Path::new("/Volumes/SystemRoot")
@@ -503,7 +600,7 @@ impl OpenOptionsWrite {
 }
 
 fn usage() {
-    eprintln!("Uso: nexus-omniloader --register-binfmt | --inspect-apk ARCHIVO | --inspect-crx ARCHIVO | --webapp HTTPS_URL | ARCHIVO [ARGUMENTOS…]\n       ELF es nativo de Linux; APK/.deb requieren confirmación.");
+    eprintln!("Uso: nexus-omniloader --register-binfmt | --inspect-apk ARCHIVO | --inspect-crx ARCHIVO | --inspect-ipa ARCHIVO | --webapp HTTPS_URL | ARCHIVO [ARGUMENTOS…]\n       ELF es nativo de Linux; APK/.deb requieren confirmación.");
 }
 
 fn main() -> ExitCode {
@@ -515,13 +612,15 @@ fn main() -> ExitCode {
             Err(error) => { eprintln!("nexus-omniloader: {error}"); ExitCode::FAILURE }
         };
     }
-    if first == OsStr::new("--inspect-apk") || first == OsStr::new("--inspect-crx") {
+    if first == OsStr::new("--inspect-apk") || first == OsStr::new("--inspect-crx") || first == OsStr::new("--inspect-ipa") {
         let Some(path) = args.next() else { usage(); return ExitCode::from(2); };
         let path = Path::new(&path);
         let result = if first == OsStr::new("--inspect-apk") {
             inspect_apk(path).map(|package| { println!("APK válido: package={package}; classes.dex=valid"); })
-        } else {
+        } else if first == OsStr::new("--inspect-crx") {
             inspect_crx(path).map(|()| println!("CRX válido estructuralmente; la firma queda a cargo de Chromium."))
+        } else {
+            inspect_ipa(path).map(|inspection| println!("{}; bundle={}", inspection.report(), inspection.bundle_path))
         };
         return match result { Ok(()) => ExitCode::SUCCESS, Err(error) => { eprintln!("nexus-omniloader: {error}"); ExitCode::FAILURE } };
     }
@@ -548,6 +647,9 @@ mod tests {
         assert_eq!(route(Path::new("run.exe"), b"MZ"), Route::Windows);
         assert_eq!(route(Path::new("install.msi"), &[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Route::WindowsInstaller);
         assert_eq!(route(Path::new("app.apk"), b"PK\x03\x04"), Route::AndroidApk);
+        assert_eq!(route(Path::new("app.ipa"), b"PK\x03\x04"), Route::IosIpa);
+        assert_eq!(route(Path::new("APP.IPA"), b"PK\x03\x04"), Route::IosIpa);
+        assert_eq!(route(Path::new("fake.ipa"), b"not a zip"), Route::Unknown);
         assert_eq!(route(Path::new("APP.APK"), b"PK\x03\x04"), Route::AndroidApk);
         assert_eq!(route(Path::new("classes.dex"), b"dex\n035\0"), Route::AndroidDex);
         assert_eq!(route(Path::new("app"), b"\x7fELF\x02"), Route::NativeElf);
@@ -567,10 +669,22 @@ mod tests {
 
     #[test]
     fn registered_rules_are_namespaced_and_point_to_this_binary() {
-        assert_eq!(RULES.len(), 11);
+        assert_eq!(RULES.len(), 13);
         assert!(RULES.iter().all(|r| r.name.starts_with("nexus-")));
         assert!(RULES.iter().all(|r| registration_bytes(r).windows(LOADER.len()).any(|w| w == LOADER.as_bytes())));
         assert!(registration_bytes(&RULES[7]).windows(4).any(|w| w == [0xfe, 0xed, 0xfa, 0xcf]));
+        assert_eq!(RULES[11].name, "nexus-ipa");
+        assert_eq!(RULES[12].name, "nexus-ipa-upper");
+    }
+
+    #[test]
+    fn identifies_only_mobile_arm64_macho_headers() {
+        let mut macho = vec![0xcf, 0xfa, 0xed, 0xfe];
+        macho.extend_from_slice(&0x0100_000cu32.to_le_bytes());
+        assert!(is_mobile_arm64_macho(&macho));
+        macho[4..8].copy_from_slice(&0x0100_0007u32.to_le_bytes());
+        assert!(!is_mobile_arm64_macho(&macho));
+        assert!(!is_mobile_arm64_macho(b"not macho"));
     }
 
     #[test]

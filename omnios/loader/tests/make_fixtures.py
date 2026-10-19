@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build tiny structural APK/CRX and WASI smoke fixtures for the CI gate.
+"""Build tiny structural APK/CRX/IPA and WASI smoke fixtures for the CI gate.
 
 The APK contains a valid empty DEX file and a binary Android XML manifest.
 It has no launchable activity, so CI inspects it but never installs it.
@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import plistlib
 import struct
 import sys
 import zipfile
@@ -99,6 +100,20 @@ def make(output: pathlib.Path) -> None:
     assert struct.unpack_from("<I", crx, 8)[0] == len(crx_header)
     assert crx[zip_offset:zip_offset + 4] == b"PK\x03\x04"
     (output / "unsigned-extension.crx").write_bytes(crx)
+
+    # Structural IPA fixture: valid ZIP, app bundle metadata, and a minimal
+    # ARM64 Mach-O header. It is not signed and is never executed as iOS code.
+    info = {
+        "CFBundleIdentifier": "com.example.nexus.iossmoke",
+        "CFBundleName": "Nexus iOS Smoke",
+        "CFBundleDisplayName": "Nexus iOS Smoke",
+        "CFBundleExecutable": "NexusSmoke",
+        "CFBundlePackageType": "APPL",
+    }
+    macho_arm64 = struct.pack("<IiiIIIII", 0xfeedfacf, 0x0100000C, 0, 2, 0, 0, 0, 0)
+    with zipfile.ZipFile(output / "minimal.ipa", "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr("Payload/NexusSmoke.app/Info.plist", plistlib.dumps(info, fmt=plistlib.FMT_XML))
+        archive.writestr("Payload/NexusSmoke.app/NexusSmoke", macho_arm64)
 
 
 if __name__ == "__main__":

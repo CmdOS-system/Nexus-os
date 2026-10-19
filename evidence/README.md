@@ -6,5 +6,6 @@ This directory stores evidence produced by automated guest and application smoke
 - `windows/` — Windows application and Wine screenshots.
 - `android/` — Android and Waydroid screenshots.
 - `web/` — browser and web application screenshots.
+- `ios/ipa-running.png` — IPA metadata and ARM64 Mach-O inspection response in XFCE; its structural fixture is not executed.
 
-The ISO Gate currently publishes serial and QEMU debug logs plus the extracted GRUB configuration as boot diagnostics. It does not yet produce a desktop screenshot; the boot smoke test now saves and uploads `boot/desktop-boot.png`.
+The ISO Gate uploads serial and QEMU debug logs, extracted GRUB configuration, and desktop/application PNG evidence from its smoke tests.

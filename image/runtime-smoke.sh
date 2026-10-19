@@ -45,6 +45,11 @@ grep -Fq 'CRX v3' <<< "$crx_result"
 grep -Fq 'manifest.json' <<< "$crx_result"
 echo "CRX envelope and extension manifest inspection passed. (Unsigned fixture; never installed.)"
 
+ipa_result="$("$LOADER" --inspect-ipa "$TEMP/fixtures/minimal.ipa")"
+grep -Fq 'com.example.nexus.iossmoke' <<< "$ipa_result"
+grep -Fq 'Mach-O ARM64 móvil=true' <<< "$ipa_result"
+echo "IPA ZIP integrity, Payload app bundle, Info.plist metadata and mobile ARM64 Mach-O inspection passed. (Structural fixture; not executed.)"
+
 "$WASMTIME" run "$TEMP/fixtures/wasi-exit-zero.wasm"
 echo "WASI command executed with Wasmtime and exited 0."
 
@@ -58,7 +63,7 @@ xvfb-run -a "$LOADER" "$TEMP/pe-exit-zero.exe"
 echo "x86_64 PE executable ran through nexus-omniloader and Wine with exit 0."
 
 # Open Wine's real Notepad GUI on the Nexus XFCE desktop and capture it.
-bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/fixtures/minimal.apk" "$TEMP/fixtures/unsigned-extension.crx" "$TEMP/fixtures/wasi-exit-zero.wasm"
+bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/fixtures/minimal.apk" "$TEMP/fixtures/unsigned-extension.crx" "$TEMP/fixtures/wasi-exit-zero.wasm" "$TEMP/fixtures/minimal.ipa"
 
 # Exercise the macOS and PWA wrappers without claiming either platform app runs.
 mkdir "$TEMP/fake-bin"
