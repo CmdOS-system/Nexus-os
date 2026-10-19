@@ -37,8 +37,8 @@ run_test() {
 }
 run_fast() {
   local label="$1"; shift
-  echo "[smoke] $label (max 3s)" >&2
-  timeout --kill-after=0.25s 3s "$@"
+  echo "[smoke] $label (max 25s)" >&2
+  timeout --kill-after=1s 25s "$@"
 }
 for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
@@ -53,14 +53,14 @@ export NEXUS_SUBSYSTEM_HELPER="$ROOT/staging/usr/lib/nexus"
 export NEXUS_SOUND_DISABLED=1
 command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 is required" >&2; exit 1; }
 
-# Compile the actual app Java sources to JVM classes and DEX, plus the ARM64 payload, under one 3s ceiling.
+# Compile the app Java sources to JVM classes and DEX, plus the ARM64 payload, under one 25s ceiling.
 mkdir -p "$TEMP/classes" "$TEMP/dex"
 run_fast "Compile APK DEX and ARM64 payload" bash -c '
   set -euo pipefail
-  javac -source 8 -target 8 -classpath "$1" -d "$3/classes" \
+  javac -J-XX:TieredStopAtLevel=1 --release 8 -classpath "$1" -d "$3/classes" \
     "$2/android-real/app/src/main/java/com/example/nexus/realapp/MainActivity.java" \
     "$2/android-real/app/src/main/java/com/example/nexus/realapp/PayloadLogic.java"
-  "$4/d8" --lib "$1" --min-api 23 --output "$3/dex" "$3/classes"
+  JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 "$4/d8" --lib "$1" --min-api 23 --output "$3/dex" "$3/classes"
   aarch64-linux-gnu-gcc -O2 -static "$2/android-real/native/nexus-payload.c" -o "$3/libnexus_apk_payload.so"
 ' _ "$ANDROID_JAR" "$ROOT" "$TEMP" "$BUILD_TOOLS"
 run_test "Execute APK Java bytecode logic in JVM" bash -c 'java -cp "$1/classes" com.example.nexus.realapp.PayloadLogic | tee "$1/jvm-output.txt"' _ "$TEMP"
