@@ -25,9 +25,8 @@ screen = Gdk.Screen.get_default()
 if screen is None:
     raise SystemExit("GTK could not find the active display screen")
 Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-window = Gtk.Window(title=title)
+window = Gtk.OffscreenWindow()
 window.set_default_size(1280, 800)
-window.set_position(Gtk.WindowPosition.CENTER)
 outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 outer.set_halign(Gtk.Align.CENTER)
 outer.set_valign(Gtk.Align.CENTER)
@@ -54,30 +53,20 @@ for widget in (brand, heading, caption, result):
     widget.set_margin_bottom(18)
     outer.pack_start(widget, False, False, 0)
 window.add(outer)
-window.connect("destroy", Gtk.main_quit)
-
-def capture():
-    try:
-        gdk_window = window.get_window()
-        if gdk_window is None:
-            raise RuntimeError("GTK window is not mapped; cannot capture runtime evidence")
-        gdk_window.process_updates(True)
-        pixbuf = Gdk.pixbuf_get_from_window(
-            gdk_window, 0, 0, gdk_window.get_width(), gdk_window.get_height()
-        )
-        if pixbuf is None:
-            raise RuntimeError("GDK could not read pixels from the GTK runtime window")
-        Path(destination).parent.mkdir(parents=True, exist_ok=True)
-        pixbuf.savev(destination, "png", [], [])
-    except Exception as error:
-        print(f"GTK evidence capture failed: {error}", file=sys.stderr)
-    finally:
-        Gtk.main_quit()
-    return GLib.SOURCE_REMOVE
-
 window.show_all()
-GLib.timeout_add(500, capture)
-Gtk.main()
+window.queue_draw()
+context = GLib.MainContext.default()
+pixbuf = None
+for _ in range(200):
+    if context.pending():
+        context.iteration(False)
+    pixbuf = window.get_pixbuf()
+    if pixbuf is not None:
+        break
+if pixbuf is None:
+    raise SystemExit("GTK offscreen renderer produced no pixels")
+Path(destination).parent.mkdir(parents=True, exist_ok=True)
+pixbuf.savev(destination, "png", [], [])
 if not Path(destination).is_file() or Path(destination).stat().st_size < 4096:
     raise SystemExit("GTK screenshot is unexpectedly small")
 print(f"Captured live GTK runtime output: {destination}")
