@@ -13,6 +13,7 @@ window, .root { background-color: rgba(11, 15, 25, 0.96); color: #edf7ff; font-f
 .badge { background-color: rgba(0, 240, 255, 0.12); color: #70f5ff; border: 1px solid #00F0FF; border-radius: 12px; padding: 5px 11px; font-weight: 700; }
 .title { color: #f5fbff; font-size: 20pt; font-weight: 700; }
 .copy { color: #c4d1e1; font-size: 11pt; }
+.status { color: #70f5ff; font-size: 9pt; font-weight: 700; letter-spacing: 0.5px; }
 .detail { color: #9fb4c9; font-size: 9pt; }
 button { background-image: none; background-color: rgba(20, 30, 48, 0.94); color: #edf7ff; border: 1px solid #30445e; border-radius: 10px; padding: 9px 18px; }
 button:hover { background-color: rgba(0, 240, 255, 0.12); border-color: #00F0FF; }
@@ -67,6 +68,11 @@ class NexusDialog:
         title.set_xalign(0)
         title.set_line_wrap(True)
         shell.pack_start(title, False, False, 0)
+        if args.status:
+            status = Gtk.Label(label=args.status.upper())
+            status.get_style_context().add_class("status")
+            status.set_xalign(0)
+            shell.pack_start(status, False, False, 0)
         message = Gtk.Label(label=args.message)
         message.get_style_context().add_class("copy")
         message.set_xalign(0)
@@ -117,6 +123,7 @@ def main():
     parser.add_argument("--ecosystem", default="Nexus")
     parser.add_argument("--title", default="Nexus OmniSubsystem")
     parser.add_argument("--message", default="")
+    parser.add_argument("--status", default="")
     parser.add_argument("--path", default="")
     parser.add_argument("--question", action="store_true")
     parser.add_argument("--accept-label", default="Continuar")

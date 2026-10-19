@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Keep one session bus alive for every graphical smoke test and evidence capture.
+if [[ "${NEXUS_RUNTIME_SESSION:-0}" != "1" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+  command -v dbus-run-session >/dev/null || {
+    echo "dbus-run-session is required for graphical runtime smoke tests" >&2
+    exit 1
+  }
+  exec dbus-run-session -- env NEXUS_RUNTIME_SESSION=1 "$BASH" "$0" "$@"
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
 LOADER="$ROOT/staging/usr/bin/nexus-omniloader"

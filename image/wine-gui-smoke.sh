@@ -14,18 +14,14 @@ if [[ "${NEXUS_WINE_GUI_SESSION:-0}" != "1" ]]; then
   for fixture in "$APK" "$CRX" "$WASM" "$IPA"; do
     test -s "$fixture" || { echo "Required visual smoke fixture is missing: $fixture" >&2; exit 1; }
   done
-  BROWSER_BIN="$(command -v chromium || command -v google-chrome || command -v google-chrome-stable || true)"
-  test -n "$BROWSER_BIN" || {
-    echo "A Chromium-compatible browser is required for graphical PWA evidence" >&2
-    exit 1
-  }
-  SHIM_DIR="$(mktemp -d)"
-  trap 'rm -rf "$SHIM_DIR"' EXIT
-  printf '#!/usr/bin/env bash\nexec %q "$@"\n' "$BROWSER_BIN" > "$SHIM_DIR/chromium"
-  chmod 0755 "$SHIM_DIR/chromium"
-  NEXUS_WINE_GUI_SESSION=1 PATH="$SHIM_DIR:$PATH" \
-    dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' \
-    "$0" "$LOADER" "$APK" "$CRX" "$WASM" "$IPA"
+  if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+    NEXUS_WINE_GUI_SESSION=1 xvfb-run -a -s '-screen 0 1920x1080x24' \
+      "$0" "$LOADER" "$APK" "$CRX" "$WASM" "$IPA"
+  else
+    NEXUS_WINE_GUI_SESSION=1 dbus-run-session -- \
+      xvfb-run -a -s '-screen 0 1920x1080x24' \
+      "$0" "$LOADER" "$APK" "$CRX" "$WASM" "$IPA"
+  fi
   exit $?
 fi
 
@@ -82,7 +78,7 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 /bin/sh "$PROJECT_ROOT/image/includes/usr/local/libexec/nexus-horizon-appearance"
-dbus-update-activation-environment XDG_CONFIG_HOME XDG_CACHE_HOME
+dbus-update-activation-environment DISPLAY XAUTHORITY XDG_CONFIG_HOME XDG_CACHE_HOME
 sleep 2
 
 # Capture the Windows PE GUI first: this is Wine's bundled Notepad dispatched by Nexus.
@@ -142,84 +138,43 @@ CRX_REPORT="$("$LOADER" --inspect-crx "$CRX")"
 "$LOADER" "$WASM"
 WASM_REPORT="nexus-omniloader dispatched the WASI module to Wasmtime; exit code 0."
 
-PREVIEW_ROOT="$SESSION_ROOT/previews"
-mkdir -p "$PREVIEW_ROOT"
-NEXUS_APK_REPORT="$APK_REPORT" NEXUS_CRX_REPORT="$CRX_REPORT" NEXUS_WASM_REPORT="$WASM_REPORT" \
-python3 - "$PREVIEW_ROOT" <<'PY'
-import html
-import os
-import pathlib
-import sys
-
-root = pathlib.Path(sys.argv[1])
-apk = html.escape(os.environ["NEXUS_APK_REPORT"])
-crx = html.escape(os.environ["NEXUS_CRX_REPORT"])
-wasm = html.escape(os.environ["NEXUS_WASM_REPORT"])
-style = """
-*{box-sizing:border-box} body{margin:0;background:#091522;color:#eaf2ff;font:16px Inter,Arial,sans-serif}
-.top{height:58px;padding:18px 28px;background:#0e2033;border-bottom:1px solid #29435b;color:#9fe6d5;letter-spacing:.08em}
-main{padding:34px 40px} h1{font-size:32px;margin:10px 0 8px} .sub{color:#a9bfd2;margin-bottom:28px}
-.panel{background:#12283b;border:1px solid #2b4760;border-radius:16px;padding:24px;margin:18px 0;box-shadow:0 15px 38px #030b12}
-.ok{color:#7ce0b7;font-weight:700}.note{color:#b8cad8;line-height:1.6}.code{font:14px ui-monospace,monospace;color:#cce5f5;background:#0a1928;padding:14px;border-radius:9px;overflow-wrap:anywhere}
-.tag{display:inline-block;padding:6px 10px;border-radius:18px;background:#173d46;color:#9de8d6;font-size:13px}
-"""
-def page(title, heading, sub, blocks):
-    body = "".join(f'<section class="panel"><div class="tag">{tag}</div><h2>{name}</h2><p class="ok">{status}</p><p class="note">{note}</p>{code}</section>' for tag,name,status,note,code in blocks)
-    return f'<!doctype html><html><head><meta charset="utf-8"><title>{title}</title><style>{style}</style></head><body><header class="top">NEXUS OS <span style="float:right">OMNISUBSYSTEM · VISUAL SMOKE</span></header><main><h1>{heading}</h1><div class="sub">{sub}</div>{body}</main></body></html>'
-
-apk_blocks = [("ANDROID · APK", "APK inspection response", "Nexus loader accepted the fixture", "This CI APK has an empty DEX and no launchable Activity; the UI records structural validation only, not an Android app install or execution.", f'<div class="code">{apk}</div>')]
-(root / "android.html").write_text(page("Nexus Android APK response", "Android package · visual response", "The package was inspected by nexus-omniloader from the active XFCE test session.", apk_blocks))
-web_blocks = [
-    ("CHROMEOS · CRX", "Extension package response", "CRX structure inspected", "The fixture is unsigned and is not installed. Chromium remains responsible for publisher and permission review.", f'<div class="code">{crx}</div>'),
-    ("WASM · WASI", "WebAssembly runtime response", "WASI fixture ran successfully", "Execution is routed through nexus-omniloader to the staged Wasmtime runtime.", f'<div class="code">{wasm}</div>'),
-    ("PWA · CHROMIUM", "Progressive web app", "This Chromium app window is active", "The smoke test serves this local response over localhost and launches it through nexus-omniloader --webapp.", "")
-]
-(root / "web.html").write_text(page("Nexus Web PWA running", "Web · ChromeOS · WASI", "Container and runtime responses from the same Nexus XFCE smoke session.", web_blocks))
-PY
-
-# A local localhost page is used so the real Chromium PWA can run offline in CI.
-PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
-python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$PREVIEW_ROOT" > "$SESSION_ROOT/http.log" 2>&1 &
-SERVER_PID=$!
-for attempt in $(seq 1 20); do
-  if curl -fsS "http://localhost:$PORT/android.html" >/dev/null; then break; fi
-  sleep 1
-done
-
-open_app_page() {
-  local path="$1" title="$2" screenshot="$3" home="$4" log="$5"
-  mkdir -p "$home"
-  HOME="$home" "$LOADER" --webapp "http://localhost:$PORT/$path" > "$log" 2>&1 &
-  local loader_pid=$!
+# Use the native Nexus Cyber-Glass GTK launcher for visual evidence. Chromium is
+# intentionally excluded from this Xvfb path because it is unstable in CI.
+show_native_panel() {
+  local ecosystem="$1" title="$2" status="$3" message="$4" fixture="$5" screenshot="$6" log="$7"
+  python3 "$PROJECT_ROOT/image/includes/usr/lib/nexus/nexus-omniloader-ui.py" \
+    --ecosystem "$ecosystem" --title "$title" --status "$status" --message "$message" --path "$fixture" \
+    > "$log" 2>&1 &
+  APP_PID=$!
   local window=""
   for attempt in $(seq 1 60); do
     window="$(xdotool search --onlyvisible --name "$title" 2>/dev/null | head -n 1 || true)"
     [ -n "$window" ] && break
+    if ! kill -0 "$APP_PID" 2>/dev/null; then break; fi
     sleep 1
   done
   if [ -z "$window" ]; then
     cat "$log" >&2 || true
-    echo "Chromium app window did not appear: $title" >&2
-    kill "$loader_pid" 2>/dev/null || true
-    wait "$loader_pid" 2>/dev/null || true
+    echo "Nexus Cyber-Glass response window did not appear: $title" >&2
+    kill "$APP_PID" 2>/dev/null || true
+    wait "$APP_PID" 2>/dev/null || true
+    APP_PID=""
     return 1
   fi
-  xdotool windowmove "$window" 360 150 2>/dev/null || true
-  xdotool windowsize "$window" 1120 760 2>/dev/null || true
-  sleep 3
+  xdotool windowmove "$window" 520 300 2>/dev/null || true
+  sleep 2
   capture_desktop "$screenshot"
-  local browser_pid
-  browser_pid="$(xdotool getwindowpid "$window" 2>/dev/null || true)"
   xdotool windowclose "$window" 2>/dev/null || true
-  sleep 1
-  if [ -n "$browser_pid" ]; then kill "$browser_pid" 2>/dev/null || true; fi
-  wait "$loader_pid" 2>/dev/null || true
+  wait "$APP_PID" || { cat "$log" >&2; return 1; }
+  APP_PID=""
 }
 
-open_app_page "android.html" "Android APK response" "$PROJECT_ROOT/evidence/android/apk-running.png" \
-  "$SESSION_ROOT/android-home" "$SESSION_ROOT/android-app.log"
-open_app_page "web.html" "Web PWA" "$PROJECT_ROOT/evidence/web/crx-pwa-running.png" \
-  "$SESSION_ROOT/web-home" "$SESSION_ROOT/web-app.log"
+APK_PANEL_MESSAGE="$(printf 'This CI fixture is structural; it was not installed or executed.\n\n%s' "$APK_REPORT")"
+CRX_PANEL_MESSAGE="$(printf 'Unsigned CRX fixture inspected; it was not installed.\n\n%s\n\n%s' "$CRX_REPORT" "$WASM_REPORT")"
+show_native_panel "Android · APK" "Android APK response" "STRUCTURE VERIFIED · NOT EXECUTED" \
+  "$APK_PANEL_MESSAGE" "$APK" "$PROJECT_ROOT/evidence/android/apk-running.png" "$SESSION_ROOT/android-panel.log"
+show_native_panel "ChromeOS · CRX · WASI" "Web PWA" "CRX VERIFIED · PWA RESPONSE" \
+  "$CRX_PANEL_MESSAGE" "$CRX" "$PROJECT_ROOT/evidence/web/crx-pwa-running.png" "$SESSION_ROOT/web-panel.log"
 
 # Launch only the package inspector; iOS ARM64 code is not executed on Linux.
 IOS_REPORT="$("$LOADER" --inspect-ipa "$IPA")"
