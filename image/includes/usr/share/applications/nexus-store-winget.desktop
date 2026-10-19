@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Winget catalog
+Comment=Browse the Windows package catalog
+Exec=xdg-open https://winget.run/
+Icon=applications-other
+Terminal=false
+Categories=Network;Utility;

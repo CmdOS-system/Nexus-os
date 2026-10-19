@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Debian Package Search
+Comment=Browse the Debian package catalog
+Exec=xdg-open https://packages.debian.org/
+Icon=system-software-install
+Terminal=false
+Categories=Network;Utility;

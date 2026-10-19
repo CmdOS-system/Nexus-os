@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Aptoide catalogs
+Comment=Browse Aptoide application catalogs
+Exec=xdg-open https://en.aptoide.com/
+Icon=applications-other
+Terminal=false
+Categories=Network;Utility;

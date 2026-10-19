@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Aurora Store
+Comment=Visit the Aurora Store project
+Exec=xdg-open https://auroraoss.com/
+Icon=applications-other
+Terminal=false
+Categories=Network;Utility;

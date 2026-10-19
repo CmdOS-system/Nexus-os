@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=AltStore
+Comment=Visit AltStore's official catalog
+Exec=xdg-open https://altstore.io/
+Icon=applications-other
+Terminal=false
+Categories=Network;Utility;

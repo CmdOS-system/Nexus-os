@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=F-Droid
+Comment=Browse free and open source Android apps
+Exec=xdg-open https://f-droid.org/
+Icon=applications-other
+Terminal=false
+Categories=Network;Utility;

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus OmniStore
+GenericName=Unified application catalog
+Comment=Browse curated app catalogs and install packages through Nexus OmniLoader
+Exec=/usr/bin/python3 /opt/nexus/omni-store.py
+Icon=system-software-install
+Terminal=false
+Categories=Network;System;Utility;
+StartupNotify=true

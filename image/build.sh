@@ -51,6 +51,7 @@ mkdir -p config/includes.chroot
 cp -a "$ROOT/includes/." config/includes.chroot/
 chmod 0755 config/includes.chroot/usr/lib/nexus/nexus-waydroid-preflight
 chmod 0755 config/includes.chroot/usr/lib/nexus/nexus-wine-office-profile
+chmod 0755 config/includes.chroot/etc/skel/Desktop/nexus-omni-store.desktop
 
 for runtime in nexus-omniloader wasmtime; do
   test -x "$ROOT/staging/usr/bin/$runtime" || {
