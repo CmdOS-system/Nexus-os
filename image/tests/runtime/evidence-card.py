@@ -6,7 +6,7 @@ from pathlib import Path
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, GLib
+from gi.repository import Gdk, Gtk, GLib
 from PIL import ImageGrab
 
 if len(sys.argv) != 4:
@@ -22,7 +22,10 @@ window { background: #080d18; color: #eff9ff; }
 """
 provider = Gtk.CssProvider()
 provider.load_from_data(css)
-Gtk.StyleContext.add_provider_for_screen(Gtk.StyleContext.get_default().get_screen(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+screen = Gdk.Screen.get_default()
+if screen is None:
+    raise SystemExit("GTK could not find the active display screen")
+Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 window = Gtk.Window(title=title)
 window.set_default_size(1280, 800)
 window.set_position(Gtk.WindowPosition.CENTER)
