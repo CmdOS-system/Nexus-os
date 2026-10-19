@@ -29,6 +29,7 @@ for tool in xfce4-session xdotool python3 curl; do
 done
 
 SESSION_ROOT="$(mktemp -d)"
+PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/.cache/ms-playwright}"
 export HOME="$SESSION_ROOT/home"
 export XDG_CONFIG_HOME="$SESSION_ROOT/config"
 export XDG_CACHE_HOME="$SESSION_ROOT/cache"
@@ -166,6 +167,7 @@ done
 curl -fsS "http://127.0.0.1:$PORT/app.wasm" -o "$SESSION_ROOT/app.wasm"
 cmp -s "$SESSION_ROOT/app.wasm" "$WEBAPP/app.wasm"
 NODE_PATH="$RUNNER_TEMP/nexus-playwright/node_modules${NODE_PATH:+:$NODE_PATH}" \
+  PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" \
   NEXUS_PWA_URL="http://127.0.0.1:$PORT/" \
   NEXUS_PWA_SCREENSHOT="$PROJECT_ROOT/evidence/web/crx-pwa-running.png" \
   node "$PROJECT_ROOT/image/tests/webapp/runtime-smoke.cjs"
