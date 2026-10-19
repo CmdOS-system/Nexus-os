@@ -94,6 +94,14 @@ PY
   test -s "$1"
 }
 
+reap_app() {
+  local pid="$1"
+  if ! timeout 10s tail --pid="$pid" -f /dev/null 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+  fi
+  wait "$pid" 2>/dev/null || true
+}
+
 # This is a freshly started target XFCE session, captured before any test app.
 capture_desktop "$PROJECT_ROOT/evidence/boot/desktop-boot.png"
 
@@ -113,7 +121,7 @@ for attempt in $(seq 1 60); do
 done
 [[ -n "$notepad_window" ]] || { cat "$SESSION_ROOT/notepad.log" >&2; exit 1; }
 xdotool windowclose "$notepad_window" 2>/dev/null || true
-wait "$APP_PID" 2>/dev/null || true
+reap_app "$APP_PID"
 APP_PID=""
 
 "$LOADER" "$WIN32_APP" > "$SESSION_ROOT/win32.log" 2>&1 &
@@ -141,7 +149,7 @@ xdotool windowmove "$win_window" 420 250 2>/dev/null || true
 sleep 1
 capture_desktop "$PROJECT_ROOT/evidence/windows/wine-gui-running.png"
 xdotool windowclose "$win_window" 2>/dev/null || true
-wait "$APP_PID" 2>/dev/null || true
+reap_app "$APP_PID"
 APP_PID=""
 echo "MinGW Win32 GUI ran under Wine through nexus-omniloader; dynamic tick $win_tick was visible."
 
@@ -182,6 +190,6 @@ xdotool windowmove "$web_window" 350 180 2>/dev/null || true
 sleep 1
 capture_desktop "$PROJECT_ROOT/evidence/web/crx-pwa-running.png"
 xdotool windowclose "$web_window" 2>/dev/null || true
-wait "$APP_PID" 2>/dev/null || true
+reap_app "$APP_PID"
 APP_PID=""
 echo "Real Chromium rendered Canvas and executed Wasm through frame $web_frame."
