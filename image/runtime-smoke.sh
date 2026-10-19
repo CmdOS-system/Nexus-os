@@ -60,7 +60,8 @@ run_fast "Compile APK DEX and ARM64 payload" bash -c '
   javac -J-XX:TieredStopAtLevel=1 --release 8 -classpath "$1" -d "$3/classes" \
     "$2/android-real/app/src/main/java/com/example/nexus/realapp/MainActivity.java" \
     "$2/android-real/app/src/main/java/com/example/nexus/realapp/PayloadLogic.java"
-  JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 "$4/d8" --lib "$1" --min-api 23 --output "$3/dex" "$3/classes"
+  mapfile -d "" class_files < <(find "$3/classes" -name "*.class" -print0)
+  JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 "$4/d8" --lib "$1" --min-api 23 --output "$3/dex" "${class_files[@]}"
   aarch64-linux-gnu-gcc -O2 -static "$2/android-real/native/nexus-payload.c" -o "$3/libnexus_apk_payload.so"
 ' _ "$ANDROID_JAR" "$ROOT" "$TEMP" "$BUILD_TOOLS"
 run_test "Execute APK Java bytecode logic in JVM" bash -c 'java -cp "$1/classes" com.example.nexus.realapp.PayloadLogic | tee "$1/jvm-output.txt"' _ "$TEMP"
