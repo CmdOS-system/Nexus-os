@@ -12,7 +12,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        setContentView(new RuntimeView());
+        setContentView(new RuntimeView(this));
     }
 
     private static final class RuntimeView extends View {
