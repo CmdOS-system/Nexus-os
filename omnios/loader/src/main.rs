@@ -402,23 +402,6 @@ fn inspect_ipa(path: &Path) -> io::Result<IpaInspection> {
     })
 }
 
-fn show_ipa_response(path: &Path, inspection: &IpaInspection) -> io::Result<()> {
-    let text = format!("{}\n\nPaquete: {}\nEjecutable: {}\nMach-O ARM64 móvil validado: {}\n\nEsta ruta inspecciona el contenedor y metadatos; el binario iOS no se ejecuta en Linux.",
-        inspection.display_name, inspection.bundle_id, inspection.executable, inspection.arm64_macho);
-    if cyber_glass_dialog("iOS", "Nexus iOS IPA response", &text, Some(path), false)?.is_some() {
-        return Ok(());
-    }
-    if command_exists("zenity") {
-        let status = Command::new("zenity")
-            .args(["--info", "--width=620", "--title=Nexus iOS IPA response", "--text"])
-            .arg(text).status()?;
-        if !status.success() { return Err(io::Error::other("La ventana de respuesta iOS se cerró con error.")); }
-    } else {
-        eprintln!("{}\nArchivo: {}", text, path.display());
-    }
-    Ok(())
-}
-
 fn pe_machine(prefix: &[u8]) -> Option<u16> {
     if !prefix.starts_with(b"MZ") || prefix.len() < 64 { return None; }
     let offset = u32::from_le_bytes(prefix.get(0x3c..0x40)?.try_into().ok()?) as usize;
@@ -447,6 +430,10 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
         .join(".local/share/nexus/chromium-pwa");
     fs::create_dir_all(&profile)?;
     run("chromium", [
+        OsString::from("--no-sandbox"),
+        OsString::from("--disable-gpu"),
+        OsString::from("--disable-software-rasterizer"),
+        OsString::from("--disable-dev-shm-usage"),
         OsString::from("--no-first-run"),
         OsString::from("--no-default-browser-check"),
         OsString::from(format!("--user-data-dir={}", profile.display())),
@@ -521,6 +508,26 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
         }
         Route::AndroidApk => {
             let package = inspect_apk(&absolute)?;
+            if env::var("NEXUS_ANDROID_TARGET").as_deref() == Ok("adb") {
+                require_program("adb", "instalar la aplicación Android en el dispositivo o emulador ADB")?;
+                if env::var("NEXUS_SMOKE_AUTOCONFIRM").as_deref() != Ok("1")
+                    && !confirm("Se instalará esta aplicación en el dispositivo Android activo.", &absolute)?
+                {
+                    return Ok(ExitCode::SUCCESS);
+                }
+                let installed = Command::new("adb")
+                    .args([OsString::from("install"), OsString::from("-r")])
+                    .arg(&absolute)
+                    .status()?;
+                if !installed.success() {
+                    return Ok(installed.code().map_or(ExitCode::FAILURE, |c| ExitCode::from(c as u8)));
+                }
+                eprintln!("APK {package} instalado en el dispositivo Android activo; solicitando la actividad de inicio.");
+                return run("adb", [
+                    OsString::from("shell"), OsString::from("monkey"),
+                    OsString::from("-p"), OsString::from(package), OsString::from("1"),
+                ]);
+            }
             require_program("waydroid", "instalar aplicaciones Android")?;
             if !confirm("Waydroid instalará esta aplicación Android en el entorno de usuario.", &absolute)? {
                 return Ok(ExitCode::SUCCESS);
@@ -543,9 +550,10 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
         Route::AndroidDex => Err(io::Error::other("Un .dex aislado no es una aplicación Android instalable. Usa el .apk original con manifiesto, recursos y firma.")),
         Route::IosIpa => {
             let inspection = inspect_ipa(&absolute)?;
-            eprintln!("{}", inspection.report());
-            show_ipa_response(&absolute, &inspection)?;
-            Ok(ExitCode::SUCCESS)
+            Err(io::Error::other(format!(
+                "{}; this Linux build cannot execute iOS Mach-O code. Run the signed app in the Apple Silicon iOS Simulator workflow.",
+                inspection.report()
+            )))
         }
         Route::MacOs => {
             require_program("darling", "intentar ejecutar un binario Mach-O en Darling")?;
@@ -590,6 +598,10 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
                 }
             }
             run("chromium", [
+                OsString::from("--no-sandbox"),
+                OsString::from("--disable-gpu"),
+                OsString::from("--disable-software-rasterizer"),
+                OsString::from("--disable-dev-shm-usage"),
                 OsString::from("--no-first-run"),
                 OsString::from("--no-default-browser-check"),
                 OsString::from(format!("--user-data-dir={}", profile.display())),

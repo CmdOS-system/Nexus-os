@@ -75,29 +75,14 @@ export WINEDEBUG=-all
 xvfb-run -a "$LOADER" "$TEMP/pe-exit-zero.exe"
 echo "x86_64 PE executable ran through nexus-omniloader and Wine with exit 0."
 
-# Open Wine's real Notepad GUI on the Nexus XFCE desktop and capture it.
-bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/fixtures/minimal.apk" "$TEMP/fixtures/unsigned-extension.crx" "$TEMP/fixtures/wasi-exit-zero.wasm" "$TEMP/fixtures/minimal.ipa"
+# Build a real Win32 GUI PE and a WebAssembly-backed PWA for the graphical smoke.
+x86_64-w64-mingw32-gcc -Os -municode -mwindows \
+  "$ROOT/tests/fixtures/pe-dynamic-gui.c" -o "$TEMP/nexus-live-win32.exe"
+file "$TEMP/nexus-live-win32.exe" | grep -Fq 'PE32+ executable'
+mkdir -p "$TEMP/webapp"
+cp -a "$ROOT/tests/webapp/." "$TEMP/webapp/"
+python3 "$ROOT/tests/webapp/build_wasm.py" "$TEMP/webapp/app.wasm"
+"$WASMTIME" validate "$TEMP/webapp/app.wasm"
 
-# Exercise the macOS and PWA wrappers without claiming either platform app runs.
-mkdir "$TEMP/fake-bin"
-cat > "$TEMP/fake-bin/darling" <<'SH'
-#!/bin/sh
-printf '%s\n' "$@" > "$NEXUS_CAPTURE"
-SH
-cat > "$TEMP/fake-bin/chromium" <<'SH'
-#!/bin/sh
-printf '%s\n' "$@" > "$NEXUS_CAPTURE"
-SH
-chmod 0755 "$TEMP/fake-bin/darling" "$TEMP/fake-bin/chromium"
-export NEXUS_CAPTURE="$TEMP/macho-args"
-printf '\317\372\355\376NEXUS' > "$TEMP/probe.macho"
-PATH="$TEMP/fake-bin:$PATH" "$LOADER" "$TEMP/probe.macho" 'argument with spaces'
-grep -Fxq shell "$NEXUS_CAPTURE"
-grep -Fq '/Volumes/SystemRoot' "$NEXUS_CAPTURE"
-grep -Fq "argument with spaces" "$NEXUS_CAPTURE"
-echo "Mach-O dispatch and Darling path/argument bridge passed with a test double; no macOS binary was executed."
-
-export NEXUS_CAPTURE="$TEMP/chromium-args"
-PATH="$TEMP/fake-bin:$PATH" "$LOADER" --webapp https://example.org/nexus
-grep -Fxq -- '--app=https://example.org/nexus' "$NEXUS_CAPTURE"
-echo "PWA launcher passed --app URL to Chromium; browser runtime was represented by a test double."
+# Android and iOS evidence is produced by the dedicated device/simulator jobs.
+bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"

@@ -58,6 +58,20 @@ jobs:
           sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
             /usr/share/backgrounds/nexus/horizon-aurora.svg
 
+      - name: Install real Chromium for the PWA and WebAssembly smoke
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Chromium browser binary
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/nexus-playwright" playwright
+          "$RUNNER_TEMP/nexus-playwright/node_modules/.bin/playwright" install --with-deps chromium
+          chrome="$(find "$HOME/.cache/ms-playwright" -type f -name chrome -perm /111 -print -quit)"
+          test -n "$chrome"
+          sudo ln -sfn "$chrome" /usr/local/bin/chromium
+
       - name: Install project Rust nightly for the Linux loader
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -70,7 +84,7 @@ jobs:
       - name: Compile loader and stage checksum-verified Wasmtime
         run: bash image/stage-omni-subsystem.sh
 
-      - name: Run real PE, WASI, APK, CRX, IPA, Darling bridge and PWA smoke tests
+      - name: Inspect package fixtures and run real PE, WASI, and Chromium PWA smoke tests
         run: bash image/runtime-smoke.sh
 
       - name: Preflight and build inside Debian Trixie
@@ -151,9 +165,9 @@ jobs:
             if test -s evidence/boot/desktop-boot.png; then
               echo 'XFCE desktop screenshot: evidence/boot/desktop-boot.png'
               echo 'Windows GUI screenshot: evidence/windows/wine-gui-running.png'
-              echo 'Android APK response: evidence/android/apk-running.png'
-              echo 'Web/CRX/PWA/WASI response: evidence/web/crx-pwa-running.png'
-              echo 'iOS IPA inspection response: evidence/ios/ipa-running.png'
+              echo 'Android APK runtime: evidence/android/apk-running.png'
+              echo 'Chromium PWA + WebAssembly runtime: evidence/web/crx-pwa-running.png'
+              echo 'iOS Simulator ARM64 runtime: evidence/ios/ipa-running.png'
             else
               echo 'XFCE desktop screenshot: not produced'
             fi
@@ -203,5 +217,6 @@ jobs:
             evidence/windows/wine-gui-running.png
             evidence/android/apk-running.png
             evidence/web/crx-pwa-running.png
+            evidence/ios/ipa-running.png
 
 # Operational trigger: refresh the ISO Gate runner after the queued run #163.

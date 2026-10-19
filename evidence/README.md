@@ -1,11 +1,11 @@
 # Nexus visual evidence
 
-This directory stores evidence produced by automated guest and application smoke tests.
+This directory stores PNG evidence from live runtime smoke tests. CI also uploads one combined artifact, `nexus-real-runtime-evidence-*`.
 
-- `boot/desktop-boot.png` — PNG framebuffer capture of the XFCE session from the QEMU UEFI boot smoke test.
-- `windows/` — Windows application and Wine screenshots.
-- `android/` — Android and Waydroid screenshots.
-- `web/` — browser and web application screenshots.
-- `ios/ipa-running.png` — IPA metadata and ARM64 Mach-O inspection response in XFCE; its structural fixture is not executed.
+- `boot/desktop-boot.png` — freshly started XFCE desktop before application tests.
+- `windows/wine-gui-running.png` — a MinGW-built Win32 GUI PE with a live timer, launched through `nexus-omniloader` and Wine.
+- `android/apk-running.png` — the Java/Dex Android app installed through `nexus-omniloader` and running in Android Emulator.
+- `web/crx-pwa-running.png` — the real PWA in Chromium, with a live Canvas animation driven by a WebAssembly counter.
+- `ios/ipa-running.png` — a native ARM64 UIKit app running in the iOS Simulator from the app bundled into the generated IPA.
 
-The ISO Gate uploads serial and QEMU debug logs, extracted GRUB configuration, and desktop/application PNG evidence from its smoke tests.
+The Linux job captures the Windows and Chromium apps. Separate Android Emulator and Apple Silicon iOS Simulator jobs run the mobile apps. The combined workflow artifact is assembled only after all five PNGs pass presence and format checks.

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0B0F19">
+  <link rel="manifest" href="/manifest.json">
+  <title>Nexus WebAssembly Canvas</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header><span class="badge">CHROMEOS · PWA · WASM</span><span class="eyebrow">NEXUS / OMNISUBSYSTEM</span></header>
+    <h1>Live Canvas Runtime</h1>
+    <p class="status">WEBASSEMBLY MODULE EXECUTING IN CHROMIUM</p>
+    <canvas id="scene" width="900" height="340" aria-label="Live WebAssembly canvas"></canvas>
+    <p id="runtime" role="status">Starting WebAssembly module…</p>
+    <footer>Canvas animation state is advanced by the loaded WebAssembly module.</footer>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
