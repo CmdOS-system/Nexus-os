@@ -11,6 +11,7 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
+from omni_store_sources import SourceStore
 
 
 HOME = Path.home()
@@ -96,6 +97,7 @@ class OmniStore:
         self.args = args
         self.active = "windows"
         self.installed = self._load_installed()
+        self.custom_sources = SourceStore()
         self.window = Gtk.Window(title="Nexus OmniStore")
         self.window.set_default_size(1240, 820)
         self.window.set_position(Gtk.WindowPosition.CENTER)
@@ -143,11 +145,96 @@ class OmniStore:
         side.pack_start(Gtk.Box(), True, True, 0)
         store_label = Gtk.Label(label="TIENDAS OFICIALES"); store_label.get_style_context().add_class("eyebrow"); store_label.set_xalign(0)
         side.pack_start(store_label, False, False, 4)
+        store_scroll = Gtk.ScrolledWindow()
+        store_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        store_scroll.set_min_content_height(160)
+        store_scroll.set_max_content_height(280)
+        store_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        store_scroll.add(store_list)
         for name, url in STORE_LINKS:
             button = Gtk.Button(label=f"↗   {name}"); button.set_relief(Gtk.ReliefStyle.NONE); button.set_halign(Gtk.Align.FILL)
             button.connect("clicked", lambda _b, u=url: self._open_url(u))
-            side.pack_start(button, False, False, 0)
+            store_list.pack_start(button, False, False, 0)
+        custom_title = Gtk.Label(label="MIS TIENDAS"); custom_title.get_style_context().add_class("eyebrow"); custom_title.set_xalign(0)
+        custom_title.set_margin_top(12); custom_title.set_margin_start(9)
+        store_list.pack_start(custom_title, False, False, 5)
+        self.custom_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        store_list.pack_start(self.custom_list, False, False, 0)
+        self.custom_scroll = store_scroll
+        side.pack_start(store_scroll, True, True, 0)
+        add_store = Gtk.Button(label="＋  Añadir tienda")
+        add_store.get_style_context().add_class("primary")
+        add_store.connect("clicked", self._add_store_dialog)
+        side.pack_start(add_store, False, False, 0)
+        self._render_custom_sources()
         self.shell.pack_start(side, False, False, 0)
+
+    def _render_custom_sources(self):
+        for child in self.custom_list.get_children(): self.custom_list.remove(child)
+        sources = self.custom_sources.list()
+        if not sources:
+            empty = Gtk.Label(label="Añade una tienda HTTPS")
+            empty.get_style_context().add_class("muted"); empty.set_xalign(0)
+            empty.set_margin_start(12); empty.set_margin_top(3); empty.set_margin_bottom(6)
+            self.custom_list.pack_start(empty, False, False, 0)
+        for source in sources:
+            row = Gtk.Box(spacing=3)
+            open_button = Gtk.Button(label=f"↗   {source['name']}")
+            open_button.set_relief(Gtk.ReliefStyle.NONE); open_button.set_halign(Gtk.Align.FILL)
+            open_button.set_tooltip_text(source["url"])
+            open_button.connect("clicked", self._open_custom_source, source)
+            row.pack_start(open_button, True, True, 0)
+            remove = Gtk.Button(label="×"); remove.set_relief(Gtk.ReliefStyle.NONE)
+            remove.set_tooltip_text("Quitar esta tienda de OmniStore")
+            remove.connect("clicked", self._remove_custom_source, source["id"])
+            row.pack_end(remove, False, False, 0)
+            self.custom_list.pack_start(row, False, False, 0)
+        self.custom_list.show_all()
+
+    def _open_custom_source(self, _button, source):
+        self._open_url(source["url"])
+        self.status.set_text(f"Abriendo {source['name']}. Descarga un paquete compatible y selecciónalo en su sección para instalarlo con OmniLoader.")
+
+    def _remove_custom_source(self, _button, source_id):
+        self.custom_sources.remove(source_id)
+        self._render_custom_sources()
+
+    def _add_store_dialog(self, _button):
+        if len(self.custom_sources.list()) >= 100:
+            self.status.set_text("Llegaste al máximo de 100 tiendas personalizadas.")
+            return
+        dialog = Gtk.Dialog(title="Añadir tienda de aplicaciones", parent=self.window, flags=Gtk.DialogFlags.MODAL)
+        dialog.add_buttons("Cancelar", Gtk.ResponseType.CANCEL, "Añadir tienda", Gtk.ResponseType.OK)
+        dialog.set_default_size(520, 260)
+        body = dialog.get_content_area()
+        body.set_spacing(10); body.set_margin_top(16); body.set_margin_bottom(14); body.set_margin_start(18); body.set_margin_end(18)
+        body.pack_start(self._label("Registra el enlace HTTPS de una tienda o catálogo legal.", "app-name"), False, False, 0)
+        body.pack_start(self._label("OmniStore guarda el enlace HTTPS y lo abre en el navegador; no verifica automáticamente la legalidad del catálogo. Para instalar, descarga un paquete y selecciónalo en la sección compatible. No ejecutamos descargas automáticamente.", "app-desc"), False, False, 0)
+        name = Gtk.Entry(); name.set_placeholder_text("Nombre de la tienda"); body.pack_start(name, False, False, 0)
+        url = Gtk.Entry(); url.set_placeholder_text("https://tienda.example"); body.pack_start(url, False, False, 0)
+        error = Gtk.Label(); error.set_xalign(0); error.set_line_wrap(True)
+        error.get_style_context().add_class("status"); body.pack_start(error, False, False, 0)
+        consent = Gtk.CheckButton(label="Confirmo que esta tienda es legítima y que tengo derecho a usarla.")
+        body.pack_start(consent, False, False, 0)
+        accept = dialog.get_widget_for_response(Gtk.ResponseType.OK)
+        accept.set_sensitive(False)
+        consent.connect("toggled", lambda item: accept.set_sensitive(item.get_active()))
+        dialog.show_all()
+        while True:
+            if dialog.run() != Gtk.ResponseType.OK:
+                break
+            try:
+                self.custom_sources.add(name.get_text(), url.get_text())
+                self._render_custom_sources()
+                self.status.set_text("Tienda añadida. OmniStore conserva el enlace en este perfil de usuario.")
+                break
+            except ValueError as exc:
+                error.set_text(str(exc))
+                dialog.show_all()
+            except OSError as exc:
+                error.set_text(f"No se pudo guardar la tienda: {exc}")
+                dialog.show_all()
+        dialog.destroy()
 
     def _navigate(self, button, key):
         if button.get_active():
