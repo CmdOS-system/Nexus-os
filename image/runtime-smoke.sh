@@ -84,7 +84,7 @@ run_test "Assemble APK bytecode and native payload" bash -c '
 run_test "Align APK package" "$BUILD_TOOLS/zipalign" -f 4 "$TEMP/unsigned.apk" "$APK"
 run_test "Extract and execute APK ARM64 ELF with qemu" bash -c 'unzip -p "$1" lib/arm64-v8a/libnexus_apk_payload.so > "$2/apk-payload" && chmod +x "$2/apk-payload" && qemu-aarch64-static "$2/apk-payload" | tee "$2/apk-output.txt" && grep -Fq "6 x 7 = 42" "$2/apk-output.txt"' _ "$APK" "$TEMP"
 
-run_test "Capture APK runtime output in GTK" xvfb-run -a python3 "$ROOT/tests/runtime/evidence-card.py" "Android APK · ARM64 + JVM" "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")" "$PROJECT_ROOT/evidence/android/apk-running.png"
+run_test "Capture APK runtime output in GTK" xvfb-run -a env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "Android APK · ARM64 + JVM" "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")" "$PROJECT_ROOT/evidence/android/apk-running.png"
 
 # Compile a freestanding ARM64 function as both an iOS Mach-O and the same raw instruction payload.
 mkdir -p "$TEMP/ios/Payload/Nexus.app"
@@ -99,7 +99,7 @@ cat > "$TEMP/ios/Payload/Nexus.app/Info.plist" <<'PLIST'
 PLIST
 mkdir -p "$PROJECT_ROOT/evidence/ios"
 run_test "Package IPA bundle" bash -c 'cd "$1/ios" && zip -qr "$2/evidence/ios/nexus-arm64-runtime.ipa" Payload' _ "$TEMP" "$PROJECT_ROOT"
-run_test "Capture IPA runtime output in GTK" xvfb-run -a python3 "$ROOT/tests/runtime/evidence-card.py" "iOS IPA · extracted ARM64 __text" "$(cat "$TEMP/ios-output.txt")" "$PROJECT_ROOT/evidence/ios/ipa-running.png"
+run_test "Capture IPA runtime output in GTK" xvfb-run -a env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "iOS IPA · extracted ARM64 __text" "$(cat "$TEMP/ios-output.txt")" "$PROJECT_ROOT/evidence/ios/ipa-running.png"
 
 # Validate real Wasm execution and build the live PWA used by the Chromium GUI capture.
 mkdir -p "$TEMP/webapp"
