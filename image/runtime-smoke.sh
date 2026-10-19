@@ -26,6 +26,10 @@ for tool in python3 unzip x86_64-w64-mingw32-gcc xvfb-run; do
 done
 test -x "$LOADER"
 test -x "$WASMTIME"
+test -s "$ROOT/staging/usr/lib/nexus/nexus-omniloader-ui.py"
+test -s "$ROOT/staging/usr/lib/nexus/nexus-system-sound.py"
+export NEXUS_SUBSYSTEM_HELPER="$ROOT/staging/usr/lib/nexus"
+export NEXUS_SOUND_DISABLED=1
 command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || {
   echo "wine64 is required for the real PE execution smoke test" >&2; exit 1;
 }

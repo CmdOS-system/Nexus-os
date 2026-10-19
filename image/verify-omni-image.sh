@@ -20,6 +20,9 @@ VERIFY_PATHS=(
   usr/bin/wasmtime
   usr/lib/nexus/nexus-waydroid-preflight
   usr/lib/nexus/nexus-wine-office-profile
+  usr/lib/nexus/nexus-omniloader-ui.py
+  usr/lib/nexus/nexus-system-sound.py
+  etc/xdg/autostart/nexus-system-sound.desktop
   usr/share/applications/nexus-wine-office-profile.desktop
   etc/modules-load.d/nexus-waydroid.conf
   etc/systemd/system/nexus-omnios-binfmt.service
@@ -43,6 +46,9 @@ waydroid_preflight = root / "usr/lib/nexus/nexus-waydroid-preflight"
 assert waydroid_preflight.is_file() and os.access(waydroid_preflight, os.X_OK), "Waydroid Binder preflight missing"
 office_profile = root / "usr/lib/nexus/nexus-wine-office-profile"
 assert office_profile.is_file() and os.access(office_profile, os.X_OK), "isolated Wine Office profile helper missing"
+assert (root / "usr/lib/nexus/nexus-omniloader-ui.py").is_file(), "Nexus Cyber-Glass dialog helper missing"
+assert (root / "usr/lib/nexus/nexus-system-sound.py").is_file(), "Nexus synthesized sound helper missing"
+assert (root / "etc/xdg/autostart/nexus-system-sound.desktop").is_file(), "Nexus startup sound hook missing"
 assert (root / "usr/share/applications/nexus-wine-office-profile.desktop").is_file(), "Office profile desktop launcher missing"
 assert (root / "etc/modules-load.d/nexus-waydroid.conf").read_text().strip() == "binder_linux"
 
@@ -67,7 +73,7 @@ for paragraph in paragraphs:
     if fields.get("Status") == "install ok installed":
         installed.add((fields.get("Package"), fields.get("Architecture", "all")))
 
-for package in ("chromium", "aapt", "waydroid", "weston", "wine64", "winbind", "cabextract", "winetricks", "fonts-liberation"):
+for package in ("chromium", "aapt", "waydroid", "weston", "wine64", "winbind", "cabextract", "winetricks", "fonts-liberation", "alsa-utils"):
     assert any(name == package for name, _ in installed), f"required installed package missing from ISO: {package}"
 assert ("wine32", "i386") in installed, "wine32:i386 missing from ISO"
 

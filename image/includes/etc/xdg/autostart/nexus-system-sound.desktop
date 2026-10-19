@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus startup sound
+Comment=Play a short synthesized Nexus welcome tone when audio is available
+Exec=/usr/bin/python3 /usr/lib/nexus/nexus-system-sound.py boot
+OnlyShowIn=XFCE;
+Terminal=false

@@ -32,6 +32,9 @@ OMNI_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh"
 WAYDROID_PREFLIGHT="$ROOT/includes/usr/lib/nexus/nexus-waydroid-preflight"
 WAYDROID_HOOK="$ROOT/hooks/040-waydroid-binder.hook.chroot"
 WINE_OFFICE_PROFILE="$ROOT/includes/usr/lib/nexus/nexus-wine-office-profile"
+OMNI_UI="$ROOT/includes/usr/lib/nexus/nexus-omniloader-ui.py"
+OMNI_SOUND="$ROOT/includes/usr/lib/nexus/nexus-system-sound.py"
+SOUND_AUTOSTART="$ROOT/includes/etc/xdg/autostart/nexus-system-sound.desktop"
 
 bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
@@ -49,7 +52,7 @@ sh -n "$WAYDROID_HOOK"
 sh -n "$WINE_OFFICE_PROFILE"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP" "$OMNI_PACKAGES" "$OMNI_ARCHIVE" "$OMNI_HOOK" "$WAYDROID_HOOK" "$WAYDROID_PREFLIGHT" "$WINE_OFFICE_PROFILE" "$OMNI_UNIT" "$OMNI_DESKTOP" "$OMNI_STAGE" "$OMNI_ISO_VERIFY" "$OMNI_RUNTIME_SMOKE" "$ROOT/auto/config"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP" "$OMNI_PACKAGES" "$OMNI_ARCHIVE" "$OMNI_HOOK" "$WAYDROID_HOOK" "$WAYDROID_PREFLIGHT" "$WINE_OFFICE_PROFILE" "$OMNI_UI" "$OMNI_SOUND" "$SOUND_AUTOSTART" "$OMNI_UNIT" "$OMNI_DESKTOP" "$OMNI_STAGE" "$OMNI_ISO_VERIFY" "$OMNI_RUNTIME_SMOKE" "$ROOT/auto/config"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -84,7 +87,7 @@ fi
 grep -q 'set timeout=3' "$BUILD"
 grep -q 'config/bootloaders/grub-pc/grub.cfg' "$BUILD"
 grep -q 'GRUB_TEMPLATE=' "$BUILD"
-python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW" "$HORIZON" "$HORIZON_PANEL"
+python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW" "$HORIZON" "$HORIZON_PANEL" "$OMNI_UI" "$OMNI_SOUND"
 grep -q "^Name=Nexus Horizon Panel Preview$" "$HORIZON_PANEL_DESKTOP"
 grep -q "^Name=Nexus Horizon$" "$HORIZON_DESKTOP"
 grep -q "^Exec=/usr/local/bin/nexus-horizon$" "$HORIZON_DESKTOP"
@@ -104,7 +107,7 @@ grep -q "installer_plan.py installer_inventory.py installer_preflight.py local_m
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
   grep -q -- "$flag" "$ROOT/auto/config"
 done
-for package in chromium unzip zenity pkexec aapt waydroid weston winbind cabextract winetricks fonts-liberation; do grep -qx "$package" "$OMNI_PACKAGES"; done
+for package in chromium unzip zenity pkexec aapt waydroid weston winbind cabextract winetricks fonts-liberation alsa-utils; do grep -qx "$package" "$OMNI_PACKAGES"; done
 grep -q '^deb http://deb.debian.org/debian trixie-backports main contrib$' "$OMNI_ARCHIVE"
 grep -q '050-enable-nexus-omnios-binfmt.hook.chroot' "$BUILD"
 grep -q 'nexus-omniloader --register-binfmt' "$OMNI_UNIT"

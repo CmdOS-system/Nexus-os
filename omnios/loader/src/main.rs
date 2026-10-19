@@ -127,6 +127,51 @@ fn command_exists(program: &str) -> bool {
         .any(|candidate| candidate.is_file())
 }
 
+fn subsystem_helper(name: &str) -> Option<PathBuf> {
+    if let Some(path) = env::var_os("NEXUS_SUBSYSTEM_HELPER") {
+        let path = PathBuf::from(path).join(name);
+        if path.is_file() { return Some(path); }
+    }
+    let installed = Path::new("/usr/lib/nexus").join(name);
+    if installed.is_file() { return Some(installed); }
+    env::current_exe().ok()
+        .and_then(|binary| binary.parent()?.parent().map(|root| root.join("lib/nexus").join(name)))
+        .filter(|path| path.is_file())
+}
+
+fn cyber_glass_dialog(
+    ecosystem: &str,
+    title: &str,
+    message: &str,
+    path: Option<&Path>,
+    question: bool,
+) -> io::Result<Option<bool>> {
+    if env::var_os("DISPLAY").is_none() && env::var_os("WAYLAND_DISPLAY").is_none() {
+        return Ok(None);
+    }
+    let Some(helper) = subsystem_helper("nexus-omniloader-ui.py") else { return Ok(None); };
+    let mut command = Command::new("python3");
+    command.arg(helper)
+        .args(["--ecosystem", ecosystem, "--title", title, "--message", message]);
+    if question { command.arg("--question"); }
+    if let Some(path) = path { command.arg("--path").arg(path); }
+    let status = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    match status {
+        Ok(status) if status.success() => Ok(Some(true)),
+        Ok(status) if question && status.code() == Some(1) => Ok(Some(false)),
+        _ => Ok(None),
+    }
+}
+
+fn play_system_sound(event: &str) {
+    if env::var_os("NEXUS_SOUND_DISABLED").is_some() { return; }
+    let Some(helper) = subsystem_helper("nexus-system-sound.py") else { return; };
+    let _ = Command::new("python3")
+        .arg(helper).arg(event)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+        .spawn();
+}
+
 fn zip_listing(path: &Path) -> io::Result<Vec<String>> {
     require_program("unzip", "inspeccionar el contenedor sin extraer rutas")?;
     let mut child = Command::new("unzip")
@@ -331,7 +376,7 @@ fn inspect_ipa(path: &Path) -> io::Result<IpaInspection> {
     let info_path = info_plists[0];
     let bundle_path = info_path.strip_suffix("/Info.plist").unwrap_or(info_path);
     let plist = zip_member(path, info_path, MAX_MANIFEST_SIZE)?;
-    let parser = "import plistlib,sys\np=plistlib.load(sys.stdin.buffer)\ndef clean(v): return str(v or '').replace('\\t',' ').replace('\\r',' ').replace('\\n',' ')[:256]\nsys.stdout.write('\\t'.join((clean(p.get('CFBundleIdentifier')), clean(p.get('CFBundleDisplayName') or p.get('CFBundleName')), clean(p.get('CFBundleExecutable')))))";
+    let parser = "import plistlib,sys\np=plistlib.loads(sys.stdin.buffer.read())\ndef clean(v): return str(v or '').replace('\\t',' ').replace('\\r',' ').replace('\\n',' ')[:256]\nsys.stdout.write('\\t'.join((clean(p.get('CFBundleIdentifier')), clean(p.get('CFBundleDisplayName') or p.get('CFBundleName')), clean(p.get('CFBundleExecutable')))))";
     let mut child = Command::new("python3").args(["-c", parser])
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
     child.stdin.take().ok_or_else(|| io::Error::other("No se pudo enviar Info.plist al parser."))?.write_all(&plist)?;
@@ -360,6 +405,9 @@ fn inspect_ipa(path: &Path) -> io::Result<IpaInspection> {
 fn show_ipa_response(path: &Path, inspection: &IpaInspection) -> io::Result<()> {
     let text = format!("{}\n\nPaquete: {}\nEjecutable: {}\nMach-O ARM64 móvil validado: {}\n\nEsta ruta inspecciona el contenedor y metadatos; el binario iOS no se ejecuta en Linux.",
         inspection.display_name, inspection.bundle_id, inspection.executable, inspection.arm64_macho);
+    if cyber_glass_dialog("iOS", "Nexus iOS IPA response", &text, Some(path), false)?.is_some() {
+        return Ok(());
+    }
     if command_exists("zenity") {
         let status = Command::new("zenity")
             .args(["--info", "--width=620", "--title=Nexus iOS IPA response", "--text"])
@@ -407,6 +455,11 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
 }
 
 fn confirm(action: &str, path: &Path) -> io::Result<bool> {
+    if let Some(accepted) = cyber_glass_dialog(
+        "Android", "Nexus Android APK response", action, Some(path), true,
+    )? {
+        return Ok(accepted);
+    }
     if command_exists("zenity") {
         return Ok(Command::new("zenity")
             .args(["--question", "--width=520", "--title=Nexus OmniSubsystem", "--text"])
@@ -444,7 +497,11 @@ fn run(program: &str, args: impl IntoIterator<Item = OsString>) -> io::Result<Ex
 fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
     let absolute = canonical_existing(path)?;
     let prefix = read_prefix(&absolute)?;
-    match route(&absolute, &prefix) {
+    let selected_route = route(&absolute, &prefix);
+    if selected_route != Route::Unknown {
+        play_system_sound("invoke");
+    }
+    match selected_route {
         Route::Windows => {
             let runtime = if pe_machine(&prefix) == Some(0x8664) {
                 if command_exists("wine64") { "wine64" }
@@ -519,13 +576,18 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
                 .join(".local/share/nexus/chromium-extension-preview");
             fs::create_dir_all(&profile)?;
             let instructions = format!("CRX es una extensión, no una aplicación ejecutable. Se abrirá un perfil Chromium separado. Arrastra el archivo a chrome://extensions y comprueba editor y permisos antes de aceptar la instalación.\n\n{}", absolute.display());
-            if command_exists("zenity") {
-                let _ = Command::new("zenity")
-                    .args(["--info", "--width=560", "--title=Nexus OmniSubsystem", "--text"])
-                    .arg(&instructions)
-                    .status()?;
-            } else {
-                eprintln!("{instructions}");
+            let response = cyber_glass_dialog(
+                "ChromeOS / CRX", "Nexus ChromeOS CRX response", &instructions, Some(&absolute), false,
+            )?;
+            if response.is_none() {
+                if command_exists("zenity") {
+                    let _ = Command::new("zenity")
+                        .args(["--info", "--width=560", "--title=Nexus OmniSubsystem", "--text"])
+                        .arg(&instructions)
+                        .status()?;
+                } else {
+                    eprintln!("{instructions}");
+                }
             }
             run("chromium", [
                 OsString::from("--no-first-run"),
@@ -581,6 +643,7 @@ fn register_binfmt() -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
 fn parse_aapt_package(line: &str) -> Option<&str> {
     let value = line.strip_prefix("package: name='")?;
     let end = value.find('\'')?;

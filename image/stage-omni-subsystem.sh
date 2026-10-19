@@ -15,6 +15,9 @@ done
 cargo +nightly -Z bindeps build --manifest-path "$PROJECT_ROOT/omnios/Cargo.toml" --release --target x86_64-unknown-linux-gnu -p omni-loader --bin nexus-omniloader
 mkdir -p "$STAGING/usr/bin"
 install -m 0755 "$PROJECT_ROOT/omnios/target/x86_64-unknown-linux-gnu/release/nexus-omniloader" "$STAGING/usr/bin/nexus-omniloader"
+mkdir -p "$STAGING/usr/lib/nexus"
+install -m 0644 "$ROOT/includes/usr/lib/nexus/nexus-omniloader-ui.py" "$STAGING/usr/lib/nexus/nexus-omniloader-ui.py"
+install -m 0644 "$ROOT/includes/usr/lib/nexus/nexus-system-sound.py" "$STAGING/usr/lib/nexus/nexus-system-sound.py"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
