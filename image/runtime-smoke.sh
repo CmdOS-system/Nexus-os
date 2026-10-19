@@ -71,7 +71,9 @@ finish_recorder() {
   local pid="$1" attempt
   [[ -n "$pid" ]] || return 0
   kill -INT "$pid" 2>/dev/null || true
-  for attempt in $(seq 1 20); do
+  # Give FFmpeg time to write the MP4 trailer/moov atom after the clean interrupt.
+  sleep 1
+  for attempt in $(seq 1 40); do
     jobs -pr | grep -Fxq "$pid" || break
     sleep 0.1
   done
@@ -90,7 +92,7 @@ finish_recorder() {
 cleanup_recording() {
   trap - EXIT
   if [[ -n "$recorder_pid" ]]; then
-    finish_recorder "$recorder_pid"
+    finish_recorder "$recorder_pid" || true
   fi
   stop_pid "$wm_pid"
   pkill -TERM -u "$(id -u)" -x xfconfd 2>/dev/null || true
