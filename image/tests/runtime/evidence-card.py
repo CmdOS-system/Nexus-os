@@ -26,8 +26,8 @@ if screen is None:
     raise SystemExit("GTK could not find the active display screen")
 Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 window = Gtk.OffscreenWindow()
-window.set_default_size(1280, 800)
 outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+outer.set_size_request(1280, 800)
 outer.set_halign(Gtk.Align.CENTER)
 outer.set_valign(Gtk.Align.CENTER)
 outer.set_margin_start(90)
@@ -53,20 +53,36 @@ for widget in (brand, heading, caption, result):
     widget.set_margin_bottom(18)
     outer.pack_start(widget, False, False, 0)
 window.add(outer)
+
+capture_error = None
+
+def capture_snapshot(widget, _event):
+    global capture_error
+    try:
+        pixbuf = widget.get_pixbuf()
+        if pixbuf is None:
+            return False
+        if pixbuf.get_width() < 200 or pixbuf.get_height() < 100:
+            raise RuntimeError(f"GTK rendered an undersized snapshot: {pixbuf.get_width()}x{pixbuf.get_height()}")
+        Path(destination).parent.mkdir(parents=True, exist_ok=True)
+        pixbuf.savev(destination, "png", [], [])
+    except Exception as error:
+        capture_error = str(error)
+    Gtk.main_quit()
+    return False
+
+def capture_timeout():
+    global capture_error
+    capture_error = "GTK offscreen renderer did not emit a draw event within 5 seconds"
+    Gtk.main_quit()
+    return GLib.SOURCE_REMOVE
+
+window.connect("damage-event", capture_snapshot)
+GLib.timeout_add_seconds(5, capture_timeout)
 window.show_all()
-window.queue_draw()
-context = GLib.MainContext.default()
-pixbuf = None
-for _ in range(200):
-    if context.pending():
-        context.iteration(False)
-    pixbuf = window.get_pixbuf()
-    if pixbuf is not None:
-        break
-if pixbuf is None:
-    raise SystemExit("GTK offscreen renderer produced no pixels")
-Path(destination).parent.mkdir(parents=True, exist_ok=True)
-pixbuf.savev(destination, "png", [], [])
+Gtk.main()
+if capture_error:
+    raise SystemExit(f"GTK evidence capture failed: {capture_error}")
 if not Path(destination).is_file() or Path(destination).stat().st_size < 4096:
     raise SystemExit("GTK screenshot is unexpectedly small")
 print(f"Captured live GTK runtime output: {destination}")
