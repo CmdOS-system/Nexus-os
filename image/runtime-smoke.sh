@@ -38,7 +38,7 @@ run_test() {
 run_fast() {
   local label="$1"; shift
   echo "[smoke] $label (max 3s)" >&2
-  timeout --kill-after=250ms 3s "$@"
+  timeout --kill-after=0.25s 3s "$@"
 }
 for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
