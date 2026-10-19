@@ -153,8 +153,8 @@ reap_app "$APP_PID"
 APP_PID=""
 echo "MinGW Win32 GUI ran under Wine through nexus-omniloader; dynamic tick $win_tick was visible."
 
-# Serve a real PWA, launch it through the loader in Chromium, and require a
-# changing Wasm-driven document title before capturing the screen.
+# Serve a real PWA in a visible Chromium window under Xvfb and require its
+# WebAssembly-driven counter and Canvas output before capturing the page.
 PORT=18943
 python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$WEBAPP" \
   > "$SESSION_ROOT/web-server.log" 2>&1 &
@@ -165,31 +165,8 @@ for attempt in $(seq 1 30); do
 done
 curl -fsS "http://127.0.0.1:$PORT/app.wasm" -o "$SESSION_ROOT/app.wasm"
 cmp -s "$SESSION_ROOT/app.wasm" "$WEBAPP/app.wasm"
-"$LOADER" --webapp "http://127.0.0.1:$PORT/" > "$SESSION_ROOT/webapp.log" 2>&1 &
-APP_PID=$!
-web_window=""
-web_title=""
-web_frame=0
-for attempt in $(seq 1 60); do
-  web_window="$(xdotool search --onlyvisible --name 'Nexus Live Canvas - frame' 2>/dev/null | head -n 1 || true)"
-  if [[ -n "$web_window" ]]; then
-    web_title="$(xdotool getwindowname "$web_window" 2>/dev/null || true)"
-    if [[ "$web_title" =~ frame[[:space:]]([0-9]+) ]]; then
-      web_frame="${BASH_REMATCH[1]}"
-      (( web_frame >= 10 )) && break
-    fi
-  fi
-  sleep 1
-done
-[[ -n "$web_window" && "$web_frame" -ge 10 ]] || {
-  cat "$SESSION_ROOT/webapp.log" "$SESSION_ROOT/web-server.log" >&2 || true
-  echo "Chromium did not render the live WebAssembly PWA" >&2
-  exit 1
-}
-xdotool windowmove "$web_window" 350 180 2>/dev/null || true
-sleep 1
-capture_desktop "$PROJECT_ROOT/evidence/web/crx-pwa-running.png"
-xdotool windowclose "$web_window" 2>/dev/null || true
-reap_app "$APP_PID"
-APP_PID=""
-echo "Real Chromium rendered Canvas and executed Wasm through frame $web_frame."
+NODE_PATH="$RUNNER_TEMP/nexus-playwright/node_modules${NODE_PATH:+:$NODE_PATH}" \
+  NEXUS_PWA_URL="http://127.0.0.1:$PORT/" \
+  NEXUS_PWA_SCREENSHOT="$PROJECT_ROOT/evidence/web/crx-pwa-running.png" \
+  node "$PROJECT_ROOT/image/tests/webapp/runtime-smoke.cjs"
+echo "Real Chromium rendered Canvas and executed the live WebAssembly PWA in Xvfb."
