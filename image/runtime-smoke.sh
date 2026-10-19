@@ -16,6 +16,39 @@ LD64_LLD="$(command -v ld64.lld || find /usr/bin -maxdepth 1 -name 'ld64.lld-*' 
 APK_NATIVE_PAYLOAD="$ROOT/android-real/app/src/main/jniLibs/arm64-v8a/libnexus_apk_payload.so"
 export WINEPREFIX="${WINEPREFIX:-$TEMP/wine-prefix}"
 export WINEARCH="${WINEARCH:-win64}"
+# Background jobs can inherit SIGINT as ignored. Relay it to FFmpeg so it can
+# close MP4 containers cleanly, while making encoding failures non-fatal.
+REAL_FFMPEG="$(command -v ffmpeg 2>/dev/null || true)"
+if [[ -n "$REAL_FFMPEG" ]]; then
+  mkdir -p "$TEMP/ffmpeg-bin"
+  cat > "$TEMP/ffmpeg-bin/ffmpeg" <<'FFMPEG_WRAPPER'
+#!/usr/bin/python3
+import os
+import signal
+import subprocess
+import sys
+
+def reset_child_sigint():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+process = subprocess.Popen(
+    [os.environ["NEXUS_REAL_FFMPEG"], *sys.argv[1:]],
+    preexec_fn=reset_child_sigint,
+)
+def relay_interrupt(_signum, _frame):
+    try:
+        process.send_signal(signal.SIGINT)
+    except ProcessLookupError:
+        pass
+
+signal.signal(signal.SIGINT, relay_interrupt)
+process.wait()
+sys.exit(0)
+FFMPEG_WRAPPER
+  chmod +x "$TEMP/ffmpeg-bin/ffmpeg"
+  export NEXUS_REAL_FFMPEG="$REAL_FFMPEG"
+  export PATH="$TEMP/ffmpeg-bin:$PATH"
+fi
 ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
 ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
 BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
