@@ -144,6 +144,11 @@ jobs:
             else
               echo 'Candidate ISO checksums: not produced'
             fi
+            if test -s evidence/boot/desktop-boot.png; then
+              echo 'XFCE desktop screenshot: evidence/boot/desktop-boot.png'
+            else
+              echo 'XFCE desktop screenshot: not produced'
+            fi
             if test -f nexus-qemu-serial.log; then
               for marker in NEXUS_LIVE_BOOT_READY_V1 NEXUS_GRAPHICAL_STACK_READY_V1 NEXUS_XFCE_SESSION_READY_V1; do
                 if grep -q "$marker" nexus-qemu-serial.log; then
@@ -166,6 +171,7 @@ jobs:
           retention-days: 7
           path: |
             nexus-qemu-serial.log
+            evidence/boot/desktop-boot.png
             nexus-qemu-debug.log
             nexus-iso-grub-files.txt
             nexus-iso-*
