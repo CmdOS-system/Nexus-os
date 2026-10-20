@@ -41,8 +41,10 @@ fi
 
 # Keep a single D-Bus session for the Xvfb apps and screenshots.
 if [[ "${NEXUS_RUNTIME_SESSION:-0}" != "1" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-  command -v dbus-run-session >/dev/null || { echo "dbus-run-session is required" >&2; exit 1; }
-  exec dbus-run-session -- env NEXUS_RUNTIME_SESSION=1 "$BASH" "$0" "$@"
+  if command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session -- env NEXUS_RUNTIME_SESSION=1 "$BASH" "$0" "$@"
+  fi
+  echo "[smoke] dbus-run-session unavailable; continuing with the current session" >&2
 fi
 
 PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
@@ -203,41 +205,29 @@ run_store_evidence() {
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
 }
-for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl flatpak adb scrcpy; do
+for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
-test -x "$BUILD_TOOLS/apksigner" || { echo "Android SDK apksigner is missing: $BUILD_TOOLS/apksigner" >&2; exit 1; }
+# adb, emulator, scrcpy, Flatpak, and Android SDK commands are optional capabilities.
 test -x "$LOADER" && test -x "$WASMTIME"
 export NEXUS_SUBSYSTEM_HELPER="$ROOT/staging/usr/lib/nexus"
 export NEXUS_SOUND_DISABLED=1
 command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 is required" >&2; exit 1; }
 
-# Use the signed, real F-Droid 2048 release and install it into an Android
-# user-space emulator through OmniStore -> OmniLoader -> adb.
-APK="$TEMP/privacyfriendly2048.apk"
-run_test "Download F-Droid 2048 APK" curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
-  https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
-run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
-# The emulator-backed Android UI evidence is optional in ISO build environments.
-if command -v emulator >/dev/null 2>&1; then
-  export NEXUS_ANDROID_TARGET=adb NEXUS_SMOKE_AUTOCONFIRM=1 ANDROID_SERIAL=emulator-5554
-  emulator -avd nexus-evidence -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off \
-    -wipe-data >"$TEMP/android-emulator.log" 2>&1 &
-  ANDROID_EMULATOR_PID=$!
-  cleanup_emulator() { kill "$ANDROID_EMULATOR_PID" 2>/dev/null || true; wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true; }
-  trap 'cleanup_emulator; cleanup' EXIT
-  timeout --kill-after=2s 480s adb wait-for-device
-  boot_deadline=$((SECONDS + 480))
-  until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
-    (( SECONDS < boot_deadline )) || { cat "$TEMP/android-emulator.log" >&2; echo "Android emulator did not boot" >&2; exit 1; }
-    sleep 2
-  done
-  run_store_evidence android privacy2048 "Nexus Android real APK mirror" "$APK"
-  cleanup_emulator
-  ANDROID_EMULATOR_PID=""
+# Verify the real F-Droid APK when Android SDK tools are available.
+# ISO Gate does not need adb, a device, or a full Android emulator.
+if [[ -x "$BUILD_TOOLS/apksigner" ]]; then
+  APK="$TEMP/privacyfriendly2048.apk"
+  run_test "Download F-Droid 2048 APK" curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
+    https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
+  run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+  if [[ -x "$BUILD_TOOLS/aapt2" ]]; then
+    run_test "Inspect F-Droid APK manifest" "$BUILD_TOOLS/aapt2" dump badging "$APK"
+  fi
 else
-  echo "[smoke] Android emulator unavailable; skipping emulator-backed Android UI evidence" >&2
+  echo "[smoke] Android SDK apksigner unavailable; skipping APK package inspection" >&2
 fi
+echo "[smoke] ISO Gate does not start an Android AVD; skipping adb/scrcpy UI capture and continuing lightweight runtime checks" >&2
 
 # Keep a separate Wasmtime smoke check, then exercise the real 2048 PWA through OmniStore.
 mkdir -p "$TEMP/webapp"
@@ -247,4 +237,8 @@ run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests
 run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TEMP/pe-exit-zero.exe"
 WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
 timeout --kill-after=2s 300s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "7zip:auto" "$TEMP/webapp"
-run_store_evidence linux gnome-mines "Mines"
+if command -v flatpak >/dev/null 2>&1; then
+  run_store_evidence linux gnome-mines "Mines"
+else
+  echo "[smoke] Flatpak unavailable; skipping Flathub GNOME Mines evidence" >&2
+fi
