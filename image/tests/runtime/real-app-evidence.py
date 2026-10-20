@@ -99,18 +99,26 @@ def visible_windows():
     return records
 
 
-def find_app_window(records, title, linux_pids=()):
+def find_app_window(records, title, linux_pids=(), wine_pids=()):
     expected = [title.casefold()]
     if ecosystem == "linux":
         expected.extend([app_id.casefold(), "mines", "gnome-mines", "org.gnome.mines"])
+    elif ecosystem == "windows":
+        expected.extend(["7-zip", "7zfm", "7-zip file manager"])
     for record in records:
-        _, window_title, wm_class, _ = record
+        window_id, window_title, wm_class, pid = record
         fields = (window_title + " " + wm_class).casefold()
         if any(value and value in fields for value in expected):
-            return record[0]
+            return window_id
     if ecosystem == "linux":
         for window_id, _, _, pid in records:
             if pid in linux_pids:
+                return window_id
+    elif ecosystem == "windows":
+        # Wine can expose a localized or empty title. The X11 window PID is
+        # authoritative when it belongs to the live 7zFM.exe Wine process.
+        for window_id, _, _, pid in records:
+            if pid in wine_pids:
                 return window_id
     return None
 
@@ -154,20 +162,20 @@ try:
     time.sleep(1.0)
     capture(installing_png)
     # Wine can spend several seconds initializing Common-Controls before the
-    # 7-Zip top-level X11 window is mapped. Wait up to 45 seconds for both the
+    # 7-Zip top-level X11 window is mapped. Wait up to 30 seconds for both the
     # actual Wine payload process and its visible window.
-    deadline = time.monotonic() + (45 if ecosystem == "windows" else 240)
+    deadline = time.monotonic() + (30 if ecosystem == "windows" else 240)
     app_window = None
     wine_pids = set()
     while time.monotonic() < deadline:
         if ecosystem == "windows":
             wine_pids = active_wine_7zip_processes()
             if not wine_pids:
-                time.sleep(0.5)
+                time.sleep(2)
                 continue
         records = visible_windows()
         linux_pids = process_descendants(store_process.pid) if ecosystem == "linux" else ()
-        app_window = find_app_window(records, app_title, linux_pids)
+        app_window = find_app_window(records, app_title, linux_pids, wine_pids)
         package_active = True
         if ecosystem == "android":
             serial = os.environ.get("ANDROID_SERIAL", "emulator-5554")
@@ -176,12 +184,20 @@ try:
             break
         if store_process.poll() is not None:
             raise RuntimeError(f"OmniStore exited before opening {app_title} (status {store_process.returncode})")
-        time.sleep(0.5)
+        time.sleep(2 if ecosystem == "windows" else 0.5)
     if app_window is None:
         if ecosystem == "linux":
             linux_pids = process_descendants(store_process.pid)
             app_window = next((window_id for window_id, _, _, pid in visible_windows()
                                if pid in linux_pids), None)
+        elif ecosystem == "windows":
+            # A window may be mapped by X11 before Wine publishes a usable
+            # title/class. If its PID belongs to the still-live 7zFM.exe, keep
+            # the real-screen capture instead of failing on the missing title.
+            wine_pids = active_wine_7zip_processes()
+            app_window = find_app_window(visible_windows(), app_title, wine_pids=wine_pids)
+            if app_window:
+                print("Captured the mapped 7-Zip Wine window despite its missing title.")
         if app_window is None:
             raise RuntimeError(f"Real app window did not appear: {app_title}")
 
