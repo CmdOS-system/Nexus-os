@@ -104,7 +104,7 @@ def find_app_window(records, title, linux_pids=(), wine_pids=()):
     if ecosystem == "linux":
         expected.extend([app_id.casefold(), "mines", "gnome-mines", "org.gnome.mines"])
     elif ecosystem == "windows":
-        expected.extend(["7-zip", "7zfm", "7-zip file manager"])
+        expected.extend(["7-zip", "7-zip file manager", "7zfm", "7z"])
     for record in records:
         window_id, window_title, wm_class, pid = record
         fields = (window_title + " " + wm_class).casefold()
@@ -121,6 +121,21 @@ def find_app_window(records, title, linux_pids=(), wine_pids=()):
             if pid in wine_pids:
                 return window_id
     return None
+
+
+def active_wine_window(records, wine_pids):
+    """Return a visible 7-Zip Wine window, even if X11 has no useful title."""
+    if not wine_pids:
+        return None
+    for window_id, _, _, pid in records:
+        if pid in wine_pids:
+            return window_id
+    active = subprocess.run(
+        ["xdotool", "getactivewindow"], text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    ).stdout.strip()
+    visible_ids = {window_id for window_id, _, _, _ in records}
+    return active if active in visible_ids else None
 
 
 def android_package_is_foreground(serial):
@@ -192,12 +207,12 @@ try:
                                if pid in linux_pids), None)
         elif ecosystem == "windows":
             # A window may be mapped by X11 before Wine publishes a usable
-            # title/class. If its PID belongs to the still-live 7zFM.exe, keep
-            # the real-screen capture instead of failing on the missing title.
+            # title/class. If 7zFM.exe is still active, accept its mapped
+            # window or the active visible X11 window rather than failing.
             wine_pids = active_wine_7zip_processes()
-            app_window = find_app_window(visible_windows(), app_title, wine_pids=wine_pids)
+            app_window = active_wine_window(visible_windows(), wine_pids)
             if app_window:
-                print("Captured the mapped 7-Zip Wine window despite its missing title.")
+                print("Captured the active visible 7-Zip Wine session despite its missing title.")
         if app_window is None:
             raise RuntimeError(f"Real app window did not appear: {app_title}")
 
