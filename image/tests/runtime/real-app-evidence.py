@@ -124,7 +124,7 @@ def all_mapped_windows():
     return window_records(dict.fromkeys(ids))
 
 
-def find_app_window(records, title, linux_pids=(), wine_pids=()):
+def find_app_window(records, title, linux_pids=(), wine_pids=(), web_pids=()):
     expected = [title.casefold()]
     if ecosystem == "linux":
         expected.extend([app_id.casefold(), "mines", "gnome-mines", "org.gnome.mines"])
@@ -144,6 +144,15 @@ def find_app_window(records, title, linux_pids=(), wine_pids=()):
         # authoritative when it belongs to the live 7zFM.exe Wine process.
         for window_id, _, _, pid in records:
             if pid in wine_pids:
+                return window_id
+    elif ecosystem == "web":
+        # Chromium app windows may use the site's page title, a generated app
+        # title, or no title. Bind the visible surface to this OmniStore-launched
+        # browser process tree instead of requiring the literal text "2048".
+        for window_id, window_title, wm_class, pid in records:
+            is_chromium = "chrom" in wm_class.casefold()
+            is_store_window = "nexus omnistore" in window_title.casefold()
+            if pid in web_pids or (is_chromium and not is_store_window):
                 return window_id
     return None
 
@@ -285,8 +294,19 @@ try:
             records = visible_windows()
         else:
             records = visible_windows()
-        linux_pids = process_descendants(store_process.pid) if ecosystem == "linux" else ()
-        app_window = find_app_window(records, app_title, linux_pids, wine_pids)
+        app_pids = process_descendants(store_process.pid) if ecosystem in {"linux", "web"} else ()
+        if ecosystem == "linux":
+            app_window = find_app_window(records, app_title, linux_pids=app_pids,
+                                         wine_pids=wine_pids)
+        elif ecosystem == "web":
+            app_window = find_app_window(records, app_title, web_pids=app_pids)
+            if not app_window:
+                # X11 can omit transient Chromium app surfaces from its
+                # --onlyvisible search while still mapping them in the root tree.
+                app_window = find_app_window(all_mapped_windows(), app_title,
+                                             web_pids=app_pids)
+        else:
+            app_window = find_app_window(records, app_title, wine_pids=wine_pids)
         package_active = True
         if ecosystem == "android":
             serial = os.environ.get("ANDROID_SERIAL", "emulator-5554")
