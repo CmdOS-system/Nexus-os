@@ -33,23 +33,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install user-mode runtime and GUI tools (no system emulator)
+      - name: Install native, Wine and Android user-space runtime tools
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64 wine32:i386 fonts-wine \
             xvfb xauth x11-utils xdotool dbus-x11 xfwm4 xfconf ffmpeg \
             python3-pil python3-gi gir1.2-gtk-3.0 unzip zip file curl \
-            gcc-aarch64-linux-gnu qemu-user-static clang lld llvm
+            gcc-aarch64-linux-gnu qemu-user-static clang lld llvm flatpak scrcpy
           sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
             /usr/share/backgrounds/nexus/horizon-aurora.svg
-      - name: Install Android build SDK only (no AVD or emulator image)
+      - name: Install Android SDK and user-space emulator for real APK execution
         run: |
           sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -perm /111 | sort -V | tail -n 1)"
           test -n "$sdkmanager_path"
           echo "$(dirname "$sdkmanager_path")" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           yes | "$sdkmanager_path" --licenses >/dev/null || true
-          "$sdkmanager_path" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          "$sdkmanager_path" "platforms;android-35" "build-tools;35.0.0" "platform-tools" \
+            "emulator" "system-images;android-35;google_apis;x86_64"
+          avdmanager_path="$(dirname "$sdkmanager_path")/avdmanager"
+          printf 'no\n' | "$avdmanager_path" create avd -n nexus-evidence \
+            -k "system-images;android-35;google_apis;x86_64" --device pixel_2
       - name: Install real Chromium
         run: |
           npm install --prefix "$RUNNER_TEMP/nexus-playwright" playwright
@@ -64,7 +70,7 @@ jobs:
         run: |
           cargo +nightly -Z bindeps test --manifest-path omnios/Cargo.toml -p omni-loader
           bash image/stage-omni-subsystem.sh
-      - name: Run Windows, WebAssembly, Android payload, and iOS payload user-mode tests
+      - name: Run real Linux, Wine, Chromium and F-Droid app evidence
         env:
           NODE_PATH: ${{ runner.temp }}/nexus-playwright/node_modules
           NEXUS_REQUIRE_VIDEO: "1"
@@ -92,8 +98,21 @@ jobs:
             evidence/web/web-interacting.png
             evidence/web/crx-pwa-running.png
             evidence/web/crx-pwa-running.mp4
+  ios-simulator-evidence:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the real ARM64 iOS app in Simulator
+        run: bash image/ios-real/simulator-evidence.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nexus-ios-simulator-evidence
+          if-no-files-found: warn
+          path: |
             evidence/ios/ios-installing.png
             evidence/ios/ios-interacting.png
             evidence/ios/ipa-running.png
             evidence/ios/ipa-running.mp4
-            evidence/ios/nexus-arm64-runtime.ipa
+            evidence/ios/nexus-2048.ipa

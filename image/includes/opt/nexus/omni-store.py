@@ -64,6 +64,7 @@ APPS = {
         ("classic-games", "Classic Games", "Catálogo de juegos clásicos para Windows; revisa licencia y compatibilidad.", "Aptoide PC", "Variable", "🎮", "https://en.aptoide.com/", ".exe"),
     ],
     "android": [
+        ("privacy2048", "2048 (Privacy Friendly)", "Juego de puzles libre de SECUSO, sin anuncios ni permisos.", "F-Droid", "8.9 MB", "2048", "https://f-droid.org/packages/org.secuso.privacyfriendly2048/", ".apk"),
         ("fdroid", "F-Droid", "Cliente de software libre para Android.", "F-Droid", "15 MB", "◈", "https://f-droid.org/", ".apk"),
         ("aurora", "Aurora Store", "Cliente alternativo de código abierto para el catálogo de Play.", "Aptoide / F-Droid", "18 MB", "✦", "https://auroraoss.com/", ".apk"),
         ("vlc-android", "VLC for Android", "Reproductor multimedia de VideoLAN para Android.", "Aptoide", "45 MB", "▶", "https://www.videolan.org/vlc/download-android.html", ".apk"),
@@ -74,18 +75,20 @@ APPS = {
         ("delta", "Delta Emulator", "Emulador distribuido oficialmente por los canales de AltStore.", "AltStore", "Variable", "🎮", "https://deltaemulator.com/", ".ipa"),
     ],
     "web": [
+        ("2048-web", "2048", "Puzle web original, jugable en Chromium como aplicación.", "Web / PWA", "Web", "2048", "https://play2048.co/", ".pwa"),
         ("vscode-web", "Visual Studio Code", "Editor web para trabajar con repositorios y archivos.", "Chrome Web Store / Web", "Web", "⌘", "https://vscode.dev/", ".crx"),
         ("figma", "Figma", "Diseño de interfaces colaborativo en el navegador.", "Chrome Web Store / PWA", "Web", "◉", "https://www.figma.com/", ".crx"),
         ("spotify", "Spotify Web Player", "Música y podcasts desde el navegador.", "Chrome Web Store / PWA", "Web", "♫", "https://open.spotify.com/", ".crx"),
     ],
     "linux": [
+        ("gnome-mines", "GNOME Mines", "Buscaminas de GNOME instalado desde Flathub.", "Flathub", "~20 MB + runtime", "✹", "https://flathub.org/apps/org.gnome.Mines", ".flatpak"),
         ("gimp", "GIMP", "Edición y composición de imágenes de código abierto.", "Flathub", "~300 MB", "✎", "https://flathub.org/apps/org.gimp.GIMP", ".flatpak"),
         ("inkscape", "Inkscape", "Ilustración vectorial SVG de calidad profesional.", "Flathub", "~180 MB", "◇", "https://flathub.org/apps/org.inkscape.Inkscape", ".flatpak"),
         ("vlc-linux", "VLC media player", "Reproductor multimedia libre para Linux.", "Flathub", "~100 MB", "▶", "https://flathub.org/apps/org.videolan.VLC", ".flatpak"),
     ],
 }
 
-FLATPAK_IDS = {"gimp": "org.gimp.GIMP", "inkscape": "org.inkscape.Inkscape", "vlc-linux": "org.videolan.VLC"}
+FLATPAK_IDS = {"gnome-mines": "org.gnome.Mines", "gimp": "org.gimp.GIMP", "inkscape": "org.inkscape.Inkscape", "vlc-linux": "org.videolan.VLC"}
 
 STORE_LINKS = [
     ("Aptoide PC", "https://en.aptoide.com/"), ("F-Droid", "https://f-droid.org/"),
@@ -327,6 +330,8 @@ class OmniStore:
         if installed_path:
             if installed_path.startswith("flatpak:"):
                 self._launch_flatpak(installed_path.partition(":")[2])
+            elif installed_path.startswith("web:"):
+                self._open_webapp(installed_path.partition(":")[2])
             else:
                 self._run_loader(installed_path, app[0], auto=False, action="open")
         else:
@@ -336,6 +341,20 @@ class OmniStore:
         app_id, name, desc, origin, _size, _glyph, url, extension = app
         if self.active == "linux" and extension == ".flatpak":
             self._install_flatpak(FLATPAK_IDS.get(app_id, app_id), app_id, self.args.auto_launch)
+            return
+        if self.active == "windows" and app_id == "7zip":
+            self._run_loader("7zip:auto", app_id, self.args.auto_launch)
+            return
+        if self.active == "web" and extension == ".pwa":
+            self.status.set_text(f"Abriendo {name} en Chromium mediante Nexus OmniLoader…")
+            try:
+                subprocess.Popen(self._runtime_command("install", "web", url), stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+                                 start_new_session=True, env=self._runtime_environment())
+                self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
+                self.status.set_text(f"PWA abierta ✓  {name} · Chromium ejecuta la aplicación web real")
+            except OSError as exc:
+                self.status.set_text(f"No se pudo iniciar Chromium: {exc}")
             return
         self.status.set_text(f"Abriendo {origin}. Descarga {name} y luego selecciona el archivo {extension} aquí.")
         self._open_url(url)
@@ -418,6 +437,15 @@ class OmniStore:
         except OSError as exc:
             self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}")
 
+    def _open_webapp(self, url):
+        try:
+            subprocess.Popen(self._runtime_command("open", "web", url), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+                             start_new_session=True, env=self._runtime_environment())
+            self.status.set_text(f"Aplicación web iniciada en Chromium: {url}")
+        except OSError as exc:
+            self.status.set_text(f"No se pudo iniciar la PWA: {exc}")
+
     @staticmethod
     def _filter(extension):
         file_filter = Gtk.FileFilter(); file_filter.set_name(f"Paquetes {extension}")
@@ -450,9 +478,12 @@ class OmniStore:
         return [loader, str(target)]
 
     def _run_loader(self, filename, app_id, auto=False, action="install"):
+        is_automatic_package = filename == "7zip:auto"
         path = str(Path(filename).expanduser().resolve())
-        if not Path(path).is_file():
+        if not is_automatic_package and not Path(path).is_file():
             self.status.set_text("No se encontró el paquete seleccionado."); return
+        if is_automatic_package:
+            path = filename
         self.status.set_text("Instalando… Nexus OmniLoader está procesando el paquete seleccionado.")
         progress = Gtk.ProgressBar(); progress.set_show_text(True); progress.set_text("Instalando…")
         self.content.pack_start(progress, False, False, 0); self.window.show_all()

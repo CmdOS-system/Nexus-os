@@ -9,6 +9,28 @@ LOADER="${NEXUS_OMNILOADER:-$ROOT/staging/usr/bin/nexus-omniloader}"
 if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
   action="$1"; ecosystem="${2:?ecosystem required}"; target="${3:?package or app ID required}"
   case "$ecosystem" in windows|android|ios|web|linux) ;; *) echo "Unknown OmniStore ecosystem: $ecosystem" >&2; exit 2 ;; esac
+  if [[ "$ecosystem" == "web" ]]; then
+    target="${target#web:}"
+    exec "$LOADER" --webapp "$target"
+  fi
+  if [[ "$ecosystem" == "windows" && "$target" == "7zip:auto" ]]; then
+    if [[ "$action" == "--store-install" ]]; then
+      cache_dir="${NEXUS_RUNTIME_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/nexus/omnistore}"
+      installer="$cache_dir/7z2604-x64.exe"
+      wine_prefix="${WINEPREFIX:-$HOME/.local/share/nexus/wine/omnistore}"
+      mkdir -p "$cache_dir"
+      if [[ ! -s "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe" ]]; then
+        curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
+          https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe -o "$installer"
+        WINEPREFIX="$wine_prefix" "$LOADER" "$installer" /S
+      fi
+      test -s "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
+      echo "7-Zip 26.04 installed from the official signed Windows installer."
+      exit 0
+    fi
+    wine_prefix="${WINEPREFIX:-$HOME/.local/share/nexus/wine/omnistore}"
+    exec env WINEPREFIX="$wine_prefix" "$LOADER" "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
+  fi
   if [[ "$target" == flatpak:* ]]; then
     app_id="${target#flatpak:}"
     if [[ "$action" == "--store-install" ]]; then exec "$LOADER" --install-flatpak "$app_id"; fi
@@ -26,8 +48,6 @@ fi
 PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
 WASMTIME="$ROOT/staging/usr/bin/wasmtime"
 TEMP="$(mktemp -d)"
-LD64_LLD="$(command -v ld64.lld || find /usr/bin -maxdepth 1 -name 'ld64.lld-*' -executable -print | sort -V | tail -n 1)"
-APK_NATIVE_PAYLOAD="$ROOT/android-real/app/src/main/jniLibs/arm64-v8a/libnexus_apk_payload.so"
 export WINEPREFIX="${WINEPREFIX:-$TEMP/wine-prefix}"
 export WINEARCH="${WINEARCH:-win64}"
 # Background jobs can inherit SIGINT as ignored. Relay it to FFmpeg so it can
@@ -64,7 +84,6 @@ FFMPEG_WRAPPER
   export PATH="$TEMP/ffmpeg-bin:$PATH"
 fi
 ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
 BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
 cleanup() {
   local status=$?
@@ -72,7 +91,6 @@ cleanup() {
   if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
     WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
   fi
-  rm -f "$APK_NATIVE_PAYLOAD" 2>/dev/null || true
   rm -rf -- "$TEMP" || status=$?
   exit "$status"
 }
@@ -83,11 +101,6 @@ run_test() {
   echo "[smoke] $label" >&2
   timeout --kill-after=1s 15s "$@"
 }
-run_fast() {
-  local label="$1"; shift
-  echo "[smoke] $label (max 25s)" >&2
-  timeout --kill-after=1s 25s "$@"
-}
 run_recorded_test() {
   local label="$1" video="$2"; shift 2
   [[ -n "$video" && "$video" == *.mp4 ]] || {
@@ -97,7 +110,7 @@ run_recorded_test() {
   mkdir -p "$(dirname "$video")"
   echo "[smoke] $label" >&2
   local test_status=0
-  timeout --kill-after=1s 15s xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' \
+  timeout --kill-after=2s 300s xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' \
     bash -s -- "$video" "$@" <<'RECORDED_TEST' || test_status=$?
 set -euo pipefail
 video_file="$1"; shift
@@ -151,7 +164,7 @@ trap 'exit 130' INT
 NO_AT_BRIDGE=1 xfwm4 --replace --compositor=off </dev/null >/dev/null 2>&1 &
 wm_pid=$!
 bash -c 'trap - INT; exec ffmpeg -nostdin -hide_banner -loglevel error -y \
-  -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -t 10 -an \
+  -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -an \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart "$1"' \
   _ "$video_file" </dev/null >/dev/null 2>&1 &
 recorder_pid=$!
@@ -173,8 +186,8 @@ RECORDED_TEST
   fi
 }
 
-capture_sequence() {
-  local ecosystem="$1" output="$2" video primary
+run_store_evidence() {
+  local ecosystem="$1" app_id="$2" title="$3" package="${4:-}" video primary
   case "$ecosystem" in
     windows) video="wine-gui-running.mp4"; primary="wine-gui-running.png" ;;
     android) video="apk-running.mp4"; primary="apk-running.png" ;;
@@ -185,91 +198,48 @@ capture_sequence() {
   esac
   run_recorded_test "Nexus OmniStore $ecosystem install/open evidence" \
     "$PROJECT_ROOT/evidence/$ecosystem/$video" \
-    env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-sequence.py" "$ecosystem" "$output" \
+    env NO_AT_BRIDGE=1 NEXUS_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh" python3 "$ROOT/tests/runtime/real-app-evidence.py" "$ecosystem" "$app_id" \
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-installing.png" \
-      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png"
+      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
 }
-for tool in python3 unzip zip clang gcc x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node xfwm4; do
+for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl flatpak emulator adb scrcpy; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
-test -n "$LD64_LLD" || { echo "ld64.lld is required to produce the ARM64 Mach-O" >&2; exit 1; }
-for tool in "$BUILD_TOOLS/aapt2" "$BUILD_TOOLS/d8" "$BUILD_TOOLS/zipalign"; do
-  test -x "$tool" || { echo "Android SDK tool missing: $tool" >&2; exit 1; }
-done
-test -s "$ANDROID_JAR" || { echo "Android SDK android.jar is missing: $ANDROID_JAR" >&2; exit 1; }
+test -x "$BUILD_TOOLS/apksigner" || { echo "Android SDK apksigner is missing: $BUILD_TOOLS/apksigner" >&2; exit 1; }
 test -x "$LOADER" && test -x "$WASMTIME"
 export NEXUS_SUBSYSTEM_HELPER="$ROOT/staging/usr/lib/nexus"
 export NEXUS_SOUND_DISABLED=1
 command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 is required" >&2; exit 1; }
 
-# Compile the app Java sources to JVM classes and DEX, plus the ARM64 payload, under one 25s ceiling.
-mkdir -p "$TEMP/classes" "$TEMP/dex"
-run_fast "Compile APK DEX and ARM64 payload" bash -c '
-  set -euo pipefail
-  javac -J-XX:TieredStopAtLevel=1 --release 8 -classpath "$1" -d "$3/classes" \
-    "$2/android-real/app/src/main/java/com/example/nexus/realapp/MainActivity.java" \
-    "$2/android-real/app/src/main/java/com/example/nexus/realapp/PayloadLogic.java"
-  mapfile -d "" class_files < <(find "$3/classes" -name "*.class" -print0)
-  JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 "$4/d8" --lib "$1" --min-api 23 --output "$3/dex" "${class_files[@]}"
-  aarch64-linux-gnu-gcc -O2 -static "$2/android-real/native/nexus-payload.c" -o "$3/libnexus_apk_payload.so"
-' _ "$ANDROID_JAR" "$ROOT" "$TEMP" "$BUILD_TOOLS"
-run_test "Execute APK Java bytecode logic in JVM" bash -c 'java -cp "$1/classes" com.example.nexus.realapp.PayloadLogic | tee "$1/jvm-output.txt"' _ "$TEMP"
-run_test "Verify APK payload ELF architecture" bash -c 'file "$1" | grep -Fq "ARM aarch64"' _ "$TEMP/libnexus_apk_payload.so"
-mkdir -p "$(dirname "$APK_NATIVE_PAYLOAD")"
-cp "$TEMP/libnexus_apk_payload.so" "$APK_NATIVE_PAYLOAD"
+# Use the signed, real F-Droid 2048 release and install it into an Android
+# user-space emulator through OmniStore -> OmniLoader -> adb.
+APK="$TEMP/privacyfriendly2048.apk"
+run_test "Download F-Droid 2048 APK" curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
+  https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
+run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+export NEXUS_ANDROID_TARGET=adb NEXUS_SMOKE_AUTOCONFIRM=1 ANDROID_SERIAL=emulator-5554
+emulator -avd nexus-evidence -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off \
+  -wipe-data >"$TEMP/android-emulator.log" 2>&1 &
+ANDROID_EMULATOR_PID=$!
+cleanup_emulator() { kill "$ANDROID_EMULATOR_PID" 2>/dev/null || true; wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true; }
+trap 'cleanup_emulator; cleanup' EXIT
+timeout --kill-after=2s 480s adb wait-for-device
+boot_deadline=$((SECONDS + 480))
+until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
+  (( SECONDS < boot_deadline )) || { cat "$TEMP/android-emulator.log" >&2; echo "Android emulator did not boot" >&2; exit 1; }
+  sleep 2
+done
+run_store_evidence android privacy2048 "Nexus Android real APK mirror" "$APK"
+cleanup_emulator
+ANDROID_EMULATOR_PID=""
 
-# Assemble a valid APK directly with aapt2, D8 output, and zipalign; with no external build system or dependency resolution.
-APK="$TEMP/nexus-runtime.apk"
-run_test "Link APK manifest with aapt2" "$BUILD_TOOLS/aapt2" link -o "$TEMP/resources.apk" \
-  --manifest "$ROOT/android-real/app/src/main/AndroidManifest.xml" -I "$ANDROID_JAR" \
-  --min-sdk-version 23 --target-sdk-version 28
-mkdir -p "$TEMP/apk/lib/arm64-v8a"
-run_test "Assemble APK bytecode and native payload" bash -c '
-  unzip -q "$1/resources.apk" -d "$1/apk"
-  cp "$1/dex/classes.dex" "$1/apk/classes.dex"
-  cp "$1/libnexus_apk_payload.so" "$1/apk/lib/arm64-v8a/libnexus_apk_payload.so"
-  (cd "$1/apk" && zip -qr "$1/unsigned.apk" .)
-' _ "$TEMP"
-run_test "Align APK package" "$BUILD_TOOLS/zipalign" -f 4 "$TEMP/unsigned.apk" "$APK"
-run_test "Extract and execute APK ARM64 ELF with qemu" bash -c 'unzip -p "$1" lib/arm64-v8a/libnexus_apk_payload.so > "$2/apk-payload" && chmod +x "$2/apk-payload" && qemu-aarch64-static "$2/apk-payload" | tee "$2/apk-output.txt" && grep -Fq "6 x 7 = 42" "$2/apk-output.txt"' _ "$APK" "$TEMP"
-
-capture_sequence android "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")"
-
-# Compile a freestanding ARM64 function as both an iOS Mach-O and the same raw instruction payload.
-mkdir -p "$TEMP/ios/Payload/Nexus.app"
-run_test "Compile iOS ARM64 Mach-O payload" clang -target arm64-apple-ios17.0 -c "$ROOT/ios-real/arm64-payload.S" -o "$TEMP/ios/payload.o"
-run_test "Link iOS ARM64 Mach-O executable" "$LD64_LLD" -arch arm64 -platform_version ios 17.0 17.0 -e _nexus_ipa_payload "$TEMP/ios/payload.o" -o "$TEMP/ios/Payload/Nexus.app/Nexus"
-run_test "Extract ARM64 __text payload from Mach-O" python3 "$ROOT/ios-real/extract-macho-text.py" "$TEMP/ios/Payload/Nexus.app/Nexus" "$TEMP/ios/payload.bin"
-run_test "Build static ARM64 payload runner" aarch64-linux-gnu-gcc -O2 -static "$ROOT/ios-real/arm64-runner.c" -o "$TEMP/ios/Payload/Nexus.app/NexusArm64Runner"
-cp "$TEMP/ios/payload.bin" "$TEMP/ios/Payload/Nexus.app/PayloadARM64.bin"
-run_test "Execute extracted iOS ARM64 instructions under qemu" bash -c 'qemu-aarch64-static "$1" "$2" | tee "$3/ios-output.txt"' _ "$TEMP/ios/Payload/Nexus.app/NexusArm64Runner" "$TEMP/ios/Payload/Nexus.app/PayloadARM64.bin" "$TEMP"
-cat > "$TEMP/ios/Payload/Nexus.app/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Nexus</string><key>CFBundleIdentifier</key><string>com.example.nexus.ios</string><key>CFBundleName</key><string>Nexus</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>
-PLIST
-mkdir -p "$PROJECT_ROOT/evidence/ios"
-run_test "Package IPA bundle" bash -c 'cd "$1/ios" && zip -qr "$2/evidence/ios/nexus-arm64-runtime.ipa" Payload' _ "$TEMP" "$PROJECT_ROOT"
-capture_sequence ios "$(cat "$TEMP/ios-output.txt")"
-
-# Validate real Wasm execution and build the live PWA used by the Chromium GUI capture.
+# Keep a separate Wasmtime smoke check, then exercise the real 2048 PWA through OmniStore.
 mkdir -p "$TEMP/webapp"
 cp -a "$ROOT/tests/webapp/." "$TEMP/webapp/"
-run_test "Build WebAssembly module" python3 "$ROOT/tests/webapp/build_wasm.py" "$TEMP/webapp/app.wasm"
-wasm_counter="$(run_test "Execute Wasm module" "$WASMTIME" run --invoke advance "$TEMP/webapp/app.wasm")"
-test "$wasm_counter" = "1"
+run_test "Build and execute WebAssembly smoke module" bash -c 'python3 "$1/tests/webapp/build_wasm.py" "$2/test.wasm" && test "$("$3" run --invoke advance "$2/test.wasm")" = 1' _ "$ROOT" "$TEMP" "$WASMTIME"
 run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TEMP/pe-exit-zero.exe"
 run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TEMP/pe-exit-zero.exe"
 WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
-run_test "Compile real Win32 GUI PE" x86_64-w64-mingw32-gcc -Os -municode -mwindows "$ROOT/tests/fixtures/pe-dynamic-gui.c" -o "$TEMP/nexus-live-win32.exe"
-echo "[smoke] Capture live Win32 and PWA GUI (single Xvfb session, max 30s)" >&2
-timeout --kill-after=1s 30s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"
-
-# Exercise a native Linux ELF through OmniLoader and retain the same paired
-# install/open evidence alongside the cross-platform smoke captures.
-cat > "$TEMP/nexus-linux-payload.c" <<'C'
-#include <stdio.h>
-int main(void) { puts("Native Linux payload executed through nexus-omniloader: 6 x 7 = 42"); return 0; }
-C
-run_test "Compile native Linux runtime payload" gcc -Os "$TEMP/nexus-linux-payload.c" -o "$TEMP/nexus-linux-payload"
-linux_output="$(run_test "Execute native Linux payload through OmniLoader" "$LOADER" "$TEMP/nexus-linux-payload")"
-capture_sequence linux "$linux_output"
+timeout --kill-after=2s 300s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "7zip:auto" "$TEMP/webapp"
+run_store_evidence linux gnome-mines "Mines"
