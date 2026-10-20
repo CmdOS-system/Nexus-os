@@ -49,15 +49,18 @@ fi
 
 PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
 WASMTIME="$ROOT/staging/usr/bin/wasmtime"
-TEMP="$(mktemp -d)"
-export WINEPREFIX="${WINEPREFIX:-$TEMP/wine-prefix}"
+TMP_DIR="$(mktemp -d)"
+export XDG_RUNTIME_DIR="/tmp/nexus-xdg-runtime-$$"
+mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+export WINEPREFIX="${WINEPREFIX:-$TMP_DIR/wine-prefix}"
 export WINEARCH="${WINEARCH:-win64}"
 # Background jobs can inherit SIGINT as ignored. Relay it to FFmpeg so it can
 # close MP4 containers cleanly, while making encoding failures non-fatal.
 REAL_FFMPEG="$(command -v ffmpeg 2>/dev/null || true)"
 if [[ -n "$REAL_FFMPEG" ]]; then
-  mkdir -p "$TEMP/ffmpeg-bin"
-  cat > "$TEMP/ffmpeg-bin/ffmpeg" <<'FFMPEG_WRAPPER'
+  mkdir -p "$TMP_DIR/ffmpeg-bin"
+  cat > "$TMP_DIR/ffmpeg-bin/ffmpeg" <<'FFMPEG_WRAPPER'
 #!/usr/bin/python3
 import os
 import signal
@@ -81,9 +84,9 @@ signal.signal(signal.SIGINT, relay_interrupt)
 process.wait()
 sys.exit(0)
 FFMPEG_WRAPPER
-  chmod +x "$TEMP/ffmpeg-bin/ffmpeg"
+  chmod +x "$TMP_DIR/ffmpeg-bin/ffmpeg"
   export NEXUS_REAL_FFMPEG="$REAL_FFMPEG"
-  export PATH="$TEMP/ffmpeg-bin:$PATH"
+  export PATH="$TMP_DIR/ffmpeg-bin:$PATH"
 fi
 ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
 BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
@@ -92,8 +95,10 @@ cleanup() {
   trap - EXIT
   if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
     WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
+    WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
   fi
-  rm -rf -- "$TEMP" || status=$?
+  rm -rf -- "$XDG_RUNTIME_DIR" >/dev/null 2>&1 || true
+  rm -rf "$TMP_DIR" || true
   exit "$status"
 }
 trap cleanup EXIT
@@ -200,7 +205,7 @@ run_store_evidence() {
   esac
   run_recorded_test "Nexus OmniStore $ecosystem install/open evidence" \
     "$PROJECT_ROOT/evidence/$ecosystem/$video" \
-    env NO_AT_BRIDGE=1 NEXUS_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh" python3 "$ROOT/tests/runtime/real-app-evidence.py" "$ecosystem" "$app_id" \
+    env NO_AT_BRIDGE=1 GSK_RENDERER=cairo GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GTK_USE_PORTAL=0 NEXUS_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh" python3 "$ROOT/tests/runtime/real-app-evidence.py" "$ecosystem" "$app_id" \
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-installing.png" \
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
@@ -212,12 +217,13 @@ done
 test -x "$LOADER" && test -x "$WASMTIME"
 export NEXUS_SUBSYSTEM_HELPER="$ROOT/staging/usr/lib/nexus"
 export NEXUS_SOUND_DISABLED=1
+export GSK_RENDERER=cairo GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GTK_USE_PORTAL=0 NO_AT_BRIDGE=1
 command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 is required" >&2; exit 1; }
 
 # Verify the real F-Droid APK when Android SDK tools are available.
 # ISO Gate does not need adb, a device, or a full Android emulator.
 if [[ -x "$BUILD_TOOLS/apksigner" ]]; then
-  APK="$TEMP/privacyfriendly2048.apk"
+  APK="$TMP_DIR/privacyfriendly2048.apk"
   run_test "Download F-Droid 2048 APK" curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
     https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
   run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
@@ -230,13 +236,13 @@ fi
 echo "[smoke] ISO Gate does not start an Android AVD; skipping adb/scrcpy UI capture and continuing lightweight runtime checks" >&2
 
 # Keep a separate Wasmtime smoke check, then exercise the real 2048 PWA through OmniStore.
-mkdir -p "$TEMP/webapp"
-cp -a "$ROOT/tests/webapp/." "$TEMP/webapp/"
-run_test "Build and execute WebAssembly smoke module" bash -c 'python3 "$1/tests/webapp/build_wasm.py" "$2/test.wasm" && test "$("$3" run --invoke advance "$2/test.wasm")" = 1' _ "$ROOT" "$TEMP" "$WASMTIME"
-run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TEMP/pe-exit-zero.exe"
-run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TEMP/pe-exit-zero.exe"
+mkdir -p "$TMP_DIR/webapp"
+cp -a "$ROOT/tests/webapp/." "$TMP_DIR/webapp/"
+run_test "Build and execute WebAssembly smoke module" bash -c 'python3 "$1/tests/webapp/build_wasm.py" "$2/test.wasm" && test "$("$3" run --invoke advance "$2/test.wasm")" = 1' _ "$ROOT" "$TMP_DIR" "$WASMTIME"
+run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TMP_DIR/pe-exit-zero.exe"
+run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TMP_DIR/pe-exit-zero.exe"
 WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
-timeout --kill-after=2s 300s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "7zip:auto" "$TEMP/webapp"
+timeout --kill-after=2s 300s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "7zip:auto" "$TMP_DIR/webapp"
 if command -v flatpak >/dev/null 2>&1; then
   run_store_evidence linux gnome-mines "Mines"
 else
