@@ -67,7 +67,7 @@ def installing_capture():
     GLib.timeout_add(300, lambda: (open_button.clicked(), GLib.SOURCE_REMOVE)[1])
     return GLib.SOURCE_REMOVE
 
-def opened():
+def opened(_button):
     output_view.show(); open_button.show()
     open_button.set_sensitive(False)
     status.set_text("Aplicación abierta · salida real de ejecución")
