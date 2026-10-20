@@ -23,13 +23,26 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
           https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe -o "$installer"
         timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$installer" /S
+        WINEPREFIX="$wine_prefix" wineserver -k >/dev/null 2>&1 || true
+        WINEPREFIX="$wine_prefix" wineserver -w >/dev/null 2>&1 || true
       fi
-      test -s "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
+      sevenzip_exe="$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
+      if [[ ! -s "$sevenzip_exe" ]]; then
+        sevenzip_exe="$(find "$wine_prefix" -type f -iname '7zFM.exe' -print -quit 2>/dev/null || true)"
+      fi
+      test -n "$sevenzip_exe" && test -s "$sevenzip_exe"
       echo "7-Zip 26.04 installed from the official signed Windows installer."
       exit 0
     fi
     wine_prefix="${WINEPREFIX:-$HOME/.local/share/nexus/wine/omnistore}"
-    exec timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
+    WINEPREFIX="$wine_prefix" wineserver -k >/dev/null 2>&1 || true
+    WINEPREFIX="$wine_prefix" wineserver -w >/dev/null 2>&1 || true
+    sevenzip_exe="$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
+    if [[ ! -s "$sevenzip_exe" ]]; then
+      sevenzip_exe="$(find "$wine_prefix" -type f -iname '7zFM.exe' -print -quit 2>/dev/null || true)"
+    fi
+    test -n "$sevenzip_exe" && test -s "$sevenzip_exe"
+    exec timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$sevenzip_exe"
   fi
   if [[ "$target" == flatpak:* ]]; then
     app_id="${target#flatpak:}"
@@ -279,6 +292,7 @@ run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests
 echo "[smoke] Execute PE exit smoke through Wine (max 60s)" >&2
 timeout --kill-after=5s 60s xvfb-run -a "$LOADER" "$TMP_DIR/pe-exit-zero.exe"
 WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
+WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
 timeout --kill-after=2s 300s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "7zip:auto" "$TMP_DIR/webapp"
 if command -v flatpak >/dev/null 2>&1; then
   run_store_evidence linux gnome-mines "Mines"
