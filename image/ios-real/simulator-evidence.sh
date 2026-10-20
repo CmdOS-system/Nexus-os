@@ -17,7 +17,8 @@ BUNDLE_ID="com.nexus.omni2048"
 make_app() {
   local destination="$1" sdk="$2" target="$3"
   mkdir -p "$destination"
-  xcrun swiftc -target "$target" -sdk "$sdk" -framework UIKit -O "$SOURCE" -o "$destination/Nexus2048"
+  xcrun swiftc -parse-as-library -target "$target" -sdk "$sdk" \
+    -framework UIKit -O "$SOURCE" -o "$destination/Nexus2048"
   cat > "$destination/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
