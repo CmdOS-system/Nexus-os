@@ -115,25 +115,6 @@ stop_pid() {
   wait "$pid" 2>/dev/null || true
 }
 
-capture_sequence() {
-  local ecosystem="$1" output="$2"
-  local primary
-  shift 2
-  local video
-  case "$ecosystem" in
-    windows) video="wine-gui-running.mp4"; primary="wine-gui-running.png" ;;
-    android) video="apk-running.mp4"; primary="apk-running.png" ;;
-    ios) video="ipa-running.mp4"; primary="ipa-running.png" ;;
-    web) video="crx-pwa-running.mp4"; primary="crx-pwa-running.png" ;;
-    linux) video="linux-app-running.mp4"; primary="linux-app-running.png" ;;
-  esac
-  run_recorded_test "Nexus OmniStore $ecosystem install/open evidence" \
-    "$PROJECT_ROOT/evidence/$ecosystem/$video" \
-    env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-sequence.py" "$ecosystem" "$output" \
-      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-installing.png" \
-      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png"
-  cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
-}
 finish_recorder() {
   local pid="$1" attempt
   [[ -n "$pid" ]] || return 0
@@ -190,6 +171,24 @@ RECORDED_TEST
       return 1
     fi
   fi
+}
+
+capture_sequence() {
+  local ecosystem="$1" output="$2" video primary
+  case "$ecosystem" in
+    windows) video="wine-gui-running.mp4"; primary="wine-gui-running.png" ;;
+    android) video="apk-running.mp4"; primary="apk-running.png" ;;
+    ios) video="ipa-running.mp4"; primary="ipa-running.png" ;;
+    web) video="crx-pwa-running.mp4"; primary="crx-pwa-running.png" ;;
+    linux) video="linux-app-running.mp4"; primary="linux-app-running.png" ;;
+    *) echo "Unknown evidence ecosystem: $ecosystem" >&2; return 2 ;;
+  esac
+  run_recorded_test "Nexus OmniStore $ecosystem install/open evidence" \
+    "$PROJECT_ROOT/evidence/$ecosystem/$video" \
+    env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-sequence.py" "$ecosystem" "$output" \
+      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-installing.png" \
+      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png"
+  cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
 }
 for tool in python3 unzip zip clang gcc x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node xfwm4; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
