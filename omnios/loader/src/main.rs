@@ -474,6 +474,7 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
         OsString::from("--no-sandbox"),
         OsString::from("--disable-gpu"),
         OsString::from("--disable-dev-shm-usage"),
+        OsString::from("--window-size=1100,760"),
         OsString::from("--password-store=basic"),
         OsString::from("--no-first-run"),
         OsString::from("--no-default-browser-check"),

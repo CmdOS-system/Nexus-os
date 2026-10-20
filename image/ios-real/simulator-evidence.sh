@@ -5,6 +5,53 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$ROOT/evidence/ios"
 BUILD="$(mktemp -d)"
 mkdir -p "$OUT"
+
+run_bounded() {
+  local seconds="$1"
+  shift
+  python3 - "$seconds" "$@" <<'PY'
+import subprocess, sys
+limit = float(sys.argv[1])
+command = sys.argv[2:]
+try:
+    subprocess.run(command, check=True, timeout=limit)
+except subprocess.TimeoutExpired:
+    print(f"Timed out after {limit:g}s: {' '.join(command)}", file=sys.stderr)
+    raise SystemExit(124)
+PY
+}
+
+record_video_five_seconds() {
+  python3 - "$UDID" "$OUT/ipa-running.mp4" <<'PY'
+import os, signal, subprocess, sys
+udid, output = sys.argv[1:]
+process = subprocess.Popen(
+    ["xcrun", "simctl", "io", udid, "recordVideo", "--codec=h264", output],
+    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+    start_new_session=True,
+)
+try:
+    process.wait(timeout=5)
+except subprocess.TimeoutExpired:
+    try:
+        os.killpg(process.pid, signal.SIGINT)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=3)
+if process.returncode not in (0, -signal.SIGINT, 130):
+    detail = process.stderr.read().decode("utf-8", "replace")[-2000:]
+    print(f"recordVideo exited {process.returncode}: {detail}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
 trap 'rm -rf "$BUILD"' EXIT
 
 HOST_ARCH="$(uname -m)"
@@ -17,7 +64,7 @@ BUNDLE_ID="com.nexus.omni2048"
 make_app() {
   local destination="$1" sdk="$2" target="$3"
   mkdir -p "$destination"
-  xcrun swiftc -parse-as-library -target "$target" -sdk "$sdk" \
+  run_bounded 240 xcrun swiftc -parse-as-library -target "$target" -sdk "$sdk" \
     -framework UIKit -O "$SOURCE" -o "$destination/Nexus2048"
   cat > "$destination/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -60,18 +107,14 @@ raise SystemExit("No available iPhone Simulator device")
 PY
 )"
 xcrun simctl boot "$UDID" 2>/dev/null || true
-xcrun simctl bootstatus "$UDID" -b
+run_bounded 180 xcrun simctl bootstatus "$UDID" -b
 mkdir -p "$OUT"
-xcrun simctl io "$UDID" screenshot "$OUT/ios-installing.png"
-xcrun simctl io "$UDID" recordVideo --codec=h264 "$OUT/ipa-running.mp4" >/dev/null 2>&1 &
-VIDEO_PID=$!
-sleep 1
-xcrun simctl install "$UDID" "$SIM_APP"
-xcrun simctl launch "$UDID" "$BUNDLE_ID"
-sleep 5
-xcrun simctl io "$UDID" screenshot "$OUT/ios-interacting.png"
+run_bounded 30 xcrun simctl io "$UDID" screenshot "$OUT/ios-installing.png"
+run_bounded 60 xcrun simctl install "$UDID" "$SIM_APP"
+run_bounded 45 xcrun simctl launch "$UDID" "$BUNDLE_ID"
+rm -f "$OUT/ipa-running.mp4"
+record_video_five_seconds
+run_bounded 30 xcrun simctl io "$UDID" screenshot "$OUT/ios-interacting.png"
 cp "$OUT/ios-interacting.png" "$OUT/ipa-running.png"
-kill -INT "$VIDEO_PID" 2>/dev/null || true
-wait "$VIDEO_PID" 2>/dev/null || true
 test -s "$OUT/ipa-running.mp4"
 echo "Built an arm64 IPA and captured the running 2048 UIKit app in iOS Simulator."

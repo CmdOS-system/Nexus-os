@@ -100,7 +100,7 @@ jobs:
             evidence/web/crx-pwa-running.mp4
   ios-simulator-evidence:
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Build and run the real ARM64 iOS app in Simulator
