@@ -473,7 +473,6 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
     run("chromium", [
         OsString::from("--no-sandbox"),
         OsString::from("--disable-gpu"),
-        OsString::from("--disable-software-rasterizer"),
         OsString::from("--disable-dev-shm-usage"),
         OsString::from("--password-store=basic"),
         OsString::from("--no-first-run"),
@@ -671,7 +670,6 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
             run("chromium", [
                 OsString::from("--no-sandbox"),
                 OsString::from("--disable-gpu"),
-                OsString::from("--disable-software-rasterizer"),
                 OsString::from("--disable-dev-shm-usage"),
                 OsString::from("--no-first-run"),
                 OsString::from("--no-default-browser-check"),
