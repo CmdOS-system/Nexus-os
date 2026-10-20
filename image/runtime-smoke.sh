@@ -224,7 +224,8 @@ command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 i
 # ISO Gate does not need adb, a device, or a full Android emulator.
 if [[ -x "$BUILD_TOOLS/apksigner" ]]; then
   APK="$TMP_DIR/privacyfriendly2048.apk"
-  run_test "Download F-Droid 2048 APK" curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
+  echo "[smoke] Download F-Droid 2048 APK" >&2
+  timeout --kill-after=2s 100s curl -fL --retry 3 --connect-timeout 15 --max-time 90 \
     https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
   run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
   if [[ -x "$BUILD_TOOLS/aapt2" ]]; then
