@@ -22,14 +22,14 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       if [[ ! -s "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe" ]]; then
         curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
           https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe -o "$installer"
-        WINEPREFIX="$wine_prefix" "$LOADER" "$installer" /S
+        timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$installer" /S
       fi
       test -s "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
       echo "7-Zip 26.04 installed from the official signed Windows installer."
       exit 0
     fi
     wine_prefix="${WINEPREFIX:-$HOME/.local/share/nexus/wine/omnistore}"
-    exec env WINEPREFIX="$wine_prefix" "$LOADER" "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
+    exec timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
   fi
   if [[ "$target" == flatpak:* ]]; then
     app_id="${target#flatpak:}"
@@ -276,7 +276,8 @@ mkdir -p "$TMP_DIR/webapp"
 cp -a "$ROOT/tests/webapp/." "$TMP_DIR/webapp/"
 run_test "Build and execute WebAssembly smoke module" bash -c 'python3 "$1/tests/webapp/build_wasm.py" "$2/test.wasm" && test "$("$3" run --invoke advance "$2/test.wasm")" = 1' _ "$ROOT" "$TMP_DIR" "$WASMTIME"
 run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TMP_DIR/pe-exit-zero.exe"
-run_test "Execute PE exit smoke through Wine" bash -c 'xvfb-run -a "$1" "$2"' _ "$LOADER" "$TMP_DIR/pe-exit-zero.exe"
+echo "[smoke] Execute PE exit smoke through Wine (max 60s)" >&2
+timeout --kill-after=5s 60s xvfb-run -a "$LOADER" "$TMP_DIR/pe-exit-zero.exe"
 WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
 timeout --kill-after=2s 300s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "7zip:auto" "$TMP_DIR/webapp"
 if command -v flatpak >/dev/null 2>&1; then

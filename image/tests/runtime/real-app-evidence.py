@@ -56,6 +56,27 @@ def process_descendants(root_pid):
     return found
 
 
+def active_wine_7zip_processes():
+    """Find a live Wine process whose command line is the real 7-Zip GUI."""
+    active = set()
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+            if not fields or fields[0] in {"Z", "X"}:
+                continue
+            command = (entry / "cmdline").read_bytes().replace(b"\0", b" ").lower()
+            comm = (entry / "comm").read_bytes().strip().lower()
+            executable = os.path.basename(os.readlink(entry / "exe")).lower()
+        except (OSError, ValueError, IndexError):
+            continue
+        if b"7zfm.exe" in command or b"7zfm.exe" in comm:
+            if "wine" in executable or b"wine" in command or b"7zfm.exe" in comm:
+                active.add(int(entry.name))
+    return active
+
+
 def visible_windows():
     result = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", ".*"],
                             text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -132,9 +153,18 @@ try:
     # The first frame is the real OmniStore while its selected runtime installs/opens the app.
     time.sleep(1.0)
     capture(installing_png)
-    deadline = time.monotonic() + (240 if ecosystem in ("linux", "android") else 240)
+    # Wine can spend several seconds initializing Common-Controls before the
+    # 7-Zip top-level X11 window is mapped. Wait up to 45 seconds for both the
+    # actual Wine payload process and its visible window.
+    deadline = time.monotonic() + (45 if ecosystem == "windows" else 240)
     app_window = None
+    wine_pids = set()
     while time.monotonic() < deadline:
+        if ecosystem == "windows":
+            wine_pids = active_wine_7zip_processes()
+            if not wine_pids:
+                time.sleep(0.5)
+                continue
         records = visible_windows()
         linux_pids = process_descendants(store_process.pid) if ecosystem == "linux" else ()
         app_window = find_app_window(records, app_title, linux_pids)
