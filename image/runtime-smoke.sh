@@ -246,7 +246,7 @@ run_store_evidence() {
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
 }
-for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl; do
+for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool wmctrl curl; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
 # adb, emulator, scrcpy, Flatpak, and Android SDK commands are optional capabilities.
@@ -295,9 +295,17 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     run_store_evidence android privacy2048 "2048" "$NEXUS_FDROID_APK"
   else
     echo "[smoke] Android SDK is available but nexus-evidence AVD is absent; skipping APK UI capture" >&2
+    if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+      echo "Real Android UI evidence is required, but the nexus-evidence AVD was not created." >&2
+      exit 1
+    fi
   fi
 else
   echo "[smoke] Android AVD/APK tooling unavailable; retaining signature and manifest checks only" >&2
+  if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+    echo "Real Android UI evidence is required, but the emulator, adb, or signed APK is unavailable." >&2
+    exit 1
+  fi
 fi
 
 # Keep a separate Wasmtime smoke check, then exercise the real 2048 PWA through OmniStore.
@@ -313,4 +321,14 @@ if command -v flatpak >/dev/null 2>&1; then
   run_store_evidence linux gnome-mines "Mines"
 else
   echo "[smoke] Flatpak unavailable; skipping Flathub GNOME Mines evidence" >&2
+  if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+    echo "Real Linux app evidence is required, but Flatpak is unavailable." >&2
+    exit 1
+  fi
+fi
+
+if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+  run_test "Validate real ecosystem evidence PNGs and MP4s" \
+    python3 "$ROOT/tests/runtime/validate-evidence.py" --evidence-root "$PROJECT_ROOT/evidence" \
+      --ecosystems windows web android linux
 fi

@@ -256,6 +256,7 @@ class OmniStore:
         return label
 
     def _render(self):
+        self.window.set_title("Nexus OmniStore")
         self._clear()
         section = next(item for item in SECTIONS if item[0] == self.active)
         _, icon, heading, ext, source = section
@@ -347,12 +348,14 @@ class OmniStore:
             return
         if self.active == "web" and extension == ".pwa":
             self.status.set_text(f"Abriendo {name} en Chromium mediante Nexus OmniLoader…")
+            self.window.set_title(f"Nexus OmniStore · Cargando {name}…")
             try:
                 subprocess.Popen(self._runtime_command("install", "web", url), stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
                                  start_new_session=True, env=self._runtime_environment())
                 self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
                 self.status.set_text(f"PWA abierta ✓  {name} · Chromium ejecuta la aplicación web real")
+                self.window.set_title(f"Nexus OmniStore · Cargando {name}…")
             except OSError as exc:
                 self.status.set_text(f"No se pudo iniciar Chromium: {exc}")
             return
@@ -395,6 +398,7 @@ class OmniStore:
         if not self._valid_flatpak_id(flatpak_id):
             self.status.set_text("ID Flatpak no válido."); return
         self.status.set_text(f"Conectando con Nexus OmniLoader para instalar {flatpak_id} desde Flathub…")
+        self.window.set_title(f"Nexus OmniStore · Instalando {flatpak_id}…")
         progress = Gtk.ProgressBar(); progress.set_show_text(True); progress.set_text("Instalando con OmniLoader…")
         progress.set_pulse_step(0.08)
         self.content.pack_start(progress, False, False, 0); self.window.show_all()
@@ -404,7 +408,7 @@ class OmniStore:
                                        stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                        text=True, close_fds=True, env=self._runtime_environment())
         except OSError as exc:
-            progress.destroy(); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
+            progress.destroy(); self.window.set_title("Nexus OmniStore"); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
         def poll():
             log.flush(); log.seek(0); output = log.read()
             percentages = [int(value) for value in re.findall(r"(?<!\d)(\d{1,3})%", output) if int(value) <= 100]
@@ -425,6 +429,7 @@ class OmniStore:
             else:
                 detail = output[-240:] if output else f"OmniLoader terminó con código {process.returncode}."
                 self.status.set_text(f"Instalación no completada: {detail}")
+                self.window.set_title("Nexus OmniStore")
             return False
         GLib.timeout_add(140, poll)
 
@@ -485,6 +490,7 @@ class OmniStore:
         if is_automatic_package:
             path = filename
         self.status.set_text("Instalando… Nexus OmniLoader está procesando el paquete seleccionado.")
+        self.window.set_title(f"Nexus OmniStore · Instalando {app_id}…")
         progress = Gtk.ProgressBar(); progress.set_show_text(True); progress.set_text("Instalando…")
         self.content.pack_start(progress, False, False, 0); self.window.show_all()
         try:
@@ -493,7 +499,7 @@ class OmniStore:
                                        stdout=log, stderr=subprocess.STDOUT, text=True, close_fds=True,
                                        env=self._runtime_environment())
         except OSError as exc:
-            progress.destroy(); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
+            progress.destroy(); self.window.set_title("Nexus OmniStore"); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
         # OmniLoader does not expose fractional progress; show an honest live pulse
         # while the child runs, then record success only on its zero exit status.
         def poll():
@@ -512,6 +518,7 @@ class OmniStore:
             else:
                 detail = output[-180:] if output else f"OmniLoader terminó con código {code}."
                 self.status.set_text(f"Instalación no completada: {detail}")
+                self.window.set_title("Nexus OmniStore")
             return False
         GLib.timeout_add(140, poll)
 

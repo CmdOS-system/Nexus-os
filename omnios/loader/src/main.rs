@@ -467,8 +467,9 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
         return Err(io::Error::other("La URL de PWA debe usar HTTPS; HTTP solo se permite en localhost."));
     }
     require_program("chromium", "abrir una PWA en ventana aislada")?;
-    let profile = env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".local/share/nexus/chromium-pwa");
+    let profile = env::var_os("NEXUS_CHROMIUM_PROFILE").map(PathBuf::from)
+        .unwrap_or_else(|| env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join(".local/share/nexus/chromium-pwa"));
     fs::create_dir_all(&profile)?;
     run("chromium", [
         OsString::from("--no-sandbox"),
@@ -478,6 +479,8 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
         OsString::from("--password-store=basic"),
         OsString::from("--no-first-run"),
         OsString::from("--no-default-browser-check"),
+        OsString::from("--window-size=900,700"),
+        OsString::from("--window-position=320,60"),
         OsString::from(format!("--user-data-dir={}", profile.display())),
         OsString::from(format!("--app={url}")),
     ])
