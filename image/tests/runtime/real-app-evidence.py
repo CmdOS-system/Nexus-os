@@ -92,7 +92,8 @@ def window_records(window_ids):
             continue
         def query(*args):
             value = subprocess.run(["xdotool", *args, window_id], text=True,
-                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                   timeout=2, check=False)
             return value.stdout.strip()
         title = query("getwindowname")
         wm_class = query("getwindowclassname")
@@ -106,8 +107,12 @@ def window_records(window_ids):
 
 def all_mapped_windows():
     """Inspect X11's full root tree, including windows without useful titles."""
-    result = subprocess.run(["xwininfo", "-root", "-tree"], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        result = subprocess.run(["xwininfo", "-root", "-tree"], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=5, check=False)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
     ids = re.findall(r"^\s*(0x[0-9a-fA-F]+)\s+", result.stdout, re.MULTILINE)
     return window_records(dict.fromkeys(ids))
 

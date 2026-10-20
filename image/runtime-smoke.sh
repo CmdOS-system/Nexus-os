@@ -4,6 +4,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOADER="${NEXUS_OMNILOADER:-$ROOT/staging/usr/bin/nexus-omniloader}"
 
+# A Wine GUI from a previous Xvfb session can leave wineserver bound to that
+# dead display. Kill the server for this exact prefix and bound the wait so a
+# stuck wineserver can never hold the smoke test open indefinitely.
+stop_wineserver() {
+  local prefix="$1"
+  WINEPREFIX="$prefix" wineserver -k >/dev/null 2>&1 || true
+  timeout --kill-after=1s 10s env WINEPREFIX="$prefix" wineserver -w \
+    >/dev/null 2>&1 || true
+}
+
 # Store actions share this entry point so clicks and CI smoke runs pass through
 # the same OmniLoader dispatcher. This mode exits before starting the test suite.
 if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
@@ -23,8 +33,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
           https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe -o "$installer"
         timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$installer" /S
-        WINEPREFIX="$wine_prefix" wineserver -k >/dev/null 2>&1 || true
-        WINEPREFIX="$wine_prefix" wineserver -w >/dev/null 2>&1 || true
+        stop_wineserver "$wine_prefix"
       fi
       sevenzip_exe="$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
       if [[ ! -s "$sevenzip_exe" ]]; then
@@ -35,8 +44,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       exit 0
     fi
     wine_prefix="${WINEPREFIX:-$HOME/.local/share/nexus/wine/omnistore}"
-    WINEPREFIX="$wine_prefix" wineserver -k >/dev/null 2>&1 || true
-    WINEPREFIX="$wine_prefix" wineserver -w >/dev/null 2>&1 || true
+    stop_wineserver "$wine_prefix"
     sevenzip_exe="$wine_prefix/drive_c/Program Files/7-Zip/7zFM.exe"
     if [[ ! -s "$sevenzip_exe" ]]; then
       sevenzip_exe="$(find "$wine_prefix" -type f -iname '7zFM.exe' -print -quit 2>/dev/null || true)"
@@ -112,8 +120,7 @@ cleanup() {
     wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true
   fi
   if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
-    WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
-    WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
+    stop_wineserver "$WINEPREFIX"
   fi
   rm -rf -- "$XDG_RUNTIME_DIR" >/dev/null 2>&1 || true
   rm -rf "$TMP_DIR" || true
@@ -291,8 +298,7 @@ run_test "Build and execute WebAssembly smoke module" bash -c 'python3 "$1/tests
 run_test "Compile PE exit smoke" x86_64-w64-mingw32-gcc -Os -static "$ROOT/tests/fixtures/pe-exit-zero.c" -o "$TMP_DIR/pe-exit-zero.exe"
 echo "[smoke] Execute PE exit smoke through Wine (max 60s)" >&2
 timeout --kill-after=5s 60s xvfb-run -a "$LOADER" "$TMP_DIR/pe-exit-zero.exe"
-WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
-WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
+stop_wineserver "$WINEPREFIX"
 timeout --kill-after=2s 300s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "7zip:auto" "$TMP_DIR/webapp"
 if command -v flatpak >/dev/null 2>&1; then
   run_store_evidence linux gnome-mines "Mines"
