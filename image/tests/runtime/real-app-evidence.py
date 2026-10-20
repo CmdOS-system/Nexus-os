@@ -27,13 +27,75 @@ def capture(path):
     target.parent.mkdir(parents=True, exist_ok=True)
     image.save(target, "PNG")
 
-def windows(title):
-    result = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", title],
+def process_descendants(root_pid):
+    """Return descendant PIDs using /proc, including detached child sessions."""
+    parents = {}
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text()
+            fields = stat[stat.rfind(")") + 1:].split()
+            parents[int(entry.name)] = int(fields[1])
+        except (OSError, ValueError, IndexError):
+            continue
+    found = set()
+    frontier = {root_pid}
+    while frontier:
+        children = {pid for pid, parent in parents.items()
+                    if parent in frontier and pid not in found and pid != root_pid}
+        found.update(children)
+        frontier = children
+    return found
+
+
+def visible_windows():
+    result = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", ".*"],
                             text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    return [line for line in result.stdout.splitlines() if line.strip()]
+    records = []
+    for window_id in result.stdout.splitlines():
+        window_id = window_id.strip()
+        if not window_id:
+            continue
+        def query(*args):
+            value = subprocess.run(["xdotool", *args, window_id], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            return value.stdout.strip()
+        title = query("getwindowname")
+        wm_class = query("getwindowclassname")
+        try:
+            pid = int(query("getwindowpid"))
+        except ValueError:
+            pid = None
+        records.append((window_id, title, wm_class, pid))
+    return records
+
+
+def find_app_window(records, title, linux_pids=()):
+    expected = [title.casefold()]
+    if ecosystem == "linux":
+        expected.extend([app_id.casefold(), "mines", "gnome-mines", "org.gnome.mines"])
+    for record in records:
+        _, window_title, wm_class, _ = record
+        fields = (window_title + " " + wm_class).casefold()
+        if any(value and value in fields for value in expected):
+            return record[0]
+    if ecosystem == "linux":
+        for window_id, _, _, pid in records:
+            if pid in linux_pids:
+                return window_id
+    return None
 
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
+if ecosystem == "linux":
+    environment.update({
+        "GSK_RENDERER": "cairo",
+        "GDK_BACKEND": "x11",
+        "LIBGL_ALWAYS_SOFTWARE": "1",
+        "GTK_USE_PORTAL": "0",
+        "NO_AT_BRIDGE": "1",
+    })
 store_process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  close_fds=True, start_new_session=True)
@@ -49,24 +111,30 @@ try:
     # The first frame is the real OmniStore while its selected runtime installs/opens the app.
     time.sleep(1.0)
     capture(installing_png)
-    deadline = time.monotonic() + 240
+    deadline = time.monotonic() + (20 if ecosystem == "linux" else 240)
     app_window = None
     while time.monotonic() < deadline:
-        matches = windows(app_title)
+        records = visible_windows()
+        linux_pids = process_descendants(store_process.pid) if ecosystem == "linux" else ()
+        app_window = find_app_window(records, app_title, linux_pids)
         package_active = True
         if ecosystem == "android":
             serial = os.environ.get("ANDROID_SERIAL", "emulator-5554")
             activity = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "activity", "activities"],
                                       text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             package_active = "org.secuso.privacyfriendly2048" in activity.stdout
-        if matches and package_active:
-            app_window = matches[0]
+        if app_window and package_active:
             break
         if store_process.poll() is not None:
             raise RuntimeError(f"OmniStore exited before opening {app_title} (status {store_process.returncode})")
         time.sleep(0.25)
     if app_window is None:
-        raise RuntimeError(f"Real app window did not appear: {app_title}")
+        if ecosystem == "linux":
+            linux_pids = process_descendants(store_process.pid)
+            app_window = next((window_id for window_id, _, _, pid in visible_windows()
+                               if pid in linux_pids), None)
+        if app_window is None:
+            raise RuntimeError(f"Real app window did not appear: {app_title}")
 
     subprocess.run(["xdotool", "windowactivate", "--sync", app_window], check=False)
     if ecosystem == "windows":
