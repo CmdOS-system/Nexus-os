@@ -507,6 +507,12 @@ fn confirm(action: &str, path: &Path) -> io::Result<bool> {
 }
 
 fn confirm_flatpak(action: &str, app_id: &str) -> io::Result<bool> {
+    // CI evidence installs a known Flathub package through OmniStore in a
+    // disposable user profile; allow that non-interactive smoke path to accept
+    // the same explicit user consent required by the interactive UI.
+    if env::var("NEXUS_SMOKE_AUTOCONFIRM").as_deref() == Ok("1") {
+        return Ok(true);
+    }
     if let Some(accepted) = cyber_glass_dialog(
         "Linux", "Nexus OmniLoader · Flatpak", action, None, true,
     )? {

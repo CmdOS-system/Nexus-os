@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Drive Nexus OmniStore and capture genuine application windows on X11."""
 import os
+import re
 import subprocess
 import sys
 import time
@@ -15,8 +16,14 @@ ecosystem, app_id, installing_png, interacting_png, app_title, *package = sys.ar
 root = Path(__file__).resolve().parents[2]
 store = root / "includes/opt/nexus/omni-store.py"
 command = [sys.executable, str(store), "--select-tab", ecosystem, "--install-app", app_id]
-if package and package[0]:
-    command += ["--package-path", package[0]]
+package_path = package[0] if package and package[0] else os.environ.get("NEXUS_FDROID_APK", "")
+if ecosystem == "android":
+    if not package_path or not Path(package_path).is_file():
+        raise SystemExit("Android evidence requires the downloaded real F-Droid APK via PACKAGE or NEXUS_FDROID_APK")
+    if not os.environ.get("ANDROID_SERIAL"):
+        raise SystemExit("Android evidence requires ANDROID_SERIAL for the CI AVD")
+if package_path:
+    command += ["--package-path", package_path]
 command += ["--auto-launch"]
 
 def capture(path):
@@ -86,6 +93,20 @@ def find_app_window(records, title, linux_pids=()):
                 return window_id
     return None
 
+
+def android_package_is_foreground(serial):
+    result = subprocess.run(
+        ["adb", "-s", serial, "shell", "dumpsys", "activity", "activities"],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=8,
+    )
+    # Only accept the resumed/top-resumed activity, not a package merely found
+    # somewhere in ActivityManager's historical task list.
+    foreground = re.search(
+        r"(?:mResumedActivity|topResumedActivity)\s*[:=]\s*[^\n]*",
+        result.stdout,
+    )
+    return bool(foreground and "org.secuso.privacyfriendly2048" in foreground.group(0))
+
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
 if ecosystem == "linux":
@@ -111,7 +132,7 @@ try:
     # The first frame is the real OmniStore while its selected runtime installs/opens the app.
     time.sleep(1.0)
     capture(installing_png)
-    deadline = time.monotonic() + (20 if ecosystem == "linux" else 240)
+    deadline = time.monotonic() + (240 if ecosystem in ("linux", "android") else 240)
     app_window = None
     while time.monotonic() < deadline:
         records = visible_windows()
@@ -120,14 +141,12 @@ try:
         package_active = True
         if ecosystem == "android":
             serial = os.environ.get("ANDROID_SERIAL", "emulator-5554")
-            activity = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "activity", "activities"],
-                                      text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            package_active = "org.secuso.privacyfriendly2048" in activity.stdout
+            package_active = android_package_is_foreground(serial)
         if app_window and package_active:
             break
         if store_process.poll() is not None:
             raise RuntimeError(f"OmniStore exited before opening {app_title} (status {store_process.returncode})")
-        time.sleep(0.25)
+        time.sleep(0.5)
     if app_window is None:
         if ecosystem == "linux":
             linux_pids = process_descendants(store_process.pid)

@@ -93,6 +93,11 @@ BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
 cleanup() {
   local status=$?
   trap - EXIT
+  if [[ -n "${ANDROID_EMULATOR_PID:-}" ]]; then
+    adb -s "${ANDROID_SERIAL:-emulator-5554}" emu kill >/dev/null 2>&1 || true
+    kill "$ANDROID_EMULATOR_PID" >/dev/null 2>&1 || true
+    wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true
+  fi
   if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
     WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
     WINEPREFIX="$WINEPREFIX" wineserver -w >/dev/null 2>&1 || true
@@ -205,7 +210,9 @@ run_store_evidence() {
   esac
   run_recorded_test "Nexus OmniStore $ecosystem install/open evidence" \
     "$PROJECT_ROOT/evidence/$ecosystem/$video" \
-    env NO_AT_BRIDGE=1 GSK_RENDERER=cairo GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GTK_USE_PORTAL=0 NEXUS_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh" python3 "$ROOT/tests/runtime/real-app-evidence.py" "$ecosystem" "$app_id" \
+    env NO_AT_BRIDGE=1 GSK_RENDERER=cairo GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GTK_USE_PORTAL=0 \
+      NEXUS_SMOKE_AUTOCONFIRM=1 NEXUS_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh" \
+      python3 "$ROOT/tests/runtime/real-app-evidence.py" "$ecosystem" "$app_id" \
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-installing.png" \
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
@@ -229,12 +236,40 @@ if [[ -x "$BUILD_TOOLS/apksigner" ]]; then
     https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
   run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
   if [[ -x "$BUILD_TOOLS/aapt2" ]]; then
-    run_test "Inspect F-Droid APK manifest" "$BUILD_TOOLS/aapt2" dump badging "$APK"
+    echo "[smoke] Verify F-Droid APK package identity" >&2
+    badging="$(timeout --kill-after=1s 15s "$BUILD_TOOLS/aapt2" dump badging "$APK")"
+    grep -Fq "package: name='org.secuso.privacyfriendly2048'" <<<"$badging"
   fi
+  export NEXUS_FDROID_APK="$APK"
 else
   echo "[smoke] Android SDK apksigner unavailable; skipping APK package inspection" >&2
 fi
-echo "[smoke] ISO Gate does not start an Android AVD; skipping adb/scrcpy UI capture and continuing lightweight runtime checks" >&2
+# The dedicated runtime-evidence job provisions this AVD. Boot it only when its
+# emulator and APK tooling are present; ISO Gate intentionally has neither.
+if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
+    [[ -n "${NEXUS_FDROID_APK:-}" ]] && [[ -x "$BUILD_TOOLS/aapt2" ]]; then
+  if emulator -list-avds 2>/dev/null | grep -Fxq nexus-evidence; then
+    export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}" NEXUS_ANDROID_TARGET=adb
+    echo "[smoke] Boot the CI Android AVD for real F-Droid APK execution" >&2
+    timeout --kill-after=5s 180s emulator -avd nexus-evidence -no-window -gpu swiftshader_indirect \
+      -no-snapshot -no-audio -no-boot-anim -camera-back none -camera-front none \
+      </dev/null >/dev/null 2>&1 &
+    ANDROID_EMULATOR_PID=$!
+    timeout --kill-after=2s 120s adb -s "$ANDROID_SERIAL" wait-for-device
+    boot_deadline=$((SECONDS + 120))
+    until [[ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
+      (( SECONDS < boot_deadline )) || { echo "Android AVD did not finish booting" >&2; exit 1; }
+      sleep 2
+    done
+    adb -s "$ANDROID_SERIAL" shell settings put global window_animation_scale 0 >/dev/null
+    adb -s "$ANDROID_SERIAL" shell settings put global transition_animation_scale 0 >/dev/null
+    run_store_evidence android privacy2048 "2048" "$NEXUS_FDROID_APK"
+  else
+    echo "[smoke] Android SDK is available but nexus-evidence AVD is absent; skipping APK UI capture" >&2
+  fi
+else
+  echo "[smoke] Android AVD/APK tooling unavailable; retaining signature and manifest checks only" >&2
+fi
 
 # Keep a separate Wasmtime smoke check, then exercise the real 2048 PWA through OmniStore.
 mkdir -p "$TMP_DIR/webapp"
