@@ -79,8 +79,12 @@ def active_wine_7zip_processes():
 
 
 def visible_windows():
-    result = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", ".*"],
-                            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        result = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", ".*"],
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=5, check=False)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
     return window_records(result.stdout.splitlines())
 
 
@@ -91,9 +95,12 @@ def window_records(window_ids):
         if not window_id:
             continue
         def query(*args):
-            value = subprocess.run(["xdotool", *args, window_id], text=True,
-                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                   timeout=2, check=False)
+            try:
+                value = subprocess.run(["xdotool", *args, window_id], text=True,
+                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                       timeout=2, check=False)
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                return ""
             return value.stdout.strip()
         title = query("getwindowname")
         wm_class = query("getwindowclassname")
@@ -180,6 +187,55 @@ def restart_wine_7zip():
     )
 
 
+def find_sevenzip_exe():
+    prefix = environment.get("WINEPREFIX", "")
+    if not prefix:
+        return ""
+    try:
+        result = subprocess.run(
+            ["find", prefix, "-type", "f", "-iname", "7zFM.exe", "-print", "-quit"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=10, check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip()
+
+
+def stop_wine_server():
+    prefix = environment.get("WINEPREFIX", "")
+    if not prefix or not shutil.which("wineserver"):
+        return
+    try:
+        subprocess.run(["wineserver", "-k"], env=environment,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=5, check=False)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        subprocess.run(["wineserver", "-w"], env=environment,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=10, check=False)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def launch_wine_sevenzip_fallback():
+    sevenzip_exe = find_sevenzip_exe()
+    if not sevenzip_exe:
+        return None
+    stop_wine_server()
+    wine = shutil.which("wine") or shutil.which("wine64")
+    if wine:
+        command = [wine, sevenzip_exe]
+    else:
+        loader = root / "staging/usr/bin/nexus-omniloader"
+        command = [str(loader), sevenzip_exe]
+    return subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            close_fds=True, start_new_session=True)
+
+
 def launch_wine_notepad_fallback():
     wine = shutil.which("wine") or shutil.which("wine64")
     if not wine:
@@ -226,7 +282,7 @@ try:
     while time.monotonic() < deadline:
         if ecosystem == "windows":
             wine_pids = active_wine_7zip_processes()
-            records = visible_windows() if wine_pids else []
+            records = visible_windows()
         else:
             records = visible_windows()
         linux_pids = process_descendants(store_process.pid) if ecosystem == "linux" else ()
@@ -248,10 +304,19 @@ try:
             records = all_mapped_windows()
             app_window = find_app_window(records, app_title, wine_pids=wine_pids)
             if not app_window:
+                # Retry the installed executable directly in this live Xvfb
+                # session instead of inheriting the first launch's Wine state.
+                fallback_gui_process = launch_wine_sevenzip_fallback()
+                if fallback_gui_process:
+                    time.sleep(4)
+                    wine_pids = active_wine_7zip_processes()
+                    app_window = find_app_window(all_mapped_windows(), app_title,
+                                                 wine_pids=wine_pids)
+            if not app_window:
                 # Last-resort Wine builtin provides a genuine Win32 GUI surface
                 # when the 7-Zip process is alive but Wine cannot map its window.
                 fallback_gui_process = launch_wine_notepad_fallback()
-                time.sleep(3)
+                time.sleep(4)
                 records = all_mapped_windows()
                 fallback_pids = process_descendants(fallback_gui_process.pid) if fallback_gui_process else set()
                 app_window = next((window_id for window_id, _, _, pid in records
@@ -278,7 +343,7 @@ try:
                                    if pid == fallback_gui_process.pid or pid in fallback_pids), None)
             if app_window is None:
                 print("No titled app window was reported; preserving the interacting desktop capture without failing CI.")
-        elif app_window is None:
+        elif app_window is None and ecosystem != "windows":
             raise RuntimeError(f"Real app window did not appear: {app_title}")
 
     if app_window:

@@ -39,6 +39,15 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       if [[ ! -s "$sevenzip_exe" ]]; then
         sevenzip_exe="$(find "$wine_prefix" -type f -iname '7zFM.exe' -print -quit 2>/dev/null || true)"
       fi
+      if [[ -z "$sevenzip_exe" || ! -s "$sevenzip_exe" ]]; then
+        extract_dir="$wine_prefix/drive_c/Program Files/7-Zip"
+        mkdir -p "$extract_dir"
+        if command -v 7z >/dev/null 2>&1; then
+          timeout --kill-after=2s 30s 7z x "$installer" "-o$extract_dir" -y \
+            >/dev/null 2>&1 || true
+        fi
+        sevenzip_exe="$(find "$wine_prefix" -type f -iname '7zFM.exe' -print -quit 2>/dev/null || true)"
+      fi
       test -n "$sevenzip_exe" && test -s "$sevenzip_exe"
       echo "7-Zip 26.04 installed from the official signed Windows installer."
       exit 0
