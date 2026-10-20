@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import tempfile
+import re
 from pathlib import Path
 
 import gi
@@ -54,8 +55,8 @@ SECTIONS = [
     ("linux", "⬡", "Aplicaciones Linux", ".deb / Flatpak", "Flathub / Debian Store"),
 ]
 
-# Catalog entries link to their publishers/store listings. OmniStore never silently
-# installs a remote binary: the user chooses the downloaded package before OmniLoader.
+# Package catalog pages are descriptive. Linux Flatpak cards are resolved by app ID
+# through OmniLoader; other ecosystems hand the selected package to its runtime.
 APPS = {
     "windows": [
         ("7zip", "7-Zip", "Compresor de archivos rápido y de código abierto.", "Winget", "4 MB", "📦", "https://www.7-zip.org/", ".exe"),
@@ -78,11 +79,13 @@ APPS = {
         ("spotify", "Spotify Web Player", "Música y podcasts desde el navegador.", "Chrome Web Store / PWA", "Web", "♫", "https://open.spotify.com/", ".crx"),
     ],
     "linux": [
-        ("gimp", "GIMP", "Edición y composición de imágenes de código abierto.", "Flathub", "~300 MB", "✎", "https://flathub.org/apps/org.gimp.GIMP", ".deb"),
-        ("inkscape", "Inkscape", "Ilustración vectorial SVG de calidad profesional.", "Flathub", "~180 MB", "◇", "https://flathub.org/apps/org.inkscape.Inkscape", ".deb"),
-        ("vlc-linux", "VLC media player", "Reproductor multimedia libre para Linux.", "Debian Store / Flathub", "~100 MB", "▶", "https://flathub.org/apps/org.videolan.VLC", ".deb"),
+        ("gimp", "GIMP", "Edición y composición de imágenes de código abierto.", "Flathub", "~300 MB", "✎", "https://flathub.org/apps/org.gimp.GIMP", ".flatpak"),
+        ("inkscape", "Inkscape", "Ilustración vectorial SVG de calidad profesional.", "Flathub", "~180 MB", "◇", "https://flathub.org/apps/org.inkscape.Inkscape", ".flatpak"),
+        ("vlc-linux", "VLC media player", "Reproductor multimedia libre para Linux.", "Flathub", "~100 MB", "▶", "https://flathub.org/apps/org.videolan.VLC", ".flatpak"),
     ],
 }
+
+FLATPAK_IDS = {"gimp": "org.gimp.GIMP", "inkscape": "org.inkscape.Inkscape", "vlc-linux": "org.videolan.VLC"}
 
 STORE_LINKS = [
     ("Aptoide PC", "https://en.aptoide.com/"), ("F-Droid", "https://f-droid.org/"),
@@ -209,7 +212,7 @@ class OmniStore:
         body = dialog.get_content_area()
         body.set_spacing(10); body.set_margin_top(16); body.set_margin_bottom(14); body.set_margin_start(18); body.set_margin_end(18)
         body.pack_start(self._label("Registra el enlace HTTPS de una tienda o catálogo legal.", "app-name"), False, False, 0)
-        body.pack_start(self._label("OmniStore guarda el enlace HTTPS y lo abre en el navegador; no verifica automáticamente la legalidad del catálogo. Para instalar, descarga un paquete y selecciónalo en la sección compatible. No ejecutamos descargas automáticamente.", "app-desc"), False, False, 0)
+        body.pack_start(self._label("OmniStore guarda el enlace HTTPS y lo abre en el navegador; no verifica automáticamente la legalidad del catálogo. Para instalar, usa el flujo compatible de la sección correspondiente.", "app-desc"), False, False, 0)
         name = Gtk.Entry(); name.set_placeholder_text("Nombre de la tienda"); body.pack_start(name, False, False, 0)
         url = Gtk.Entry(); url.set_placeholder_text("https://tienda.example"); body.pack_start(url, False, False, 0)
         error = Gtk.Label(); error.set_xalign(0); error.set_line_wrap(True)
@@ -261,12 +264,28 @@ class OmniStore:
         hero.set_margin_top(3); hero.set_margin_bottom(3); hero.set_margin_start(1); hero.set_margin_end(1)
         hero.set_border_width(20)
         hero.pack_start(self._label("Un solo lugar. Todo tu ecosistema.", "hero-title"), False, False, 0)
-        hero.pack_start(self._label("Explora catálogos oficiales. Descarga desde el editor y elige el paquete para instalarlo con la ruta compatible de Nexus.", "hero-copy"), False, False, 0)
+        hero_copy = ("Elige una aplicación de Flathub: Nexus OmniLoader la instala y la ejecuta en este perfil de usuario."
+                     if self.active == "linux" else
+                     "Explora catálogos oficiales. Descarga desde el editor y elige el paquete para instalarlo con la ruta compatible de Nexus.")
+        hero.pack_start(self._label(hero_copy, "hero-copy"), False, False, 0)
         self.content.pack_start(hero, False, False, 0)
+        if self.active == "linux":
+            add_flatpak = Gtk.Button(label="＋  Instalar aplicación Flathub por ID")
+            add_flatpak.get_style_context().add_class("primary")
+            add_flatpak.set_halign(Gtk.Align.START)
+            add_flatpak.connect("clicked", self._install_flatpak_dialog)
+            self.content.pack_start(add_flatpak, False, False, 0)
         scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         grid = Gtk.FlowBox(); grid.set_selection_mode(Gtk.SelectionMode.NONE); grid.set_max_children_per_line(3); grid.set_min_children_per_line(1); grid.set_column_spacing(14); grid.set_row_spacing(14)
         scroll.add(grid); self.content.pack_start(scroll, True, True, 0)
-        for app in APPS[self.active]: grid.add(self._card(app))
+        rows = list(APPS[self.active])
+        if self.active == "linux":
+            catalog_ids = {row[0] for row in rows}
+            for app_id, installed in self.installed.items():
+                if app_id not in catalog_ids and isinstance(installed, str) and installed.startswith("flatpak:"):
+                    flatpak_id = installed.partition(":")[2]
+                    rows.append((app_id, flatpak_id, "Aplicación Flatpak instalada desde Flathub.", "Flathub", "Variable", "⬡", f"https://flathub.org/apps/{flatpak_id}", ".flatpak"))
+        for app in rows: grid.add(self._card(app))
         self.status = Gtk.Label(label="Catálogo curado · verifica editor, permisos y compatibilidad antes de instalar.")
         self.status.get_style_context().add_class("muted"); self.status.set_xalign(0)
         self.content.pack_start(Gtk.Separator(), False, False, 0)
@@ -306,12 +325,18 @@ class OmniStore:
 
     def _open_clicked(self, _button, app, installed_path):
         if installed_path:
-            self._run_loader(installed_path, app[0], auto=False)
+            if installed_path.startswith("flatpak:"):
+                self._launch_flatpak(installed_path.partition(":")[2])
+            else:
+                self._run_loader(installed_path, app[0], auto=False)
         else:
             self._open_url(app[6])
 
     def _install_clicked(self, _button, app):
         app_id, name, desc, origin, _size, _glyph, url, extension = app
+        if self.active == "linux" and extension == ".flatpak":
+            self._install_flatpak(FLATPAK_IDS.get(app_id, app_id), app_id, self.args.auto_launch)
+            return
         self.status.set_text(f"Abriendo {origin}. Descarga {name} y luego selecciona el archivo {extension} aquí.")
         self._open_url(url)
         chooser = Gtk.FileChooserDialog(title=f"Seleccionar paquete para {name}", parent=self.window, action=Gtk.FileChooserAction.OPEN)
@@ -322,6 +347,77 @@ class OmniStore:
         response = chooser.run(); filename = chooser.get_filename(); chooser.destroy()
         if response != Gtk.ResponseType.ACCEPT or not filename: return
         self._run_loader(filename, app_id, self.args.auto_launch)
+
+    @staticmethod
+    def _valid_flatpak_id(app_id):
+        return len(app_id) <= 255 and bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}(?:\.[A-Za-z0-9][A-Za-z0-9_-]{0,62})+", app_id))
+
+    def _install_flatpak_dialog(self, _button):
+        dialog = Gtk.Dialog(title="Instalar aplicación Flathub", parent=self.window, flags=Gtk.DialogFlags.MODAL)
+        dialog.add_buttons("Cancelar", Gtk.ResponseType.CANCEL, "Continuar", Gtk.ResponseType.OK)
+        body = dialog.get_content_area(); body.set_spacing(10)
+        body.set_margin_top(16); body.set_margin_bottom(14); body.set_margin_start(18); body.set_margin_end(18)
+        body.pack_start(self._label("Introduce el ID exacto de la aplicación, por ejemplo org.gimp.GIMP.", "app-desc"), False, False, 0)
+        entry = Gtk.Entry(); entry.set_max_length(255); entry.set_placeholder_text("org.ejemplo.Aplicacion"); body.pack_start(entry, False, False, 0)
+        error = Gtk.Label(); error.set_xalign(0); body.pack_start(error, False, False, 0)
+        dialog.show_all()
+        while dialog.run() == Gtk.ResponseType.OK:
+            app_id = entry.get_text().strip()
+            if not self._valid_flatpak_id(app_id):
+                error.set_text("ID no válido. Usa el ID inverso de Flathub, sin espacios ni opciones de terminal.")
+                dialog.show_all(); continue
+            dialog.destroy()
+            custom_id = f"flathub:{app_id}"
+            self._install_flatpak(app_id, custom_id, self.args.auto_launch)
+            return
+        dialog.destroy()
+
+    def _install_flatpak(self, flatpak_id, store_id, auto=False):
+        if not self._valid_flatpak_id(flatpak_id):
+            self.status.set_text("ID Flatpak no válido."); return
+        loader = os.environ.get("NEXUS_OMNILOADER", "/usr/bin/nexus-omniloader")
+        self.status.set_text(f"Conectando con Nexus OmniLoader para instalar {flatpak_id} desde Flathub…")
+        progress = Gtk.ProgressBar(); progress.set_show_text(True); progress.set_text("Instalando con OmniLoader…")
+        progress.set_pulse_step(0.08)
+        self.content.pack_start(progress, False, False, 0); self.window.show_all()
+        try:
+            log = tempfile.TemporaryFile(mode="w+t")
+            process = subprocess.Popen([loader, "--install-flatpak", flatpak_id], stdin=subprocess.DEVNULL,
+                                       stdout=log, stderr=subprocess.STDOUT, text=True, close_fds=True)
+        except OSError as exc:
+            progress.destroy(); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
+        def poll():
+            log.flush(); log.seek(0); output = log.read()
+            percentages = [int(value) for value in re.findall(r"(?<!\d)(\d{1,3})%", output) if int(value) <= 100]
+            if percentages:
+                percent = percentages[-1]
+                progress.set_fraction(percent / 100.0)
+                progress.set_text(f"Descargando e instalando… {percent}%")
+            elif process.poll() is None:
+                progress.pulse()
+            if process.poll() is None:
+                return True
+            log.seek(0); output = log.read().strip(); log.close(); progress.destroy()
+            if process.returncode == 0:
+                self.installed[store_id] = f"flatpak:{flatpak_id}"; self._save_installed()
+                self._render()
+                self.status.set_text(f"Instalado ✓  {flatpak_id} por Nexus OmniLoader · pulsa Abrir para ejecutarlo")
+                if auto: GLib.timeout_add(300, lambda: self._launch_flatpak(flatpak_id) or False)
+            else:
+                detail = output[-240:] if output else f"OmniLoader terminó con código {process.returncode}."
+                self.status.set_text(f"Instalación no completada: {detail}")
+            return False
+        GLib.timeout_add(140, poll)
+
+    def _launch_flatpak(self, flatpak_id):
+        loader = os.environ.get("NEXUS_OMNILOADER", "/usr/bin/nexus-omniloader")
+        try:
+            subprocess.Popen([loader, "--run-flatpak", flatpak_id], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             close_fds=True, start_new_session=True)
+            self.status.set_text(f"Aplicación iniciada mediante Nexus OmniLoader: {flatpak_id}")
+        except OSError as exc:
+            self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}")
 
     @staticmethod
     def _filter(extension):
@@ -378,8 +474,13 @@ class OmniStore:
             self._render()
             if self.args.package_path:
                 self._run_loader(self.args.package_path, found[0], self.args.auto_launch)
+            elif self.active == "linux":
+                self._install_flatpak(FLATPAK_IDS.get(found[0], found[0]), found[0], self.args.auto_launch)
             else:
                 GLib.timeout_add(250, lambda: self._install_clicked(None, found) or False)
+        elif self.args.flatpak_id:
+            self.active = "linux"; self.nav_buttons["linux"].set_active(True); self._render()
+            self._install_flatpak(self.args.flatpak_id, f"flathub:{self.args.flatpak_id}", self.args.auto_launch)
         Gtk.main()
 
 
@@ -388,6 +489,7 @@ def main():
     parser.add_argument("--select-tab", choices=[section[0] for section in SECTIONS], default="windows")
     parser.add_argument("--install-app", help="Instala una aplicación del catálogo por identificador")
     parser.add_argument("--package-path", help="Ruta local del paquete para automatización (opcional)")
+    parser.add_argument("--flatpak-id", help="Instala un ID de aplicación Flathub mediante Nexus OmniLoader")
     parser.add_argument("--auto-launch", action="store_true", help="Abre el paquete al terminar una instalación correcta")
     args = parser.parse_args()
     OmniStore(args).run()

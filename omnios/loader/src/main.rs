@@ -17,6 +17,7 @@ const WAYDROID_PREFLIGHT: &str = "/usr/lib/nexus/nexus-waydroid-preflight";
 const MAX_ZIP_LISTING: usize = 8 * 1024 * 1024;
 const MAX_MANIFEST_SIZE: usize = 4 * 1024 * 1024;
 const MAX_CRX_SIZE: u64 = 512 * 1024 * 1024;
+const FLATHUB_REPO: &str = "https://dl.flathub.org/repo/flathub.flatpakrepo";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Route {
@@ -421,6 +422,46 @@ fn valid_web_url(url: &str) -> bool {
     false
 }
 
+fn valid_flatpak_id(app_id: &str) -> bool {
+    let parts: Vec<&str> = app_id.split('.').collect();
+    app_id.len() <= 255 && parts.len() >= 2 && parts.iter().all(|part| {
+        !part.is_empty()
+            && part.len() <= 63
+            && part.as_bytes()[0].is_ascii_alphanumeric()
+            && part.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    })
+}
+
+fn flatpak_install(app_id: &str) -> io::Result<ExitCode> {
+    if !valid_flatpak_id(app_id) {
+        return Err(io::Error::other("ID Flatpak inválido; usa un ID inverso de aplicación como org.example.App."));
+    }
+    require_program("flatpak", "instalar y ejecutar aplicaciones Linux Flatpak")?;
+    let message = format!(
+        "Nexus OmniLoader añadirá Flathub como remoto de usuario si hace falta y descargará {app_id} y sus dependencias. La aplicación se instalará en el perfil de este usuario."
+    );
+    if !confirm_flatpak(&message, app_id)? { return Ok(ExitCode::from(1)); }
+
+    let remote = Command::new("flatpak")
+        .args(["--user", "remote-add", "--if-not-exists", "--noninteractive", "--assumeyes", "flathub", FLATHUB_REPO])
+        .status()?;
+    if !remote.success() {
+        return Ok(remote.code().map_or(ExitCode::FAILURE, |code| ExitCode::from(code as u8)));
+    }
+    run("flatpak", [
+        OsString::from("install"), OsString::from("--user"), OsString::from("--noninteractive"),
+        OsString::from("--assumeyes"), OsString::from("flathub"), OsString::from(app_id),
+    ])
+}
+
+fn flatpak_run(app_id: &str) -> io::Result<ExitCode> {
+    if !valid_flatpak_id(app_id) {
+        return Err(io::Error::other("ID Flatpak inválido; usa un ID inverso de aplicación como org.example.App."));
+    }
+    require_program("flatpak", "ejecutar aplicaciones Linux Flatpak")?;
+    run("flatpak", [OsString::from("run"), OsString::from(app_id)])
+}
+
 fn chromium_app(url: &str) -> io::Result<ExitCode> {
     if !valid_web_url(url) {
         return Err(io::Error::other("La URL de PWA debe usar HTTPS; HTTP solo se permite en localhost."));
@@ -459,6 +500,29 @@ fn confirm(action: &str, path: &Path) -> io::Result<bool> {
         return Err(io::Error::other("No hay interfaz de confirmación (zenity) ni terminal interactiva; acción cancelada."));
     }
     eprint!("{action}\n{}\n¿Continuar? [s/N] ", path.display());
+    io::stderr().flush()?;
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    Ok(matches!(answer.trim().to_ascii_lowercase().as_str(), "s" | "si" | "sí" | "y" | "yes"))
+}
+
+fn confirm_flatpak(action: &str, app_id: &str) -> io::Result<bool> {
+    if let Some(accepted) = cyber_glass_dialog(
+        "Linux", "Nexus OmniLoader · Flatpak", action, None, true,
+    )? {
+        return Ok(accepted);
+    }
+    if command_exists("zenity") {
+        return Ok(Command::new("zenity")
+            .args(["--question", "--width=520", "--title=Nexus OmniLoader", "--text"])
+            .arg(format!("{action}\n\nID: {app_id}"))
+            .status()?
+            .success());
+    }
+    if !atty_stdin() {
+        return Err(io::Error::other("No hay interfaz de confirmación (zenity) ni terminal interactiva; acción cancelada."));
+    }
+    eprint!("{action}\nID: {app_id}\n¿Continuar? [s/N] ");
     io::stderr().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
@@ -620,7 +684,12 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
                 OsString::from("--"), absolute.into_os_string(),
             ])
         }
-        Route::NativeElf => Err(io::Error::other("ELF pertenece al kernel/loader nativo de Linux y no debe volver a encadenarse por Nexus OmniLoader.")),
+        // ELF is not registered with binfmt_misc; this route is only reached
+        // when a user explicitly opens a native Linux executable with Omni.
+        Route::NativeElf => {
+            let status = Command::new(&absolute).args(extra).status()?;
+            Ok(status.code().map_or(ExitCode::FAILURE, |code| ExitCode::from(code as u8)))
+        }
         Route::Unknown => Err(io::Error::other("Formato no reconocido o sin ruta compatible configurada; no se ejecutó el archivo.")),
     }
 }
@@ -676,7 +745,7 @@ impl OpenOptionsWrite {
 }
 
 fn usage() {
-    eprintln!("Uso: nexus-omniloader --register-binfmt | --inspect-apk ARCHIVO | --inspect-crx ARCHIVO | --inspect-ipa ARCHIVO | --webapp HTTPS_URL | ARCHIVO [ARGUMENTOS…]\n       ELF es nativo de Linux; APK/.deb requieren confirmación.");
+    eprintln!("Uso: nexus-omniloader --register-binfmt | --inspect-apk ARCHIVO | --inspect-crx ARCHIVO | --inspect-ipa ARCHIVO | --webapp HTTPS_URL | --install-flatpak APP_ID | --run-flatpak APP_ID | ARCHIVO [ARGUMENTOS…]\n       Flatpak/.deb/APK requieren confirmación; ELF se ejecuta de forma nativa en Linux.");
 }
 
 fn main() -> ExitCode {
@@ -706,6 +775,15 @@ fn main() -> ExitCode {
             Ok(code) => code,
             Err(error) => { eprintln!("nexus-omniloader: {error}"); ExitCode::FAILURE }
         };
+    }
+    if first == OsStr::new("--install-flatpak") || first == OsStr::new("--run-flatpak") {
+        let Some(app_id) = args.next().and_then(|value| value.into_string().ok()) else { usage(); return ExitCode::from(2); };
+        let result = if first == OsStr::new("--install-flatpak") {
+            flatpak_install(&app_id)
+        } else {
+            flatpak_run(&app_id)
+        };
+        return match result { Ok(code) => code, Err(error) => { eprintln!("nexus-omniloader: {error}"); ExitCode::FAILURE } };
     }
     match dispatch(Path::new(&first), &args.collect::<Vec<_>>()) {
         Ok(code) => code,
@@ -741,6 +819,18 @@ mod tests {
     #[test]
     fn zip_files_are_not_automatically_treated_as_apks() {
         assert_eq!(route(Path::new("download.zip"), b"PK\x03\x04"), Route::Unknown);
+    }
+
+    #[test]
+    fn accepts_safe_reverse_dns_flatpak_ids_only() {
+        assert!(valid_flatpak_id("org.gimp.GIMP"));
+        assert!(valid_flatpak_id("com.example.app_2"));
+        assert!(!valid_flatpak_id(""));
+        assert!(!valid_flatpak_id("org"));
+        assert!(!valid_flatpak_id("org..App"));
+        assert!(!valid_flatpak_id("-org.example.App"));
+        assert!(!valid_flatpak_id("org.example.App;rm"));
+        assert!(!valid_flatpak_id("--help"));
     }
 
     #[test]

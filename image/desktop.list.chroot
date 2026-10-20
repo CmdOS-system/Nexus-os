@@ -16,6 +16,7 @@ python3-gi
 gir1.2-gtk-3.0
 x11-utils
 xdg-utils
+flatpak
 
 # Engine for the verified Windows application installer prototype.
 wine
