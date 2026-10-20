@@ -203,7 +203,7 @@ run_store_evidence() {
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
 }
-for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl flatpak emulator adb scrcpy; do
+for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl flatpak adb scrcpy; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
 test -x "$BUILD_TOOLS/apksigner" || { echo "Android SDK apksigner is missing: $BUILD_TOOLS/apksigner" >&2; exit 1; }
@@ -218,21 +218,26 @@ APK="$TEMP/privacyfriendly2048.apk"
 run_test "Download F-Droid 2048 APK" curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
   https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
 run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
-export NEXUS_ANDROID_TARGET=adb NEXUS_SMOKE_AUTOCONFIRM=1 ANDROID_SERIAL=emulator-5554
-emulator -avd nexus-evidence -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off \
-  -wipe-data >"$TEMP/android-emulator.log" 2>&1 &
-ANDROID_EMULATOR_PID=$!
-cleanup_emulator() { kill "$ANDROID_EMULATOR_PID" 2>/dev/null || true; wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true; }
-trap 'cleanup_emulator; cleanup' EXIT
-timeout --kill-after=2s 480s adb wait-for-device
-boot_deadline=$((SECONDS + 480))
-until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
-  (( SECONDS < boot_deadline )) || { cat "$TEMP/android-emulator.log" >&2; echo "Android emulator did not boot" >&2; exit 1; }
-  sleep 2
-done
-run_store_evidence android privacy2048 "Nexus Android real APK mirror" "$APK"
-cleanup_emulator
-ANDROID_EMULATOR_PID=""
+# The emulator-backed Android UI evidence is optional in ISO build environments.
+if command -v emulator >/dev/null 2>&1; then
+  export NEXUS_ANDROID_TARGET=adb NEXUS_SMOKE_AUTOCONFIRM=1 ANDROID_SERIAL=emulator-5554
+  emulator -avd nexus-evidence -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off \
+    -wipe-data >"$TEMP/android-emulator.log" 2>&1 &
+  ANDROID_EMULATOR_PID=$!
+  cleanup_emulator() { kill "$ANDROID_EMULATOR_PID" 2>/dev/null || true; wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true; }
+  trap 'cleanup_emulator; cleanup' EXIT
+  timeout --kill-after=2s 480s adb wait-for-device
+  boot_deadline=$((SECONDS + 480))
+  until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
+    (( SECONDS < boot_deadline )) || { cat "$TEMP/android-emulator.log" >&2; echo "Android emulator did not boot" >&2; exit 1; }
+    sleep 2
+  done
+  run_store_evidence android privacy2048 "Nexus Android real APK mirror" "$APK"
+  cleanup_emulator
+  ANDROID_EMULATOR_PID=""
+else
+  echo "[smoke] Android emulator unavailable; skipping emulator-backed Android UI evidence" >&2
+fi
 
 # Keep a separate Wasmtime smoke check, then exercise the real 2048 PWA through OmniStore.
 mkdir -p "$TEMP/webapp"
