@@ -1,15 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOADER="${NEXUS_OMNILOADER:-$ROOT/staging/usr/bin/nexus-omniloader}"
+
+# Store actions share this entry point so clicks and CI smoke runs pass through
+# the same OmniLoader dispatcher. This mode exits before starting the test suite.
+if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
+  action="$1"; ecosystem="${2:?ecosystem required}"; target="${3:?package or app ID required}"
+  case "$ecosystem" in windows|android|ios|web|linux) ;; *) echo "Unknown OmniStore ecosystem: $ecosystem" >&2; exit 2 ;; esac
+  if [[ "$target" == flatpak:* ]]; then
+    app_id="${target#flatpak:}"
+    if [[ "$action" == "--store-install" ]]; then exec "$LOADER" --install-flatpak "$app_id"; fi
+    exec "$LOADER" --run-flatpak "$app_id"
+  fi
+  exec "$LOADER" "$target"
+fi
+
 # Keep a single D-Bus session for the Xvfb apps and screenshots.
 if [[ "${NEXUS_RUNTIME_SESSION:-0}" != "1" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
   command -v dbus-run-session >/dev/null || { echo "dbus-run-session is required" >&2; exit 1; }
   exec dbus-run-session -- env NEXUS_RUNTIME_SESSION=1 "$BASH" "$0" "$@"
 fi
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$ROOT/.." && pwd)"
-LOADER="$ROOT/staging/usr/bin/nexus-omniloader"
 WASMTIME="$ROOT/staging/usr/bin/wasmtime"
 TEMP="$(mktemp -d)"
 LD64_LLD="$(command -v ld64.lld || find /usr/bin -maxdepth 1 -name 'ld64.lld-*' -executable -print | sort -V | tail -n 1)"
@@ -100,6 +114,26 @@ stop_pid() {
   kill -KILL "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
 }
+
+capture_sequence() {
+  local ecosystem="$1" output="$2"
+  local primary
+  shift 2
+  local video
+  case "$ecosystem" in
+    windows) video="wine-gui-running.mp4"; primary="wine-gui-running.png" ;;
+    android) video="apk-running.mp4"; primary="apk-running.png" ;;
+    ios) video="ipa-running.mp4"; primary="ipa-running.png" ;;
+    web) video="crx-pwa-running.mp4"; primary="crx-pwa-running.png" ;;
+    linux) video="linux-app-running.mp4"; primary="linux-app-running.png" ;;
+  esac
+  run_recorded_test "Nexus OmniStore $ecosystem install/open evidence" \
+    "$PROJECT_ROOT/evidence/$ecosystem/$video" \
+    env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-sequence.py" "$ecosystem" "$output" \
+      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-installing.png" \
+      "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png"
+  cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
+}
 finish_recorder() {
   local pid="$1" attempt
   [[ -n "$pid" ]] || return 0
@@ -151,9 +185,13 @@ RECORDED_TEST
   else
     echo "[smoke] Video capture unavailable; retaining the PNG evidence for $label" >&2
     rm -f -- "$video"
+    if [[ "${NEXUS_REQUIRE_VIDEO:-0}" == "1" ]]; then
+      echo "Required MP4 evidence was not produced: $video" >&2
+      return 1
+    fi
   fi
 }
-for tool in python3 unzip zip clang x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node xfwm4; do
+for tool in python3 unzip zip clang gcc x86_64-w64-mingw32-gcc aarch64-linux-gnu-gcc qemu-aarch64-static xvfb-run javac java node xfwm4; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
 test -n "$LD64_LLD" || { echo "ld64.lld is required to produce the ARM64 Mach-O" >&2; exit 1; }
@@ -197,7 +235,7 @@ run_test "Assemble APK bytecode and native payload" bash -c '
 run_test "Align APK package" "$BUILD_TOOLS/zipalign" -f 4 "$TEMP/unsigned.apk" "$APK"
 run_test "Extract and execute APK ARM64 ELF with qemu" bash -c 'unzip -p "$1" lib/arm64-v8a/libnexus_apk_payload.so > "$2/apk-payload" && chmod +x "$2/apk-payload" && qemu-aarch64-static "$2/apk-payload" | tee "$2/apk-output.txt" && grep -Fq "6 x 7 = 42" "$2/apk-output.txt"' _ "$APK" "$TEMP"
 
-run_recorded_test "Capture APK runtime output in GTK and MP4" "$PROJECT_ROOT/evidence/android/apk-running.mp4" env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "Android APK · ARM64 + JVM" "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")" "$PROJECT_ROOT/evidence/android/apk-running.png"
+capture_sequence android "$(cat "$TEMP/apk-output.txt" "$TEMP/jvm-output.txt")"
 
 # Compile a freestanding ARM64 function as both an iOS Mach-O and the same raw instruction payload.
 mkdir -p "$TEMP/ios/Payload/Nexus.app"
@@ -212,7 +250,7 @@ cat > "$TEMP/ios/Payload/Nexus.app/Info.plist" <<'PLIST'
 PLIST
 mkdir -p "$PROJECT_ROOT/evidence/ios"
 run_test "Package IPA bundle" bash -c 'cd "$1/ios" && zip -qr "$2/evidence/ios/nexus-arm64-runtime.ipa" Payload' _ "$TEMP" "$PROJECT_ROOT"
-run_recorded_test "Capture IPA runtime output in GTK and MP4" "$PROJECT_ROOT/evidence/ios/ipa-running.mp4" env NO_AT_BRIDGE=1 python3 "$ROOT/tests/runtime/evidence-card.py" "iOS IPA · extracted ARM64 __text" "$(cat "$TEMP/ios-output.txt")" "$PROJECT_ROOT/evidence/ios/ipa-running.png"
+capture_sequence ios "$(cat "$TEMP/ios-output.txt")"
 
 # Validate real Wasm execution and build the live PWA used by the Chromium GUI capture.
 mkdir -p "$TEMP/webapp"
@@ -226,3 +264,13 @@ WINEPREFIX="$WINEPREFIX" wineserver -k >/dev/null 2>&1 || true
 run_test "Compile real Win32 GUI PE" x86_64-w64-mingw32-gcc -Os -municode -mwindows "$ROOT/tests/fixtures/pe-dynamic-gui.c" -o "$TEMP/nexus-live-win32.exe"
 echo "[smoke] Capture live Win32 and PWA GUI (single Xvfb session, max 30s)" >&2
 timeout --kill-after=1s 30s bash "$ROOT/wine-gui-smoke.sh" "$LOADER" "$TEMP/nexus-live-win32.exe" "$TEMP/webapp"
+
+# Exercise a native Linux ELF through OmniLoader and retain the same paired
+# install/open evidence alongside the cross-platform smoke captures.
+cat > "$TEMP/nexus-linux-payload.c" <<'C'
+#include <stdio.h>
+int main(void) { puts("Native Linux payload executed through nexus-omniloader: 6 x 7 = 42"); return 0; }
+C
+run_test "Compile native Linux runtime payload" gcc -Os "$TEMP/nexus-linux-payload.c" -o "$TEMP/nexus-linux-payload"
+linux_output="$(run_test "Execute native Linux payload through OmniLoader" "$LOADER" "$TEMP/nexus-linux-payload")"
+capture_sequence linux "$linux_output"

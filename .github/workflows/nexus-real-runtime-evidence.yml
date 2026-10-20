@@ -67,6 +67,7 @@ jobs:
       - name: Run Windows, WebAssembly, Android payload, and iOS payload user-mode tests
         env:
           NODE_PATH: ${{ runner.temp }}/nexus-playwright/node_modules
+          NEXUS_REQUIRE_VIDEO: "1"
         run: bash image/runtime-smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()
@@ -75,12 +76,24 @@ jobs:
           if-no-files-found: warn
           path: |
             evidence/boot/desktop-boot.png
+            evidence/linux/linux-installing.png
+            evidence/linux/linux-interacting.png
+            evidence/linux/linux-app-running.png
+            evidence/linux/linux-app-running.mp4
+            evidence/windows/windows-installing.png
+            evidence/windows/windows-interacting.png
             evidence/windows/wine-gui-running.png
             evidence/windows/wine-gui-running.mp4
+            evidence/android/android-installing.png
+            evidence/android/android-interacting.png
             evidence/android/apk-running.png
             evidence/android/apk-running.mp4
+            evidence/web/web-installing.png
+            evidence/web/web-interacting.png
             evidence/web/crx-pwa-running.png
             evidence/web/crx-pwa-running.mp4
+            evidence/ios/ios-installing.png
+            evidence/ios/ios-interacting.png
             evidence/ios/ipa-running.png
             evidence/ios/ipa-running.mp4
             evidence/ios/nexus-arm64-runtime.ipa

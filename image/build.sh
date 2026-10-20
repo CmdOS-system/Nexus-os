@@ -66,6 +66,8 @@ test -s "$ROOT/staging/usr/share/doc/wasmtime/LICENSE" || {
 mkdir -p config/includes.chroot/usr/bin
 install -m 0755 "$ROOT/staging/usr/bin/nexus-omniloader" config/includes.chroot/usr/bin/nexus-omniloader
 install -m 0755 "$ROOT/staging/usr/bin/wasmtime" config/includes.chroot/usr/bin/wasmtime
+mkdir -p config/includes.chroot/usr/lib/nexus
+install -m 0755 "$ROOT/runtime-smoke.sh" config/includes.chroot/usr/lib/nexus/nexus-runtime-smoke.sh
 mkdir -p config/includes.chroot/usr/share/doc/wasmtime
 install -m 0644 "$ROOT/staging/usr/share/doc/wasmtime/LICENSE" config/includes.chroot/usr/share/doc/wasmtime/LICENSE
 

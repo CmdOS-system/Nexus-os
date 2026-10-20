@@ -328,7 +328,7 @@ class OmniStore:
             if installed_path.startswith("flatpak:"):
                 self._launch_flatpak(installed_path.partition(":")[2])
             else:
-                self._run_loader(installed_path, app[0], auto=False)
+                self._run_loader(installed_path, app[0], auto=False, action="open")
         else:
             self._open_url(app[6])
 
@@ -375,15 +375,15 @@ class OmniStore:
     def _install_flatpak(self, flatpak_id, store_id, auto=False):
         if not self._valid_flatpak_id(flatpak_id):
             self.status.set_text("ID Flatpak no válido."); return
-        loader = os.environ.get("NEXUS_OMNILOADER", "/usr/bin/nexus-omniloader")
         self.status.set_text(f"Conectando con Nexus OmniLoader para instalar {flatpak_id} desde Flathub…")
         progress = Gtk.ProgressBar(); progress.set_show_text(True); progress.set_text("Instalando con OmniLoader…")
         progress.set_pulse_step(0.08)
         self.content.pack_start(progress, False, False, 0); self.window.show_all()
         try:
             log = tempfile.TemporaryFile(mode="w+t")
-            process = subprocess.Popen([loader, "--install-flatpak", flatpak_id], stdin=subprocess.DEVNULL,
-                                       stdout=log, stderr=subprocess.STDOUT, text=True, close_fds=True)
+            process = subprocess.Popen(self._runtime_command("install", "linux", f"flatpak:{flatpak_id}"),
+                                       stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                       text=True, close_fds=True, env=self._runtime_environment())
         except OSError as exc:
             progress.destroy(); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
         def poll():
@@ -410,11 +410,10 @@ class OmniStore:
         GLib.timeout_add(140, poll)
 
     def _launch_flatpak(self, flatpak_id):
-        loader = os.environ.get("NEXUS_OMNILOADER", "/usr/bin/nexus-omniloader")
         try:
-            subprocess.Popen([loader, "--run-flatpak", flatpak_id], stdin=subprocess.DEVNULL,
+            subprocess.Popen(self._runtime_command("open", "linux", f"flatpak:{flatpak_id}"), stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             close_fds=True, start_new_session=True)
+                             close_fds=True, start_new_session=True, env=self._runtime_environment())
             self.status.set_text(f"Aplicación iniciada mediante Nexus OmniLoader: {flatpak_id}")
         except OSError as exc:
             self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}")
@@ -426,17 +425,42 @@ class OmniStore:
         for pattern in patterns.get(extension, ("*",)): file_filter.add_pattern(pattern)
         return file_filter
 
-    def _run_loader(self, filename, app_id, auto=False):
+    def _runtime_script(self):
+        configured = os.environ.get("NEXUS_RUNTIME_SMOKE")
+        candidates = [Path(configured)] if configured else []
+        candidates.extend((Path(__file__).resolve().parents[3] / "runtime-smoke.sh",
+                           Path("/usr/lib/nexus/nexus-runtime-smoke.sh")))
+        return next((path for path in candidates if path.is_file()), None)
+
+    def _runtime_environment(self):
+        environment = os.environ.copy()
+        if "NEXUS_OMNILOADER" not in environment:
+            staged = Path(__file__).resolve().parents[3] / "staging/usr/bin/nexus-omniloader"
+            environment["NEXUS_OMNILOADER"] = str(staged if staged.is_file() else "/usr/bin/nexus-omniloader")
+        return environment
+
+    def _runtime_command(self, action, ecosystem, target):
+        script = self._runtime_script()
+        if script:
+            return ["bash", str(script), f"--store-{action}", ecosystem, str(target)]
+        loader = os.environ.get("NEXUS_OMNILOADER", "/usr/bin/nexus-omniloader")
+        if str(target).startswith("flatpak:"):
+            flag = "--install-flatpak" if action == "install" else "--run-flatpak"
+            return [loader, flag, str(target).partition(":")[2]]
+        return [loader, str(target)]
+
+    def _run_loader(self, filename, app_id, auto=False, action="install"):
         path = str(Path(filename).expanduser().resolve())
         if not Path(path).is_file():
             self.status.set_text("No se encontró el paquete seleccionado."); return
         self.status.set_text("Instalando… Nexus OmniLoader está procesando el paquete seleccionado.")
         progress = Gtk.ProgressBar(); progress.set_show_text(True); progress.set_text("Instalando…")
         self.content.pack_start(progress, False, False, 0); self.window.show_all()
-        loader = os.environ.get("NEXUS_OMNILOADER", "/usr/bin/nexus-omniloader")
         try:
             log = tempfile.TemporaryFile(mode="w+t")
-            process = subprocess.Popen([loader, path], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, text=True, close_fds=True)
+            process = subprocess.Popen(self._runtime_command(action, self.active, path), stdin=subprocess.DEVNULL,
+                                       stdout=log, stderr=subprocess.STDOUT, text=True, close_fds=True,
+                                       env=self._runtime_environment())
         except OSError as exc:
             progress.destroy(); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
         # OmniLoader does not expose fractional progress; show an honest live pulse
@@ -453,7 +477,7 @@ class OmniStore:
                 self.installed[app_id] = path; self._save_installed()
                 self.status.set_text(f"Instalado ✓  {Path(path).name}")
                 self._render()
-                if auto: GLib.timeout_add(300, lambda: self._run_loader(path, app_id, auto=False) or False)
+                if auto: GLib.timeout_add(300, lambda: self._run_loader(path, app_id, auto=False, action="open") or False)
             else:
                 detail = output[-180:] if output else f"OmniLoader terminó con código {code}."
                 self.status.set_text(f"Instalación no completada: {detail}")

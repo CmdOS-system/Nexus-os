@@ -164,6 +164,10 @@ reap_app "$APP_PID"
 APP_PID=""
 
 start_recording "$PROJECT_ROOT/evidence/windows/wine-gui-running.mp4"
+env NO_AT_BRIDGE=1 python3 "$SCRIPT_DIR/tests/runtime/evidence-sequence.py" windows \
+  "MinGW Win32 GUI package prepared for Nexus OmniLoader + Wine" \
+  "$PROJECT_ROOT/evidence/windows/windows-installing.png" \
+  "$PROJECT_ROOT/evidence/windows/windows-interacting.png"
 "$LOADER" "$WIN32_APP" > "$SESSION_ROOT/win32.log" 2>&1 &
 APP_PID=$!
 win_window=""
@@ -188,6 +192,7 @@ done
 xdotool windowmove "$win_window" 80 55 2>/dev/null || true
 sleep 1
 capture_desktop "$PROJECT_ROOT/evidence/windows/wine-gui-running.png"
+cp "$PROJECT_ROOT/evidence/windows/wine-gui-running.png" "$PROJECT_ROOT/evidence/windows/windows-interacting.png"
 sleep 1
 stop_recording
 xdotool windowclose "$win_window" 2>/dev/null || true
@@ -208,9 +213,14 @@ done
 curl -fsS "http://127.0.0.1:$PORT/app.wasm" -o "$SESSION_ROOT/app.wasm"
 cmp -s "$SESSION_ROOT/app.wasm" "$WEBAPP/app.wasm"
 start_recording "$PROJECT_ROOT/evidence/web/crx-pwa-running.mp4"
+env NO_AT_BRIDGE=1 python3 "$SCRIPT_DIR/tests/runtime/evidence-sequence.py" web \
+  "WebAssembly module verified; preparing the live PWA in Chromium" \
+  "$PROJECT_ROOT/evidence/web/web-installing.png" \
+  "$PROJECT_ROOT/evidence/web/web-interacting.png"
 NODE_PATH="$RUNNER_TEMP/nexus-playwright/node_modules${NODE_PATH:+:$NODE_PATH}" \
   NEXUS_PWA_URL="http://127.0.0.1:$PORT/" \
   NEXUS_PWA_SCREENSHOT="$PROJECT_ROOT/evidence/web/crx-pwa-running.png" \
   timeout --kill-after=1s 10s node "$PROJECT_ROOT/image/tests/webapp/runtime-smoke.cjs"
+cp "$PROJECT_ROOT/evidence/web/crx-pwa-running.png" "$PROJECT_ROOT/evidence/web/web-interacting.png"
 stop_recording
 echo "Real Chromium rendered Canvas and executed the live WebAssembly PWA in Xvfb."
