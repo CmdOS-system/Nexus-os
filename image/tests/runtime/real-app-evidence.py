@@ -493,7 +493,7 @@ def relaunch_installed_7zip():
     if not wine:
         raise RuntimeError("Wine is required to launch the installed 7-Zip GUI")
     print(f"Reopening the installed 7-Zip GUI on DISPLAY={environment.get('DISPLAY')}.")
-    return subprocess.Popen([wine, executable, r"Z:\\tmp"], env=environment, stdin=subprocess.DEVNULL,
+    return subprocess.Popen([wine, executable, r"Z:\tmp"], env=environment, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             close_fds=True, start_new_session=True)
 

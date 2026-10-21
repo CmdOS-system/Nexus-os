@@ -80,8 +80,8 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
     stop_wineserver "$wine_prefix"
     sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
     test -n "$sevenzip_exe" && test -s "$sevenzip_exe"
-    exec timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$sevenzip_exe" \\
-      "Z:\\tmp"
+    exec timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$sevenzip_exe" \
+      "Z:\tmp"
   fi
   if [[ "$target" == flatpak:* ]]; then
     app_id="${target#flatpak:}"
