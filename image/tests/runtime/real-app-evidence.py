@@ -181,7 +181,7 @@ def wait_for_install_state(timeout=12):
             return True
         if window and any(state in window["title"].casefold()
                           for state in ("instalado", "abierta", "no completada")):
-            print("OmniStore completed before the installing title was sampled; capturing the current store state.", file=sys.stderr)
+            print("OmniStore completed before the installing title was sampled; its UI enforces a 2.8s minimum install state, capturing the current store state.", file=sys.stderr)
             return False
         time.sleep(0.1)
     print(f"OmniStore {marker} title was not observed before timeout; capturing the current store state.", file=sys.stderr)
@@ -198,10 +198,15 @@ def android_is_foreground():
 
 
 def place_windows(store_window, app_window):
-    # Keep both genuine top-level windows visible in the 1280x720 Xvfb frame.
-    for window, x, width in ((store_window, 0, 630), (app_window, 640, 630)):
-        subprocess.run(["xdotool", "windowmove", window["id"], str(x), "24"], check=False)
-        subprocess.run(["xdotool", "windowsize", window["id"], str(width), "670"], check=False)
+    # Keep the desktop visible around two moderate floating windows. The Android
+    # app keeps its portrait aspect ratio in scrcpy; it is still a desktop window.
+    if ecosystem == "android":
+        layout = ((store_window, 30, 78, 690, 540), (app_window, 765, 54, 430, 600))
+    else:
+        layout = ((store_window, 30, 76, 650, 530), (app_window, 720, 105, 520, 455))
+    for window, x, y, width, height in layout:
+        subprocess.run(["xdotool", "windowsize", window["id"], str(width), str(height)], check=False)
+        subprocess.run(["xdotool", "windowmove", window["id"], str(x), str(y)], check=False)
     activate_window(app_window["id"])
     time.sleep(0.4)
     fresh = top_level_windows()
@@ -325,7 +330,7 @@ try:
     place_windows(store_window, app_window)
     interact(app_window)
     time.sleep(3)
-    capture(interacting_png, require_two=ecosystem in {"windows", "web", "linux"})
+    capture(interacting_png, require_two=ecosystem in {"windows", "web", "linux", "android"})
     assert_distinct(installing_png, interacting_png)
     print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
 finally:

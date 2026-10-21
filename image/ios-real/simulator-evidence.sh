@@ -14,7 +14,13 @@ cleanup() {
   fi
   if [[ -n "$VIDEO_PID" ]]; then
     kill -INT "$VIDEO_PID" 2>/dev/null || true
-    sleep 1
+    for _ in {1..30}; do
+      kill -0 "$VIDEO_PID" 2>/dev/null || break
+      sleep 0.2
+    done
+    kill -TERM "$VIDEO_PID" 2>/dev/null || true
+    sleep 0.2
+    kill -KILL "$VIDEO_PID" 2>/dev/null || true
     wait "$VIDEO_PID" 2>/dev/null || true
   fi
   rm -rf "$BUILD"
@@ -45,12 +51,15 @@ PY
 
 take_sim_screenshot() {
   local output="$1"
-  if run_bounded 20 xcrun simctl io "$UDID" screenshot "$output" && [[ -s "$output" ]]; then
+  # Capture the macOS desktop so the Simulator appears as a normal floating
+  # window with the surrounding desktop visible. Fall back to the device frame
+  # only when the hosted runner has no capturable desktop surface.
+  if run_bounded 10 screencapture -x "$output" && [[ -s "$output" ]]; then
     return 0
   fi
   rm -f "$output"
-  echo "simctl screenshot did not return a frame; trying the visible Simulator surface." >&2
-  if run_bounded 10 screencapture -x "$output" && [[ -s "$output" ]]; then
+  echo "macOS desktop capture unavailable; trying the bounded Simulator device-frame capture." >&2
+  if run_bounded 15 xcrun simctl io "$UDID" screenshot "$output" && [[ -s "$output" ]]; then
     return 0
   fi
   rm -f "$output"
@@ -112,10 +121,30 @@ PY
 )"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
-if ! run_bounded 300 xcrun simctl bootstatus "$UDID" -b; then
-  echo "Simulator bootstatus failed; opening Simulator and continuing with bounded native capture fallbacks." >&2
+if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
+  echo "SpringBoard did not become ready; resetting this simulator and retrying once." >&2
+  run_bounded 30 xcrun simctl shutdown "$UDID" || true
+  run_bounded 120 xcrun simctl erase "$UDID" || true
+  run_bounded 30 xcrun simctl boot "$UDID" || true
   open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+  if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
+    echo "Simulator remains unavailable after reset; bounded desktop captures will still record only visible simulator state." >&2
+  fi
 fi
+# Keep the simulator in a medium floating macOS window, not fullscreen.
+osascript >/dev/null 2>&1 <<'APPLESCRIPT' || true
+tell application "System Events"
+  if exists process "Simulator" then
+    tell process "Simulator"
+      set frontmost to true
+      if (count of windows) > 0 then
+        set position of window 1 to {430, 70}
+        set size of window 1 to {560, 690}
+      end if
+    end tell
+  end if
+end tell
+APPLESCRIPT
 mkdir -p "$OUT"
 xcrun simctl io "$UDID" recordVideo --codec=h264 "$OUT/ipa-running.mp4" >/dev/null 2>&1 &
 VIDEO_PID=$!
@@ -137,7 +166,13 @@ take_sim_screenshot "$OUT/ios-interacting.png" || true
 sleep 2
 take_sim_screenshot "$OUT/ipa-running.png" || true
 kill -INT "$VIDEO_PID" 2>/dev/null || true
-sleep 1
+for _ in {1..30}; do
+  kill -0 "$VIDEO_PID" 2>/dev/null || break
+  sleep 0.2
+done
+kill -TERM "$VIDEO_PID" 2>/dev/null || true
+sleep 0.2
+kill -KILL "$VIDEO_PID" 2>/dev/null || true
 wait "$VIDEO_PID" 2>/dev/null || true
 for evidence in ios-installing.png ios-interacting.png ipa-running.png ipa-running.mp4; do
   if [[ ! -s "$OUT/$evidence" ]]; then

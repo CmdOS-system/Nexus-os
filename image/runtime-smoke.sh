@@ -316,22 +316,41 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
   fi
   if emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME"; then
     export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}" NEXUS_ANDROID_TARGET=adb
-    echo "[smoke] Boot Android AVD for real F-Droid APK installation and execution" >&2
     ACCEL_ARGS=()
     if ! emulator -accel-check 2>&1 | grep -Eqi 'installed and usable|is usable'; then
       echo "[smoke] KVM acceleration unavailable; using the emulator's software CPU mode" >&2
       ACCEL_ARGS=(-accel off)
     fi
-    timeout --kill-after=5s 240s emulator -avd "$AVD_NAME" -no-window -gpu swiftshader_indirect \
-      -no-snapshot -no-audio -no-boot-anim -camera-back none -camera-front none \
-      "${ACCEL_ARGS[@]}" </dev/null >/dev/null 2>&1 &
-    ANDROID_EMULATOR_PID=$!
-    timeout --kill-after=2s 180s adb -s "$ANDROID_SERIAL" wait-for-device
-    boot_deadline=$((SECONDS + 180))
-    until [[ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
-      (( SECONDS < boot_deadline )) || { echo "Android AVD did not finish booting" >&2; exit 1; }
-      sleep 2
-    done
+    boot_android_avd() {
+      local mode="$1" boot_deadline
+      shift
+      echo "[smoke] Boot Android AVD in $mode mode for real F-Droid APK execution" >&2
+      timeout --kill-after=5s 240s emulator -avd "$AVD_NAME" -no-window -gpu swiftshader_indirect \
+        -no-snapshot -no-audio -no-boot-anim -camera-back none -camera-front none "$@" \
+        </dev/null >/dev/null 2>&1 &
+      ANDROID_EMULATOR_PID=$!
+      if ! timeout --kill-after=2s 90s adb -s "$ANDROID_SERIAL" wait-for-device; then
+        return 1
+      fi
+      boot_deadline=$((SECONDS + 150))
+      until [[ "$(timeout --kill-after=1s 8s adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
+        (( SECONDS < boot_deadline )) || return 1
+        sleep 2
+      done
+      return 0
+    }
+    if ! boot_android_avd "configured" "${ACCEL_ARGS[@]}"; then
+      echo "[smoke] Android did not boot; restarting the user-space emulator with software CPU, clean data and no snapshots" >&2
+      adb -s "$ANDROID_SERIAL" emu kill >/dev/null 2>&1 || true
+      kill "$ANDROID_EMULATOR_PID" >/dev/null 2>&1 || true
+      wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true
+      ANDROID_EMULATOR_PID=""
+      timeout --kill-after=2s 20s adb -s "$ANDROID_SERIAL" wait-for-disconnect >/dev/null 2>&1 || true
+      boot_android_avd "software fallback" -accel off -wipe-data || {
+        echo "Android user-space emulator did not boot after software-mode recovery." >&2
+        exit 1
+      }
+    fi
     adb -s "$ANDROID_SERIAL" shell settings put global window_animation_scale 0 >/dev/null
     adb -s "$ANDROID_SERIAL" shell settings put global transition_animation_scale 0 >/dev/null
     run_store_evidence android privacy2048 "2048" "$NEXUS_FDROID_APK"
