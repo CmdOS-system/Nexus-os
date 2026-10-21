@@ -373,7 +373,17 @@ def capture(path, require_store=False, require_two=False):
     windows = top_level_windows()
     if require_store and not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                  for item in windows):
-        raise RuntimeError(f"Cannot capture {ecosystem}: Nexus OmniStore has no mapped desktop-sized X11 window")
+        # GTK can unmap or temporarily report a 10x10 client during install
+        # transitions. Ask the live OmniStore process to remap and resize its
+        # own window, then re-read the X11 tree before rejecting the capture.
+        try:
+            wait_for_store(timeout=8)
+        except RuntimeError as error:
+            print(f"OmniStore window recovery before capture failed: {error}", file=sys.stderr)
+        windows = top_level_windows()
+        if not any(is_store(item) and item["width"] > 300 and item["height"] > 200
+                   for item in windows):
+            raise RuntimeError(f"Cannot capture {ecosystem}: Nexus OmniStore has no mapped desktop-sized X11 window")
     if require_two and (not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                 for item in windows) or
                         not any(is_target(item) and item["width"] > 300 and item["height"] > 200
@@ -528,7 +538,11 @@ def relaunch_installed_7zip():
     if not wine:
         raise RuntimeError("Wine is required to launch the installed 7-Zip GUI")
     print(f"Reopening the installed 7-Zip GUI on DISPLAY={environment.get('DISPLAY')}.")
-    return subprocess.Popen([wine, executable, r"Z:\tmp"], env=environment, stdin=subprocess.DEVNULL,
+    # A Wine virtual desktop gives 7-Zip a stable, medium-sized X11
+    # surface on headless runners where its HWND otherwise remains a 1x1 IME.
+    # The installed 7-Zip executable still provides the application UI.
+    return subprocess.Popen([wine, "explorer", "/desktop=Nexus-7-Zip,960x620", executable],
+                            env=environment, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             close_fds=True, start_new_session=True)
 
@@ -536,10 +550,17 @@ def relaunch_installed_7zip():
 store_processes = []
 wm_process = None
 if shutil.which("xfwm4"):
-    wm_process = subprocess.Popen(["xfwm4", "--replace", "--compositor=off"], env=environment,
-                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
-    time.sleep(0.5)
+    # run_recorded_test starts xfwm4 before launching this script. Replacing
+    # that WM tears down the active Xfce/D-Bus session and can unmap GTK windows.
+    wm_ready = False
+    if shutil.which("wmctrl"):
+        wm_ready = gui_run(["wmctrl", "-m"], text=True, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=3).returncode == 0
+    if not wm_ready:
+        wm_process = subprocess.Popen(["xfwm4", "--replace", "--compositor=off"], env=environment,
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
+        time.sleep(0.5)
 store_process = launch_store()
 mirror_process = None
 recovery_process = None
