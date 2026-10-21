@@ -134,6 +134,8 @@ def is_store(window):
 
 def is_target(window):
     identity = (window["title"] + " " + window["class"]).casefold()
+    if android_preview_mode and (window.get("pid") == os.getpid() or "real-app-evidence.py" in identity):
+        return True
     accepted = {
         "windows": ("7-zip", "7zfm", "7zip"),
         "web": ("2048",),
@@ -147,9 +149,19 @@ def is_target(window):
 def wait_for_windows(timeout):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        pump_gtk_events()
         windows = top_level_windows()
         store_window = next((item for item in windows if is_store(item)), None)
         app_window = next((item for item in windows if is_target(item)), None)
+        if android_preview_mode and app_window and (app_window["width"] <= 300 or app_window["height"] <= 200):
+            # GTK windows can initially be reported as 10x10 until its main
+            # context is dispatched. Pump it and request the medium desktop size.
+            gui_run(["xdotool", "windowsize", app_window["id"], "520", "455"], timeout=3,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            gui_run(["xdotool", "windowmove", app_window["id"], "720", "105"], timeout=3,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            pump_gtk_events()
+            app_window = next((item for item in top_level_windows() if item["id"] == app_window["id"]), app_window)
         if store_window and app_window and (app_window["width"] > 300 and app_window["height"] > 200):
             return store_window, app_window
         if store_process.poll() is not None:
@@ -278,21 +290,32 @@ def capture(path, require_two=False):
         windows = top_level_windows()
         if not any(is_store(item) for item in windows) or not any(is_target(item) for item in windows):
             print(f"X11 window inspection was unavailable for {ecosystem}; capturing the active display with PIL/scrot.", file=sys.stderr)
-    try:
-        image = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).convert("RGB")
-    except Exception as error:
-        if not shutil.which("scrot"):
-            raise RuntimeError(f"PIL could not capture Xvfb and scrot is unavailable: {error}") from error
-        result = gui_run(["scrot", "-o", str(path)], timeout=5,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if result.returncode != 0:
-            raise RuntimeError("Neither PIL nor scrot could capture the active X11 desktop") from error
-        image = Image.open(path).convert("RGB")
-    if image.size != (1280, 720):
-        raise RuntimeError(f"Expected 1280x720 Xvfb display, got {image.size}")
+    image = None
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    image.save(target, "PNG", optimize=True)
+    last_capture_error = None
+    for attempt in range(25):
+        pump_gtk_events()
+        try:
+            image = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).convert("RGB")
+        except Exception as error:
+            last_capture_error = error
+            if shutil.which("scrot"):
+                result = gui_run(["scrot", "-o", str(target)], timeout=5,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if result.returncode == 0:
+                    image = Image.open(target).convert("RGB")
+        if image is not None:
+            if image.size != (1280, 720):
+                raise RuntimeError(f"Expected 1280x720 Xvfb display, got {image.size}")
+            # Keep retries short, unoptimized PNG avoids over-compressing a
+            # newly mapped GTK window and lets the first real frame finish painting.
+            image.save(target, "PNG", compress_level=3)
+            if target.stat().st_size >= 15 * 1024:
+                break
+        time.sleep(0.2)
+    if image is None:
+        raise RuntimeError(f"Could not capture the active X11 display: {last_capture_error}")
     if target.stat().st_size < 15 * 1024:
         raise RuntimeError(f"Evidence PNG is smaller than 15 KB: {target}")
     histogram = image.histogram()
@@ -349,10 +372,13 @@ def create_android_package_preview():
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import GLib, Gtk
+    global gtk_module
+    gtk_module = Gtk
 
     Gtk.init([])
     window = Gtk.Window(title="Android APK Resource Preview")
     window.set_default_size(520, 455)
+    window.set_size_request(520, 455)
     window.set_resizable(False)
     window.set_border_width(20)
     window.set_position(Gtk.WindowPosition.CENTER)
@@ -395,6 +421,16 @@ def create_android_package_preview():
     while Gtk.events_pending():
         Gtk.main_iteration_do(False)
     return Gtk, window, button
+
+
+def pump_gtk_events():
+    gtk = globals().get("gtk_module")
+    if gtk is None:
+        return
+    for _ in range(32):
+        if not gtk.events_pending():
+            break
+        gtk.main_iteration_do(False)
 
 
 def relaunch_installed_7zip():

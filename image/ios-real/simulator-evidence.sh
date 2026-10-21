@@ -52,21 +52,26 @@ PY
 
 take_sim_screenshot() {
   local output="$1" temporary="${1%.png}.capture.png"
-  # CoreSimulator screenshots work on headless hosted macOS workers where
-  # screencapture may wait forever for a WindowServer desktop session.
+  # Keep this evidence tied to the simulator device framebuffer. A macOS desktop
+  # screencapture is not an iOS app frame and must not be substituted for it.
   rm -f "$temporary"
   if run_bounded 20 xcrun simctl io "$UDID" screenshot "$temporary" && [[ -s "$temporary" ]]; then
     mv -f "$temporary" "$output"
     return 0
   fi
   rm -f "$temporary"
-  echo "CoreSimulator screenshot did not return; trying a short native desktop capture." >&2
-  if run_bounded 3 screencapture -x "$temporary" && [[ -s "$temporary" ]]; then
-    mv -f "$temporary" "$output"
-    return 0
-  fi
-  rm -f "$temporary"
-  echo "No real iOS Simulator frame could be captured: $output" >&2
+  echo "CoreSimulator did not return a device frame: $output" >&2
+  return 1
+}
+
+capture_installing_frame() {
+  local attempt
+  for attempt in 1 2 3; do
+    if take_sim_screenshot "$OUT/ios-installing.png"; then
+      return 0
+    fi
+    sleep 1
+  done
   return 1
 }
 
@@ -124,9 +129,6 @@ PY
 )"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
-# Save a real framebuffer frame immediately after boot, before bootstatus or
-# package installation can consume their longer bounded waits.
-take_sim_screenshot "$OUT/ios-installing.png" || true
 if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
   echo "SpringBoard did not become ready; resetting this simulator and retrying once." >&2
   run_bounded 30 xcrun simctl shutdown "$UDID" || true
@@ -136,6 +138,14 @@ if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
   if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
     echo "Simulator remains unavailable after reset; bounded desktop captures will still record only visible simulator state." >&2
   fi
+fi
+# Wait for CoreSimulator's framebuffer after boot recovery, then capture the
+# actual device screen before installation begins. Never substitute the host desktop.
+if ! capture_installing_frame; then
+  echo "Simulator framebuffer is not ready before installation; retrying after Simulator activation." >&2
+  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+  sleep 2
+  capture_installing_frame || true
 fi
 # Keep the simulator in a medium floating macOS window when a GUI session is
 # available. The headless CI capture path remains the simulator framebuffer.
@@ -156,7 +166,7 @@ mkdir -p "$OUT"
 xcrun simctl io "$UDID" recordVideo --codec=h264 "$OUT/ipa-running.mp4" >/dev/null 2>&1 &
 VIDEO_PID=$!
 sleep 2
-take_sim_screenshot "$OUT/ios-installing.png" || true
+capture_installing_frame || true
 run_bounded 20 xcrun simctl install "$UDID" "$SIM_APP" &
 INSTALL_PID=$!
 sleep 0.2
@@ -169,6 +179,7 @@ if ! wait "$INSTALL_PID"; then
   run_bounded 30 xcrun simctl boot "$UDID" || true
   open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
   run_bounded 180 xcrun simctl bootstatus "$UDID" -b || true
+  capture_installing_frame || true
   run_bounded 90 xcrun simctl install "$UDID" "$SIM_APP" || true
 else
   INSTALL_PID=""
