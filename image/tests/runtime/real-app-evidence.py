@@ -330,6 +330,23 @@ try:
     place_windows(store_window, app_window)
     interact(app_window)
     time.sleep(3)
+    if ecosystem == "android" and not any(is_target(item) for item in top_level_windows()):
+        print("The Android mirror window disappeared during interaction; reopening scrcpy for the live app.", file=sys.stderr)
+        if mirror_process is not None and mirror_process.poll() is None:
+            mirror_process.terminate()
+            try:
+                mirror_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                mirror_process.kill()
+                mirror_process.wait(timeout=2)
+        mirror_process = subprocess.Popen(
+            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android", "--no-audio"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True, start_new_session=True)
+        store_window, app_window = wait_for_windows(30)
+        place_windows(store_window, app_window)
+        interact(app_window)
+        time.sleep(1)
     capture(interacting_png, require_two=ecosystem in {"windows", "web", "linux", "android"})
     assert_distinct(installing_png, interacting_png)
     print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")

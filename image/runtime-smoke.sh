@@ -120,6 +120,12 @@ FFMPEG_WRAPPER
 fi
 ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
 BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+# Use one explicit AVD directory for both avdmanager and emulator. CI tools can
+# otherwise write the AVD under ANDROID_USER_HOME while emulator searches a
+# different default when the workflow changes HOME/XDG context.
+export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.android}"
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$ANDROID_USER_HOME/avd}"
+mkdir -p "$ANDROID_AVD_HOME"
 cleanup() {
   local status=$?
   trap - EXIT
@@ -298,7 +304,11 @@ fi
 if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     [[ -n "${NEXUS_FDROID_APK:-}" ]] && [[ -x "$BUILD_TOOLS/aapt2" ]]; then
   AVD_NAME="${NEXUS_AVD_NAME:-nexus-evidence}"
-  if ! emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME"; then
+  avd_exists() {
+    emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME" ||
+      [[ -f "$ANDROID_AVD_HOME/$AVD_NAME.ini" || -f "$ANDROID_AVD_HOME/$AVD_NAME.avd/config.ini" ]]
+  }
+  if ! avd_exists; then
     AVDMANAGER="$(command -v avdmanager 2>/dev/null || true)"
     if [[ -z "$AVDMANAGER" ]]; then
       AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager -perm /111 -print -quit 2>/dev/null || true)"
@@ -308,13 +318,14 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     if [[ -x "$AVDMANAGER" && -d "$IMAGE_DIR" ]]; then
       echo "[smoke] Create an Android AVD on demand from the installed SDK image" >&2
       printf 'no\n' | timeout --kill-after=2s 45s "$AVDMANAGER" create avd --force \
-        -n "$AVD_NAME" -k "$SYSTEM_IMAGE" --device pixel_2
+        -n "$AVD_NAME" -k "$SYSTEM_IMAGE" --device pixel_2 \
+        -p "$ANDROID_AVD_HOME/$AVD_NAME.avd"
     else
       echo "Real Android UI evidence requires avdmanager and the Android 35 Google APIs x86_64 image." >&2
       if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then exit 1; fi
     fi
   fi
-  if emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME"; then
+  if avd_exists; then
     export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}" NEXUS_ANDROID_TARGET=adb
     ACCEL_ARGS=()
     if ! emulator -accel-check 2>&1 | grep -Eqi 'installed and usable|is usable'; then

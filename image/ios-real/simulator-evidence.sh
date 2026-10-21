@@ -51,15 +51,14 @@ PY
 
 take_sim_screenshot() {
   local output="$1"
-  # Capture the macOS desktop so the Simulator appears as a normal floating
-  # window with the surrounding desktop visible. Fall back to the device frame
-  # only when the hosted runner has no capturable desktop surface.
-  if run_bounded 10 screencapture -x "$output" && [[ -s "$output" ]]; then
+  # CoreSimulator screenshots work on headless hosted macOS workers where
+  # screencapture may wait forever for a WindowServer desktop session.
+  if run_bounded 20 xcrun simctl io "$UDID" screenshot "$output" && [[ -s "$output" ]]; then
     return 0
   fi
   rm -f "$output"
-  echo "macOS desktop capture unavailable; trying the bounded Simulator device-frame capture." >&2
-  if run_bounded 15 xcrun simctl io "$UDID" screenshot "$output" && [[ -s "$output" ]]; then
+  echo "CoreSimulator screenshot did not return; trying a short native desktop capture." >&2
+  if run_bounded 3 screencapture -x "$output" && [[ -s "$output" ]]; then
     return 0
   fi
   rm -f "$output"
@@ -131,7 +130,8 @@ if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
     echo "Simulator remains unavailable after reset; bounded desktop captures will still record only visible simulator state." >&2
   fi
 fi
-# Keep the simulator in a medium floating macOS window, not fullscreen.
+# Keep the simulator in a medium floating macOS window when a GUI session is
+# available. The headless CI capture path remains the simulator framebuffer.
 osascript >/dev/null 2>&1 <<'APPLESCRIPT' || true
 tell application "System Events"
   if exists process "Simulator" then
@@ -154,10 +154,18 @@ INSTALL_PID=$!
 sleep 0.2
 take_sim_screenshot "$OUT/ios-installing.png" || true
 if ! wait "$INSTALL_PID"; then
-  echo "simctl install failed or timed out; continuing to try the simulator's visible app surface." >&2
+  echo "simctl install failed or timed out; resetting CoreSimulator once before retrying." >&2
+  INSTALL_PID=""
+  run_bounded 30 xcrun simctl shutdown "$UDID" || true
+  run_bounded 120 xcrun simctl erase "$UDID" || true
+  run_bounded 30 xcrun simctl boot "$UDID" || true
+  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+  run_bounded 180 xcrun simctl bootstatus "$UDID" -b || true
+  run_bounded 90 xcrun simctl install "$UDID" "$SIM_APP" || true
+else
+  INSTALL_PID=""
 fi
-INSTALL_PID=""
-run_bounded 20 xcrun simctl launch "$UDID" "$BUNDLE_ID" || {
+run_bounded 60 xcrun simctl launch "$UDID" "$BUNDLE_ID" || {
   echo "simctl launch failed or timed out; foregrounding Simulator for native screenshot recovery." >&2
   open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
 }
