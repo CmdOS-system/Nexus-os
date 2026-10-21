@@ -55,7 +55,7 @@ take_sim_screenshot() {
   # Keep this evidence tied to the simulator device framebuffer. A macOS desktop
   # screencapture is not an iOS app frame and must not be substituted for it.
   rm -f "$temporary"
-  if run_bounded 20 xcrun simctl io "$UDID" screenshot "$temporary" && [[ -s "$temporary" ]]; then
+  if run_bounded 60 xcrun simctl io "$UDID" screenshot "$temporary" && [[ -s "$temporary" ]]; then
     mv -f "$temporary" "$output"
     return 0
   fi
@@ -66,11 +66,11 @@ take_sim_screenshot() {
 
 capture_installing_frame() {
   local attempt
-  for attempt in 1 2 3; do
+  for attempt in 1 2 3 4 5; do
     if take_sim_screenshot "$OUT/ios-installing.png"; then
       return 0
     fi
-    sleep 1
+    sleep 2
   done
   return 1
 }
@@ -136,7 +136,8 @@ if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
   run_bounded 30 xcrun simctl boot "$UDID" || true
   open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
   if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
-    echo "Simulator remains unavailable after reset; bounded desktop captures will still record only visible simulator state." >&2
+    echo "Simulator remains unavailable after reset; cannot produce genuine iOS app evidence." >&2
+    exit 1
   fi
 fi
 # Wait for CoreSimulator's framebuffer after boot recovery, then capture the
@@ -167,7 +168,7 @@ xcrun simctl io "$UDID" recordVideo --codec=h264 "$OUT/ipa-running.mp4" >/dev/nu
 VIDEO_PID=$!
 sleep 2
 capture_installing_frame || true
-run_bounded 20 xcrun simctl install "$UDID" "$SIM_APP" &
+run_bounded 120 xcrun simctl install "$UDID" "$SIM_APP" &
 INSTALL_PID=$!
 sleep 0.2
 take_sim_screenshot "$OUT/ios-installing.png" || true
@@ -178,20 +179,24 @@ if ! wait "$INSTALL_PID"; then
   run_bounded 120 xcrun simctl erase "$UDID" || true
   run_bounded 30 xcrun simctl boot "$UDID" || true
   open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
-  run_bounded 180 xcrun simctl bootstatus "$UDID" -b || true
+  run_bounded 180 xcrun simctl bootstatus "$UDID" -b
   capture_installing_frame || true
-  run_bounded 90 xcrun simctl install "$UDID" "$SIM_APP" || true
+  run_bounded 180 xcrun simctl install "$UDID" "$SIM_APP"
 else
   INSTALL_PID=""
 fi
-run_bounded 60 xcrun simctl launch "$UDID" "$BUNDLE_ID" || {
-  echo "simctl launch failed or timed out; foregrounding Simulator for native screenshot recovery." >&2
-  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
-}
+if [[ ! -s "$OUT/ios-installing.png" ]]; then
+  echo "The simulator did not expose its framebuffer before app launch; retrying a genuine device screenshot after installation." >&2
+  capture_installing_frame || {
+    echo "CoreSimulator still has no readable device framebuffer; refusing to generate a substitute image." >&2
+    exit 1
+  }
+fi
+run_bounded 90 xcrun simctl launch "$UDID" "$BUNDLE_ID"
 sleep 4
-take_sim_screenshot "$OUT/ios-interacting.png" || true
+take_sim_screenshot "$OUT/ios-interacting.png"
 sleep 2
-take_sim_screenshot "$OUT/ipa-running.png" || true
+take_sim_screenshot "$OUT/ipa-running.png"
 kill -INT "$VIDEO_PID" 2>/dev/null || true
 for _ in {1..30}; do
   kill -0 "$VIDEO_PID" 2>/dev/null || break

@@ -244,10 +244,9 @@ RECORDED_TEST
 
 run_store_evidence() {
   local ecosystem="$1" evidence_ecosystem="$1" app_id="$2" title="$3" package="${4:-}" video primary
-  if [[ "$ecosystem" == "android-preview" ]]; then evidence_ecosystem=android; fi
   case "$ecosystem" in
     windows) video="wine-gui-running.mp4"; primary="wine-gui-running.png" ;;
-    android|android-preview) video="apk-running.mp4"; primary="apk-running.png" ;;
+    android) video="apk-running.mp4"; primary="apk-running.png" ;;
     ios) video="ipa-running.mp4"; primary="ipa-running.png" ;;
     web) video="crx-pwa-running.mp4"; primary="crx-pwa-running.png" ;;
     linux) video="linux-app-running.mp4"; primary="linux-app-running.png" ;;
@@ -323,8 +322,9 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     [[ -n "${NEXUS_FDROID_APK:-}" ]] && [[ -x "$BUILD_TOOLS/aapt2" ]]; then
   AVD_NAME="${NEXUS_AVD_NAME:-nexus-evidence}"
   avd_exists() {
-    emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME" ||
-      [[ -f "$ANDROID_AVD_HOME/$AVD_NAME.ini" || -f "$ANDROID_AVD_HOME/$AVD_NAME.avd/config.ini" ]]
+    local config="$ANDROID_AVD_HOME/$AVD_NAME.avd/config.ini"
+    [[ -s "$config" ]] && grep -q '^image\.sysdir\.1=' "$config" && return 0
+    emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME"
   }
   if ! avd_exists; then
     AVDMANAGER="$(command -v avdmanager 2>/dev/null || true)"
@@ -335,10 +335,15 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     IMAGE_DIR="$ANDROID_HOME/system-images/android-35/google_apis/x86_64"
     if [[ -x "$AVDMANAGER" && -d "$IMAGE_DIR" ]]; then
       echo "[smoke] Create an Android AVD on demand from the installed SDK image" >&2
-      printf 'no\n' | timeout --kill-after=2s 45s "$AVDMANAGER" create avd --force \
-        -n "$AVD_NAME" -k "$SYSTEM_IMAGE" --device pixel_2 \
-        -p "$ANDROID_AVD_HOME/$AVD_NAME.avd" || \
-        echo "Android AVD creation failed; the package preview fallback will be used if the APK is available." >&2
+      rm -rf "$ANDROID_AVD_HOME/$AVD_NAME.avd" "$ANDROID_AVD_HOME/$AVD_NAME.ini"
+      if ! printf 'no\n' | timeout --kill-after=2s 90s "$AVDMANAGER" create avd --force \
+          -n "$AVD_NAME" -k "$SYSTEM_IMAGE" --device pixel_2 \
+          -p "$ANDROID_AVD_HOME/$AVD_NAME.avd"; then
+        echo "Android AVD creation failed; avdmanager output above is required to diagnose the installed SDK image/profile." >&2
+      fi
+      if ! avd_exists; then
+        echo "avdmanager returned without a valid $AVD_NAME AVD in ANDROID_AVD_HOME=$ANDROID_AVD_HOME." >&2
+      fi
     else
       echo "Real Android UI evidence requires avdmanager and the Android 35 Google APIs x86_64 image." >&2
     fi
@@ -358,7 +363,7 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
       local emulator_log="$TMP_DIR/android-emulator-${mode// /-}.log"
       : > "$emulator_log"
       timeout --kill-after=5s 420s emulator -avd "$AVD_NAME" -port 5554 -memory 2048 \
-        -no-window -gpu swiftshader_indirect \
+        -no-window -gpu swiftshader \
         -no-snapshot -no-audio -no-boot-anim -camera-back none -camera-front none "$@" \
         </dev/null >>"$emulator_log" 2>&1 &
       ANDROID_EMULATOR_PID=$!
@@ -391,24 +396,30 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
       if boot_android_avd "software fallback" -accel off -wipe-data; then
         ANDROID_RUNTIME_READY=1
       else
-        echo "Android software emulator did not boot; capturing an authentic APK resource preview and clearly marking that Android code did not execute." >&2
+        if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+          echo "Android software AVD did not boot; refusing to replace real APK execution with a package preview." >&2
+          exit 1
+        fi
+        echo "Android software AVD did not boot; skipping Android UI evidence (APK metadata/signature checks remain separate)." >&2
       fi
     fi
     if [[ "$ANDROID_RUNTIME_READY" == "1" ]]; then
       timeout --kill-after=1s 15s adb -s "$ANDROID_SERIAL" shell settings put global window_animation_scale 0 >/dev/null 2>&1 || true
       timeout --kill-after=1s 15s adb -s "$ANDROID_SERIAL" shell settings put global transition_animation_scale 0 >/dev/null 2>&1 || true
       run_store_evidence android privacy2048 "2048" "$NEXUS_FDROID_APK"
-    elif [[ -n "${NEXUS_FDROID_APK:-}" ]]; then
-      run_store_evidence android-preview privacy2048 "F-Droid 2048 APK package preview" "$NEXUS_FDROID_APK"
+    elif [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+      echo "No valid Android AVD is available; refusing to report a package preview as real Android execution." >&2
+      exit 1
     fi
-  elif [[ -n "${NEXUS_FDROID_APK:-}" ]]; then
-    echo "Android emulator tooling or AVD is unavailable; capturing the authentic F-Droid APK resources without claiming app execution." >&2
-    run_store_evidence android-preview privacy2048 "F-Droid 2048 APK package preview" "$NEXUS_FDROID_APK"
+  elif [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+    echo "Android emulator tooling or a valid AVD is unavailable; real Android app execution cannot be evidenced." >&2
+    exit 1
   fi
 else
-  echo "[smoke] Android AVD/APK tooling unavailable; retaining signature/manifest checks and not claiming Android UI execution." >&2
-  if [[ -n "${NEXUS_FDROID_APK:-}" ]]; then
-    run_store_evidence android-preview privacy2048 "F-Droid 2048 APK package preview" "$NEXUS_FDROID_APK"
+  echo "[smoke] Android AVD/APK tooling unavailable; no Android UI evidence will be fabricated." >&2
+  if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+    echo "The real-runtime evidence job requires an active Android AVD and APK tooling." >&2
+    exit 1
   fi
 fi
 

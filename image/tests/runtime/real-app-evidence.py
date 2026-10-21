@@ -15,11 +15,10 @@ if len(sys.argv) < 6:
     raise SystemExit("usage: real-app-evidence.py ECOSYSTEM APP_ID INSTALLING.png INTERACTING.png APP_TITLE [PACKAGE]")
 
 ecosystem, app_id, installing_png, interacting_png, app_title, *package = sys.argv[1:]
-android_preview_mode = ecosystem == "android-preview"
 root = Path(__file__).resolve().parents[2]
 store = root / "includes/opt/nexus/omni-store.py"
 package_path = package[0] if package and package[0] else os.environ.get("NEXUS_FDROID_APK", "")
-if ecosystem in {"android", "android-preview"}:
+if ecosystem == "android":
     if not package_path or not Path(package_path).is_file():
         raise SystemExit("Android evidence requires the real F-Droid APK")
     if ecosystem == "android" and not os.environ.get("ANDROID_SERIAL"):
@@ -34,13 +33,10 @@ def gui_run(argv, *, timeout=5, **kwargs):
         print(f"Ignoring unavailable GUI helper {argv[0]}: {error}", file=sys.stderr)
         return subprocess.CompletedProcess(argv, 127, stdout="" if kwargs.get("text") else b"")
 
-command = [sys.executable, str(store), "--select-tab", "android" if android_preview_mode else ecosystem]
-if not android_preview_mode:
-    command += ["--install-app", app_id]
-if package_path and not android_preview_mode:
+command = [sys.executable, str(store), "--select-tab", ecosystem, "--install-app", app_id]
+if package_path:
     command += ["--package-path", package_path]
-if not android_preview_mode:
-    command += ["--auto-launch"]
+command += ["--auto-launch"]
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
 environment.update(GDK_BACKEND="x11", GSK_RENDERER="cairo", LIBGL_ALWAYS_SOFTWARE="1",
@@ -134,14 +130,13 @@ def is_store(window):
 
 def is_target(window):
     identity = (window["title"] + " " + window["class"]).casefold()
-    if android_preview_mode and (window.get("pid") == os.getpid() or "real-app-evidence.py" in identity):
+    if ecosystem == "web" and "chrom" in identity and not is_store(window):
         return True
     accepted = {
         "windows": ("7-zip", "7zfm", "7zip"),
         "web": ("2048",),
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
         "android": ("2048", "scrcpy"),
-        "android-preview": ("apk resource preview",),
     }.get(ecosystem, (app_title.casefold(),))
     return any(value in identity for value in accepted)
 
@@ -153,15 +148,6 @@ def wait_for_windows(timeout):
         windows = top_level_windows()
         store_window = next((item for item in windows if is_store(item)), None)
         app_window = next((item for item in windows if is_target(item)), None)
-        if android_preview_mode and app_window and (app_window["width"] <= 300 or app_window["height"] <= 200):
-            # GTK windows can initially be reported as 10x10 until its main
-            # context is dispatched. Pump it and request the medium desktop size.
-            gui_run(["xdotool", "windowsize", app_window["id"], "520", "455"], timeout=3,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            gui_run(["xdotool", "windowmove", app_window["id"], "720", "105"], timeout=3,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            pump_gtk_events()
-            app_window = next((item for item in top_level_windows() if item["id"] == app_window["id"]), app_window)
         if store_window and app_window and (app_window["width"] > 300 and app_window["height"] > 200):
             return store_window, app_window
         if store_process.poll() is not None:
@@ -223,7 +209,8 @@ def wait_for_store(timeout=25):
             print("OmniStore window was not mapped after 10s; relaunched it and allowing 5s to map.")
             time.sleep(5)
         time.sleep(0.2)
-    if process_window and store_process.poll() is None:
+    if (process_window and store_process.poll() is None and
+            process_window["width"] > 300 and process_window["height"] > 200):
         print(f"OmniStore owns a mapped X11 window ({process_window['width']}x{process_window['height']}); continuing after resize attempts.", file=sys.stderr)
         return process_window
     windows = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}"
@@ -232,10 +219,6 @@ def wait_for_store(timeout=25):
 
 
 def wait_for_install_state(timeout=12):
-    if android_preview_mode:
-        # The package viewer is an explicit fallback status, not an Android
-        # installation. Never label its progress as a running Android app.
-        return False
     marker = "cargando" if ecosystem == "web" else "instalando"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -285,11 +268,18 @@ def place_windows(store_window, app_window):
         raise RuntimeError(f"Expected two visible top-level windows; got {fresh}")
 
 
-def capture(path, require_two=False):
-    if require_two:
-        windows = top_level_windows()
-        if not any(is_store(item) for item in windows) or not any(is_target(item) for item in windows):
-            print(f"X11 window inspection was unavailable for {ecosystem}; capturing the active display with PIL/scrot.", file=sys.stderr)
+def capture(path, require_store=False, require_two=False):
+    windows = top_level_windows()
+    if require_store and not any(is_store(item) and item["width"] > 300 and item["height"] > 200
+                                 for item in windows):
+        raise RuntimeError(f"Cannot capture {ecosystem}: Nexus OmniStore has no mapped desktop-sized X11 window")
+    if require_two and (not any(is_store(item) and item["width"] > 300 and item["height"] > 200
+                                for item in windows) or
+                        not any(is_target(item) and item["width"] > 300 and item["height"] > 200
+                                for item in windows)):
+        details = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}"
+                             for item in windows) or "<none>"
+        raise RuntimeError(f"Cannot capture {ecosystem}: OmniStore and the real application must both have mapped desktop windows; {details}")
     image = None
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -308,16 +298,14 @@ def capture(path, require_two=False):
         if image is not None:
             if image.size != (1280, 720):
                 raise RuntimeError(f"Expected 1280x720 Xvfb display, got {image.size}")
-            # Keep retries short, unoptimized PNG avoids over-compressing a
-            # newly mapped GTK window and lets the first real frame finish painting.
             image.save(target, "PNG", compress_level=3)
-            if target.stat().st_size >= 15 * 1024:
+            if target.stat().st_size >= 1024:
                 break
         time.sleep(0.2)
     if image is None:
         raise RuntimeError(f"Could not capture the active X11 display: {last_capture_error}")
-    if target.stat().st_size < 15 * 1024:
-        raise RuntimeError(f"Evidence PNG is smaller than 15 KB: {target}")
+    if target.stat().st_size < 1024:
+        raise RuntimeError(f"Evidence PNG is implausibly small: {target} ({target.stat().st_size} bytes)")
     histogram = image.histogram()
     pixels = image.width * image.height
     mean = sum(value * histogram[channel * 256 + value]
@@ -337,7 +325,7 @@ def assert_distinct(first, second):
         raise RuntimeError(f"Install/interacting captures are pixel-identical: {first}, {second}")
 
 
-def interact(window, preview_button=None):
+def interact(window):
     activate_window(window["id"])
     if ecosystem == "web":
         for key in ("Right", "Down", "Left", "Up", "Right", "Down"):
@@ -358,71 +346,6 @@ def interact(window, preview_button=None):
         gui_run(["xdotool", "key", "--clearmodifiers", "ctrl+o"], timeout=5)
         time.sleep(0.4)
         gui_run(["xdotool", "key", "Escape"], timeout=5)
-    elif android_preview_mode:
-        # Click the real GTK control in the package inspector. It only reports
-        # package metadata review; it does not claim that Android code ran.
-        gui_run(["xdotool", "mousemove", "980", "525", "click", "1"], timeout=5,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if preview_button is not None:
-            preview_button.clicked()
-
-
-def create_android_package_preview():
-    """Show authentic APK metadata/icon when no Android runtime can boot."""
-    import gi
-    gi.require_version("Gtk", "3.0")
-    from gi.repository import GLib, Gtk
-    global gtk_module
-    gtk_module = Gtk
-
-    Gtk.init([])
-    window = Gtk.Window(title="Android APK Resource Preview")
-    window.set_default_size(520, 455)
-    window.set_size_request(520, 455)
-    window.set_resizable(False)
-    window.set_border_width(20)
-    window.set_position(Gtk.WindowPosition.CENTER)
-    window.connect("destroy", lambda *_: Gtk.main_quit() if Gtk.main_level() else None)
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-    window.add(box)
-    title = os.environ.get("NEXUS_ANDROID_PACKAGE_LABEL", "F-Droid APK")
-    heading = Gtk.Label()
-    heading.set_markup(f"<span size='large' weight='bold'>{GLib.markup_escape_text(title)}</span>")
-    heading.set_xalign(0)
-    box.pack_start(heading, False, False, 0)
-    icon_path = os.environ.get("NEXUS_ANDROID_REAL_ICON", "")
-    if icon_path and Path(icon_path).is_file():
-        icon = Gtk.Image.new_from_file(icon_path)
-        icon.set_pixel_size(120)
-        box.pack_start(icon, False, False, 0)
-    apk = Path(package_path)
-    details = Gtk.Label(label=(
-        f"{os.environ.get('NEXUS_ANDROID_PACKAGE_NAME', 'org.secuso.privacyfriendly2048')}\n"
-        f"{apk.name} · {apk.stat().st_size / (1024 * 1024):.1f} MiB\n\n"
-        "Authentic icon and package metadata from the downloaded F-Droid APK."
-    ))
-    details.set_xalign(0)
-    details.set_line_wrap(True)
-    box.pack_start(details, False, False, 0)
-    disclosure = Gtk.Label(label="Android runtime unavailable — APK code was not executed")
-    disclosure.set_xalign(0)
-    disclosure.set_line_wrap(True)
-    box.pack_start(disclosure, False, False, 0)
-    progress = Gtk.ProgressBar()
-    progress.set_fraction(0.35)
-    progress.set_text("Preparing APK resource preview (no installation)")
-    progress.set_show_text(True)
-    box.pack_start(progress, False, False, 0)
-    button = Gtk.Button(label="Inspect package resources")
-    button.connect("clicked", lambda *_: (progress.set_fraction(1.0),
-                 progress.set_text("APK metadata inspected · app not executed")))
-    box.pack_end(button, False, False, 0)
-    window.show_all()
-    while Gtk.events_pending():
-        Gtk.main_iteration_do(False)
-    return Gtk, window, button
-
-
 def pump_gtk_events():
     gtk = globals().get("gtk_module")
     if gtk is None:
@@ -478,36 +401,17 @@ if shutil.which("xfwm4"):
 store_process = launch_store()
 mirror_process = None
 recovery_process = None
-package_preview = None
 try:
     # This early frame catches the actual OmniStore progress UI before the app launch.
     wait_for_store()
-    if android_preview_mode:
-        Gtk, package_preview, preview_button = create_android_package_preview()
-        store_window, app_window = wait_for_windows(30)
-        place_windows(store_window, app_window)
-        time.sleep(1)
-        capture(installing_png, require_two=True)
-        interact(app_window, preview_button)
-        for _ in range(4):
-            while Gtk.events_pending():
-                Gtk.main_iteration_do(False)
-            time.sleep(0.1)
-        time.sleep(1)
-        capture(interacting_png, require_two=True)
-        assert_distinct(installing_png, interacting_png)
-        print("Captured Nexus OmniStore beside an authentic F-Droid APK resource preview; Android execution was unavailable.")
-    else:
-        wait_for_install_state()
-        capture(installing_png)
-    if not android_preview_mode and ecosystem == "android":
+    wait_for_install_state()
+    capture(installing_png, require_store=True)
+    if ecosystem == "android":
         mirror_process = subprocess.Popen(
             ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android", "--no-audio"],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True, start_new_session=True)
-    if android_preview_mode:
-        pass  # Both windows and the two truthful fallback captures are complete.
-    elif ecosystem == "windows":
+    if ecosystem == "windows":
         try:
             store_window, app_window = wait_for_windows(12)
         except RuntimeError:
@@ -521,10 +425,9 @@ try:
             time.sleep(1)
         if not android_is_foreground():
             raise RuntimeError("The real F-Droid 2048 package is not the Android foreground activity")
-    if not android_preview_mode:
-        place_windows(store_window, app_window)
-        interact(app_window)
-        time.sleep(3)
+    place_windows(store_window, app_window)
+    interact(app_window)
+    time.sleep(3)
     if ecosystem == "android" and not any(is_target(item) for item in top_level_windows()):
         print("The Android mirror window disappeared during interaction; reopening scrcpy for the live app.", file=sys.stderr)
         if mirror_process is not None and mirror_process.poll() is None:
@@ -542,13 +445,10 @@ try:
         place_windows(store_window, app_window)
         interact(app_window)
         time.sleep(1)
-    if not android_preview_mode:
-        capture(interacting_png, require_two=ecosystem in {"windows", "web", "linux", "android"})
-        assert_distinct(installing_png, interacting_png)
-        print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
+    capture(interacting_png, require_two=True)
+    assert_distinct(installing_png, interacting_png)
+    print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
 finally:
-    if package_preview is not None:
-        package_preview.destroy()
     if ecosystem == "windows" and recovery_process is not None:
         recovery_process.terminate()
         try:

@@ -20,7 +20,7 @@ permissions:
 jobs:
   linux-real-runtimes:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -54,14 +54,19 @@ jobs:
           "$sdkmanager_path" "platforms;android-35" "build-tools;35.0.0" "platform-tools" \
             "emulator" "system-images;android-35;google_apis;x86_64"
           avdmanager_path="$(dirname "$sdkmanager_path")/avdmanager"
+          test -x "$avdmanager_path"
           export ANDROID_USER_HOME="$HOME/.android"
           export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
           mkdir -p "$ANDROID_AVD_HOME"
+          rm -rf "$ANDROID_AVD_HOME/nexus-evidence.avd" "$ANDROID_AVD_HOME/nexus-evidence.ini"
           echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           printf 'no\n' | "$avdmanager_path" create avd --force -n nexus-evidence \
             -k "system-images;android-35;google_apis;x86_64" --device pixel_2 \
             -p "$ANDROID_AVD_HOME/nexus-evidence.avd"
+          test -s "$ANDROID_AVD_HOME/nexus-evidence.avd/config.ini"
+          grep -q '^image\.sysdir\.1=' "$ANDROID_AVD_HOME/nexus-evidence.avd/config.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fxq nexus-evidence
       - name: Install real Chromium
         run: |
           npm install --prefix "$RUNNER_TEMP/nexus-playwright" playwright

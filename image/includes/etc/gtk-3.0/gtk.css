@@ -1,0 +1,59 @@
+/* Nexus desktop GTK3 palette. Window-manager decorations remain native and movable. */
+@define-color theme_bg_color #080C14;
+@define-color theme_fg_color #F3F7FF;
+@define-color theme_base_color #0B0F19;
+@define-color theme_text_color #F3F7FF;
+@define-color theme_selected_bg_color #00D9E8;
+@define-color theme_selected_fg_color #06121B;
+@define-color theme_unfocused_bg_color #090D16;
+@define-color theme_unfocused_fg_color #D7E1F0;
+
+window {
+  background-color: #080C14;
+  color: #F3F7FF;
+  font-family: Inter, "Noto Sans", sans-serif;
+}
+
+headerbar {
+  background-image: linear-gradient(100deg, #101B2A, #0B111D 62%, #171126);
+  color: #F7FAFF;
+  border-bottom: 1px solid rgba(0, 242, 255, 0.24);
+  box-shadow: 0 2px 18px rgba(0, 0, 0, 0.24);
+}
+
+button {
+  background-image: linear-gradient(145deg, #172338, #101827);
+  color: #E5EFFB;
+  border: 1px solid rgba(178, 203, 230, 0.18);
+  border-radius: 9px;
+}
+
+button:hover {
+  background-image: linear-gradient(145deg, #1C3445, #152238);
+  border-color: rgba(0, 242, 255, 0.55);
+}
+
+button:checked,
+button.suggested-action {
+  background-image: linear-gradient(100deg, #00C9D8, #64EAF0);
+  color: #06121B;
+  border-color: #00F2FF;
+}
+
+entry, textview text, treeview.view {
+  background-color: #0B111D;
+  color: #F3F7FF;
+  caret-color: #00F2FF;
+  selection-background-color: rgba(0, 217, 232, 0.36);
+}
+
+progressbar trough {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  min-height: 8px;
+}
+
+progressbar progress {
+  background-image: linear-gradient(90deg, #00D9E8, #795BFF);
+  border-radius: 7px;
+}

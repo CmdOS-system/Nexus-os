@@ -3,5 +3,7 @@
   <property name="general" type="empty">
     <property name="theme" type="string" value="Arc-Dark"/>
     <property name="title_font" type="string" value="Inter Bold 10"/>
+    <property name="title_alignment" type="string" value="center"/>
+    <property name="button_layout" type="string" value="O|HMC"/>
   </property>
 </channel>

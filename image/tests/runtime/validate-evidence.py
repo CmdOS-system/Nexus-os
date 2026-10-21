@@ -74,8 +74,10 @@ def png_pixels(data):
 
 def validate_png(path):
     data = path.read_bytes()
-    if len(data) < 15 * 1024:
-        raise ValueError(f"PNG under 15 KB ({len(data)} bytes)")
+    # File size alone is not an authenticity/quality check: a valid dark UI can
+    # compress below 15 KB. Validate decoded resolution and pixel content below.
+    if len(data) < 1024:
+        raise ValueError(f"PNG is implausibly small ({len(data)} bytes)")
     width, height, mean, nonblack = png_pixels(data)
     if width < 320 or height < 200 or mean < 5 or nonblack < 0.03:
         raise ValueError(f"black/empty/undersized image: {width}x{height}, mean={mean:.1f}, nonblack={nonblack:.1%}")

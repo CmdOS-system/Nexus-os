@@ -7,17 +7,17 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 CSS = """
-window, .root { background-color: rgba(11, 15, 25, 0.96); color: #edf7ff; font-family: Inter, "Noto Sans", sans-serif; }
-.root { border: 1px solid #00F0FF; border-radius: 18px; }
+window, .root { background-color: rgba(5, 7, 13, 0.96); color: #edf7ff; font-family: Inter, "Noto Sans", sans-serif; }
+.root { background-image: linear-gradient(145deg, rgba(18, 30, 46, 0.96), rgba(8, 12, 22, 0.98)); border: 1px solid rgba(0, 242, 255, 0.78); border-radius: 18px; }
 .eyebrow { color: #00F0FF; font-size: 10pt; font-weight: 700; letter-spacing: 1px; }
-.badge { background-color: rgba(0, 240, 255, 0.12); color: #70f5ff; border: 1px solid #00F0FF; border-radius: 12px; padding: 5px 11px; font-weight: 700; }
+.badge { background-color: rgba(0, 242, 255, 0.12); color: #70f5ff; border: 1px solid rgba(0, 242, 255, 0.72); border-radius: 12px; padding: 5px 11px; font-weight: 700; }
 .title { color: #f5fbff; font-size: 20pt; font-weight: 700; }
 .copy { color: #c4d1e1; font-size: 11pt; }
 .status { color: #70f5ff; font-size: 9pt; font-weight: 700; letter-spacing: 0.5px; }
 .detail { color: #9fb4c9; font-size: 9pt; }
-button { background-image: none; background-color: rgba(20, 30, 48, 0.94); color: #edf7ff; border: 1px solid #30445e; border-radius: 10px; padding: 9px 18px; }
-button:hover { background-color: rgba(0, 240, 255, 0.12); border-color: #00F0FF; }
-button.primary { background-color: #00dbea; color: #07121d; border-color: #00F0FF; font-weight: 700; }
+button { background-image: linear-gradient(145deg, rgba(24, 36, 54, 0.98), rgba(13, 20, 33, 0.98)); color: #edf7ff; border: 1px solid rgba(147, 174, 205, 0.28); border-radius: 10px; padding: 9px 18px; }
+button:hover { background-color: rgba(0, 242, 255, 0.14); border-color: #00F2FF; }
+button.primary { background-image: linear-gradient(105deg, #00dbea, #72f4f6); color: #07121d; border-color: #00F2FF; font-weight: 700; }
 button.primary:hover { background-color: #70f5ff; }
 """
 

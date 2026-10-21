@@ -20,9 +20,9 @@ HOME = Path.home()
 STATE = HOME / ".local/share/nexus/omnistore-installed.json"
 MIN_INSTALL_STATE_SECONDS = 2.8
 CSS = """
-window { background: linear-gradient(135deg, #080C14, #05070D 62%, #0B0B18); color: #F3F7FF; font-family: Inter, 'Noto Sans', sans-serif; }
+window { background: linear-gradient(135deg, #05070D, #080C14 58%, #0B0B18); color: #F3F7FF; font-family: Inter, 'Noto Sans', sans-serif; }
 .shell { background-color: transparent; }
-.sidebar { background-color: rgba(17,23,37,0.92); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
+.sidebar { background-image: linear-gradient(155deg, rgba(26,35,53,0.91), rgba(12,17,29,0.94)); border: 1px solid rgba(255,255,255,0.09); border-radius: 22px; box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
 .brand { color: #F8FBFF; font-size: 20pt; font-weight: 800; letter-spacing: 0.5px; }
 .brand-accent { color: #00F2FF; }
 .eyebrow { color: #74EAF2; font-size: 8pt; font-weight: 700; letter-spacing: 1.6px; }
@@ -31,12 +31,12 @@ window { background: linear-gradient(135deg, #080C14, #05070D 62%, #0B0B18); col
 .nav-button { background-color: transparent; color: rgba(226,235,250,0.68); border: 1px solid transparent; border-radius: 12px; padding: 13px 12px; font-size: 10pt; }
 .nav-button:hover { background-color: rgba(255,255,255,0.055); color: #F5FBFF; border-color: rgba(255,255,255,0.08); }
 .nav-button:checked { background-image: linear-gradient(100deg, rgba(0,242,255,0.17), rgba(112,0,255,0.10)); color: #B8FAFF; border-color: rgba(0,242,255,0.34); box-shadow: inset 3px 0 #00F2FF, 0 5px 18px rgba(0,242,255,0.07); }
-.hero { background-image: linear-gradient(112deg, rgba(0,242,255,0.15), rgba(30,37,66,0.74) 48%, rgba(112,0,255,0.14)); background-color: rgba(16,22,36,0.88); border: 1px solid rgba(255,255,255,0.12); border-radius: 22px; box-shadow: 0 20px 46px rgba(0,0,0,0.28); }
+.hero { background-image: linear-gradient(112deg, rgba(0,242,255,0.16), rgba(30,37,66,0.70) 48%, rgba(112,0,255,0.17)); background-color: rgba(16,22,36,0.78); border: 1px solid rgba(255,255,255,0.13); border-radius: 22px; box-shadow: 0 20px 46px rgba(0,0,0,0.28); }
 .hero-title { color: #F7FBFF; font-size: 20pt; font-weight: 700; }
 .hero-copy { color: rgba(225,235,248,0.76); font-size: 10pt; }
 .hero-mark { color: rgba(0,242,255,0.92); font-size: 31pt; font-weight: 700; }
-.card { background-color: rgba(18,24,38,0.88); border: 1px solid rgba(255,255,255,0.085); border-radius: 19px; box-shadow: 0 14px 32px rgba(0,0,0,0.25); }
-.card:hover { background-color: rgba(23,32,49,0.96); border-color: rgba(0,242,255,0.40); box-shadow: 0 18px 38px rgba(0,0,0,0.35), 0 0 18px rgba(0,242,255,0.08); }
+.card { background-image: linear-gradient(145deg, rgba(25,33,50,0.86), rgba(13,19,31,0.88)); border: 1px solid rgba(255,255,255,0.09); border-radius: 19px; box-shadow: 0 14px 32px rgba(0,0,0,0.25); }
+.card:hover { background-image: linear-gradient(145deg, rgba(31,44,62,0.94), rgba(16,24,39,0.96)); border-color: rgba(0,242,255,0.42); box-shadow: 0 18px 38px rgba(0,0,0,0.35), 0 0 18px rgba(0,242,255,0.10); }
 .cover { background-image: linear-gradient(125deg, rgba(0,242,255,0.20), rgba(112,0,255,0.22)); background-color: #111A2A; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; }
 .cover-windows { background-image: linear-gradient(125deg, rgba(0,153,255,0.24), rgba(112,0,255,0.24)); }
 .cover-android { background-image: linear-gradient(125deg, rgba(52,211,153,0.19), rgba(0,153,255,0.20)); }
@@ -54,6 +54,8 @@ window { background: linear-gradient(135deg, #080C14, #05070D 62%, #0B0B18); col
 button { background-color: rgba(255,255,255,0.045); color: #E3ECF8; border: 1px solid rgba(255,255,255,0.10); border-radius: 11px; padding: 8px 12px; }
 button:hover { background-color: rgba(255,255,255,0.09); color: #FFFFFF; border-color: rgba(0,242,255,0.32); }
 button:disabled { color: rgba(215,228,244,0.50); background-color: rgba(255,255,255,0.035); }
+dialog, popover, menu { background-color: #0B111D; color: #F3F7FF; border: 1px solid rgba(0,242,255,0.20); border-radius: 14px; }
+tooltip { background-color: rgba(5,7,13,0.96); color: #F3F7FF; border: 1px solid rgba(0,242,255,0.24); border-radius: 8px; }
 #app-icon { color: #B8FAFF; background-color: rgba(0,242,255,0.08); border: 1px solid rgba(0,242,255,0.18); border-radius: 12px; font-size: 20pt; }
 progressbar trough { background-color: rgba(255,255,255,0.09); border-radius: 8px; min-height: 9px; }
 progressbar progress { background-image: linear-gradient(90deg, #00D9E8, #7F5BFF); border-radius: 8px; }
@@ -119,7 +121,13 @@ class OmniStore:
         self.installed = self._load_installed()
         self.custom_sources = SourceStore()
         self.window = Gtk.Window(title="Nexus OmniStore")
-        self.window.set_default_size(1380, 880)
+        screen = self.window.get_screen()
+        screen_width, screen_height = screen.get_width(), screen.get_height()
+        # Keep the store a normal floating desktop window on laptop displays;
+        # the window manager retains its titlebar and standard controls.
+        self.window.set_default_size(max(640, min(1120, screen_width - 160)),
+                                     max(480, min(700, screen_height - 140)))
+        self.window.set_resizable(True)
         self.window.set_position(Gtk.WindowPosition.CENTER)
         self.window.connect("destroy", Gtk.main_quit)
         provider = Gtk.CssProvider()
