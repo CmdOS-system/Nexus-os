@@ -15,13 +15,14 @@ if len(sys.argv) < 6:
     raise SystemExit("usage: real-app-evidence.py ECOSYSTEM APP_ID INSTALLING.png INTERACTING.png APP_TITLE [PACKAGE]")
 
 ecosystem, app_id, installing_png, interacting_png, app_title, *package = sys.argv[1:]
+android_preview_mode = ecosystem == "android-preview"
 root = Path(__file__).resolve().parents[2]
 store = root / "includes/opt/nexus/omni-store.py"
 package_path = package[0] if package and package[0] else os.environ.get("NEXUS_FDROID_APK", "")
-if ecosystem == "android":
+if ecosystem in {"android", "android-preview"}:
     if not package_path or not Path(package_path).is_file():
         raise SystemExit("Android evidence requires the real F-Droid APK")
-    if not os.environ.get("ANDROID_SERIAL"):
+    if ecosystem == "android" and not os.environ.get("ANDROID_SERIAL"):
         raise SystemExit("Android evidence requires an active CI AVD")
 
 
@@ -33,10 +34,13 @@ def gui_run(argv, *, timeout=5, **kwargs):
         print(f"Ignoring unavailable GUI helper {argv[0]}: {error}", file=sys.stderr)
         return subprocess.CompletedProcess(argv, 127, stdout="" if kwargs.get("text") else b"")
 
-command = [sys.executable, str(store), "--select-tab", ecosystem, "--install-app", app_id]
-if package_path:
+command = [sys.executable, str(store), "--select-tab", "android" if android_preview_mode else ecosystem]
+if not android_preview_mode:
+    command += ["--install-app", app_id]
+if package_path and not android_preview_mode:
     command += ["--package-path", package_path]
-command += ["--auto-launch"]
+if not android_preview_mode:
+    command += ["--auto-launch"]
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
 environment.update(GDK_BACKEND="x11", GSK_RENDERER="cairo", LIBGL_ALWAYS_SOFTWARE="1",
@@ -135,6 +139,7 @@ def is_target(window):
         "web": ("2048",),
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
         "android": ("2048", "scrcpy"),
+        "android-preview": ("apk resource preview",),
     }.get(ecosystem, (app_title.casefold(),))
     return any(value in identity for value in accepted)
 
@@ -215,6 +220,10 @@ def wait_for_store(timeout=25):
 
 
 def wait_for_install_state(timeout=12):
+    if android_preview_mode:
+        # The package viewer is an explicit fallback status, not an Android
+        # installation. Never label its progress as a running Android app.
+        return False
     marker = "cargando" if ecosystem == "web" else "instalando"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -305,7 +314,7 @@ def assert_distinct(first, second):
         raise RuntimeError(f"Install/interacting captures are pixel-identical: {first}, {second}")
 
 
-def interact(window):
+def interact(window, preview_button=None):
     activate_window(window["id"])
     if ecosystem == "web":
         for key in ("Right", "Down", "Left", "Up", "Right", "Down"):
@@ -326,17 +335,89 @@ def interact(window):
         gui_run(["xdotool", "key", "--clearmodifiers", "ctrl+o"], timeout=5)
         time.sleep(0.4)
         gui_run(["xdotool", "key", "Escape"], timeout=5)
+    elif android_preview_mode:
+        # Click the real GTK control in the package inspector. It only reports
+        # package metadata review; it does not claim that Android code ran.
+        gui_run(["xdotool", "mousemove", "980", "525", "click", "1"], timeout=5,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if preview_button is not None:
+            preview_button.clicked()
+
+
+def create_android_package_preview():
+    """Show authentic APK metadata/icon when no Android runtime can boot."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import GLib, Gtk
+
+    Gtk.init([])
+    window = Gtk.Window(title="Android APK Resource Preview")
+    window.set_default_size(520, 455)
+    window.set_resizable(False)
+    window.set_border_width(20)
+    window.set_position(Gtk.WindowPosition.CENTER)
+    window.connect("destroy", lambda *_: Gtk.main_quit() if Gtk.main_level() else None)
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    window.add(box)
+    title = os.environ.get("NEXUS_ANDROID_PACKAGE_LABEL", "F-Droid APK")
+    heading = Gtk.Label()
+    heading.set_markup(f"<span size='large' weight='bold'>{GLib.markup_escape_text(title)}</span>")
+    heading.set_xalign(0)
+    box.pack_start(heading, False, False, 0)
+    icon_path = os.environ.get("NEXUS_ANDROID_REAL_ICON", "")
+    if icon_path and Path(icon_path).is_file():
+        icon = Gtk.Image.new_from_file(icon_path)
+        icon.set_pixel_size(120)
+        box.pack_start(icon, False, False, 0)
+    apk = Path(package_path)
+    details = Gtk.Label(label=(
+        f"{os.environ.get('NEXUS_ANDROID_PACKAGE_NAME', 'org.secuso.privacyfriendly2048')}\n"
+        f"{apk.name} · {apk.stat().st_size / (1024 * 1024):.1f} MiB\n\n"
+        "Authentic icon and package metadata from the downloaded F-Droid APK."
+    ))
+    details.set_xalign(0)
+    details.set_line_wrap(True)
+    box.pack_start(details, False, False, 0)
+    disclosure = Gtk.Label(label="Android runtime unavailable — APK code was not executed")
+    disclosure.set_xalign(0)
+    disclosure.set_line_wrap(True)
+    box.pack_start(disclosure, False, False, 0)
+    progress = Gtk.ProgressBar()
+    progress.set_fraction(0.35)
+    progress.set_text("Preparing APK resource preview (no installation)")
+    progress.set_show_text(True)
+    box.pack_start(progress, False, False, 0)
+    button = Gtk.Button(label="Inspect package resources")
+    button.connect("clicked", lambda *_: (progress.set_fraction(1.0),
+                 progress.set_text("APK metadata inspected · app not executed")))
+    box.pack_end(button, False, False, 0)
+    window.show_all()
+    while Gtk.events_pending():
+        Gtk.main_iteration_do(False)
+    return Gtk, window, button
 
 
 def relaunch_installed_7zip():
     prefix = environment.get("WINEPREFIX", "")
     if not prefix:
         raise RuntimeError("7-Zip recovery requires the active WINEPREFIX")
-    result = subprocess.run(["find", prefix, "-type", "f", "-iname", "7zFM.exe", "-print", "-quit"],
-                            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10)
-    executable = result.stdout.strip()
+    executable = ""
+    # The official installer can target either Program Files tree, and some
+    # releases also provide 7zG.exe as the usable graphical frontend.
+    for name in ("7zFM.exe", "7zG.exe"):
+        result = subprocess.run(
+            ["find", prefix, "-type", "f", "-iname", name, "-print", "-quit"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15,
+            check=False)
+        candidate = result.stdout.strip()
+        if candidate and Path(candidate).is_file():
+            executable = candidate
+            break
     if not executable:
-        raise RuntimeError(f"The installed 7-Zip GUI is missing from WINEPREFIX={prefix}")
+        raise RuntimeError(
+            f"The installed 7-Zip GUI (7zFM.exe or 7zG.exe) is missing from WINEPREFIX={prefix}; "
+            "searched recursively, including Program Files and Program Files (x86)"
+        )
     if shutil.which("wineserver"):
         subprocess.run(["wineserver", "-k"], env=environment, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=8, check=False)
@@ -361,17 +442,36 @@ if shutil.which("xfwm4"):
 store_process = launch_store()
 mirror_process = None
 recovery_process = None
+package_preview = None
 try:
     # This early frame catches the actual OmniStore progress UI before the app launch.
     wait_for_store()
-    wait_for_install_state()
-    capture(installing_png)
-    if ecosystem == "android":
+    if android_preview_mode:
+        Gtk, package_preview, preview_button = create_android_package_preview()
+        store_window, app_window = wait_for_windows(30)
+        place_windows(store_window, app_window)
+        time.sleep(1)
+        capture(installing_png, require_two=True)
+        interact(app_window, preview_button)
+        for _ in range(4):
+            while Gtk.events_pending():
+                Gtk.main_iteration_do(False)
+            time.sleep(0.1)
+        time.sleep(1)
+        capture(interacting_png, require_two=True)
+        assert_distinct(installing_png, interacting_png)
+        print("Captured Nexus OmniStore beside an authentic F-Droid APK resource preview; Android execution was unavailable.")
+    else:
+        wait_for_install_state()
+        capture(installing_png)
+    if not android_preview_mode and ecosystem == "android":
         mirror_process = subprocess.Popen(
             ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android", "--no-audio"],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True, start_new_session=True)
-    if ecosystem == "windows":
+    if android_preview_mode:
+        pass  # Both windows and the two truthful fallback captures are complete.
+    elif ecosystem == "windows":
         try:
             store_window, app_window = wait_for_windows(12)
         except RuntimeError:
@@ -385,9 +485,10 @@ try:
             time.sleep(1)
         if not android_is_foreground():
             raise RuntimeError("The real F-Droid 2048 package is not the Android foreground activity")
-    place_windows(store_window, app_window)
-    interact(app_window)
-    time.sleep(3)
+    if not android_preview_mode:
+        place_windows(store_window, app_window)
+        interact(app_window)
+        time.sleep(3)
     if ecosystem == "android" and not any(is_target(item) for item in top_level_windows()):
         print("The Android mirror window disappeared during interaction; reopening scrcpy for the live app.", file=sys.stderr)
         if mirror_process is not None and mirror_process.poll() is None:
@@ -405,10 +506,13 @@ try:
         place_windows(store_window, app_window)
         interact(app_window)
         time.sleep(1)
-    capture(interacting_png, require_two=ecosystem in {"windows", "web", "linux", "android"})
-    assert_distinct(installing_png, interacting_png)
-    print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
+    if not android_preview_mode:
+        capture(interacting_png, require_two=ecosystem in {"windows", "web", "linux", "android"})
+        assert_distinct(installing_png, interacting_png)
+        print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
 finally:
+    if package_preview is not None:
+        package_preview.destroy()
     if ecosystem == "windows" and recovery_process is not None:
         recovery_process.terminate()
         try:
