@@ -283,8 +283,16 @@ def capture(path, require_store=False, require_two=False):
     image = None
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
+    target.unlink(missing_ok=True)
+    if require_store:
+        store_window = next(item for item in windows if is_store(item) and
+                            item["width"] > 300 and item["height"] > 200)
+        gui_run(["xdotool", "windowmap", store_window["id"]], timeout=3,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        activate_window(store_window["id"])
+        time.sleep(0.4)
     last_capture_error = None
-    for attempt in range(25):
+    for attempt in range(48):
         pump_gtk_events()
         try:
             image = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).convert("RGB")
@@ -298,16 +306,26 @@ def capture(path, require_store=False, require_two=False):
         if image is not None:
             if image.size != (1280, 720):
                 raise RuntimeError(f"Expected 1280x720 Xvfb display, got {image.size}")
-            image.save(target, "PNG", compress_level=3)
-            if target.stat().st_size >= 1024:
-                break
-        time.sleep(0.2)
+            histogram = image.histogram()
+            pixels = image.width * image.height
+            mean = sum(value * histogram[channel * 256 + value]
+                       for channel in range(3) for value in range(256)) / (3 * pixels)
+            nonblack_channels = sum(histogram[channel * 256 + value]
+                                    for channel in range(3) for value in range(24, 256))
+            if mean >= 5 and nonblack_channels >= pixels * 3 * 0.03:
+                image.save(target, "PNG", compress_level=3)
+                if target.stat().st_size >= 1024:
+                    break
+        time.sleep(0.25)
     if image is None:
         raise RuntimeError(f"Could not capture the active X11 display: {last_capture_error}")
+    if not target.exists():
+        raise RuntimeError(f"X11 stayed black while capturing {target}; windows: {top_level_windows()}")
     if target.stat().st_size < 1024:
         raise RuntimeError(f"Evidence PNG is implausibly small: {target} ({target.stat().st_size} bytes)")
-    histogram = image.histogram()
-    pixels = image.width * image.height
+    captured = Image.open(target).convert("RGB")
+    histogram = captured.histogram()
+    pixels = captured.width * captured.height
     mean = sum(value * histogram[channel * 256 + value]
                for channel in range(3) for value in range(256)) / (3 * pixels)
     nonblack_channels = sum(histogram[channel * 256 + value]
@@ -474,3 +492,4 @@ finally:
             wm_process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             wm_process.kill()
+

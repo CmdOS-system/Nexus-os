@@ -331,8 +331,8 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     if [[ -z "$AVDMANAGER" ]]; then
       AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager -perm /111 -print -quit 2>/dev/null || true)"
     fi
-    SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
-    IMAGE_DIR="$ANDROID_HOME/system-images/android-35/google_apis/x86_64"
+    SYSTEM_IMAGE="system-images;android-35;default;x86_64"
+    IMAGE_DIR="$ANDROID_HOME/system-images/android-35/default/x86_64"
     if [[ -x "$AVDMANAGER" && -d "$IMAGE_DIR" ]]; then
       echo "[smoke] Create an Android AVD on demand from the installed SDK image" >&2
       rm -rf "$ANDROID_AVD_HOME/$AVD_NAME.avd" "$ANDROID_AVD_HOME/$AVD_NAME.ini"
@@ -345,24 +345,41 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
         echo "avdmanager returned without a valid $AVD_NAME AVD in ANDROID_AVD_HOME=$ANDROID_AVD_HOME." >&2
       fi
     else
-      echo "Real Android UI evidence requires avdmanager and the Android 35 Google APIs x86_64 image." >&2
+      echo "Real Android UI evidence requires avdmanager and the Android 35 x86_64 system image." >&2
     fi
+  fi
+  AVD_CONFIG="$ANDROID_AVD_HOME/$AVD_NAME.avd/config.ini"
+  if [[ -s "$AVD_CONFIG" ]]; then
+    set_avd_property() {
+      local key="$1" value="$2"
+      if grep -q "^${key}=" "$AVD_CONFIG"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$AVD_CONFIG"
+      else
+        printf '%s=%s\n' "$key" "$value" >> "$AVD_CONFIG"
+      fi
+    }
+    set_avd_property hw.lcd.width 720
+    set_avd_property hw.lcd.height 1280
+    set_avd_property hw.lcd.density 240
+    set_avd_property hw.ramSize 2048
+    set_avd_property hw.cpu.ncore 2
   fi
   ANDROID_RUNTIME_READY=0
   if avd_exists; then
     export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}" NEXUS_ANDROID_TARGET=adb
     ACCEL_ARGS=()
-    if ! emulator -accel-check 2>&1 | grep -Eqi 'installed and usable|is usable'; then
+    ACCEL_CHECK="$(timeout --kill-after=1s 10s emulator -accel-check 2>&1 || true)"
+    if ! grep -Eqi 'installed and usable|is usable' <<<"$ACCEL_CHECK"; then
       echo "[smoke] KVM acceleration unavailable; using the emulator's software CPU mode" >&2
       ACCEL_ARGS=(-accel off)
     fi
     boot_android_avd() {
-      local mode="$1" boot_deadline
-      shift
-      echo "[smoke] Boot Android AVD in $mode mode for real F-Droid APK execution" >&2
+      local mode="$1" boot_limit="$2" boot_deadline
+      shift 2
+      echo "[smoke] Boot Android AVD in $mode mode for real F-Droid APK execution (limit ${boot_limit}s)" >&2
       local emulator_log="$TMP_DIR/android-emulator-${mode// /-}.log"
       : > "$emulator_log"
-      timeout --kill-after=5s 420s emulator -avd "$AVD_NAME" -port 5554 -memory 2048 \
+      timeout --kill-after=5s "${boot_limit}s" emulator -avd "$AVD_NAME" -port 5554 -memory 2048 -cores 2 \
         -no-window -gpu swiftshader \
         -no-snapshot -no-audio -no-boot-anim -camera-back none -camera-front none "$@" \
         </dev/null >>"$emulator_log" 2>&1 &
@@ -372,7 +389,7 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
         tail -n 40 "$emulator_log" >&2 || true
         return 1
       fi
-      boot_deadline=$((SECONDS + 300))
+      boot_deadline=$((SECONDS + boot_limit - 20))
       until [[ "$(timeout --kill-after=1s 8s adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
         if (( SECONDS >= boot_deadline )); then
           tail -n 40 "$emulator_log" >&2 || true
@@ -382,18 +399,23 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
       done
       return 0
     }
-    if boot_android_avd "configured" "${ACCEL_ARGS[@]}"; then
-      ANDROID_RUNTIME_READY=1
-    else
-      echo "[smoke] Android did not boot; restarting the user-space emulator with software CPU, clean data and no snapshots" >&2
-      adb -s "$ANDROID_SERIAL" emu kill >/dev/null 2>&1 || true
-      kill "$ANDROID_EMULATOR_PID" >/dev/null 2>&1 || true
-      wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true
-      ANDROID_EMULATOR_PID=""
-      timeout --kill-after=1s 10s adb kill-server >/dev/null 2>&1 || true
-      timeout --kill-after=1s 15s adb start-server >/dev/null 2>&1 || true
-      timeout --kill-after=2s 20s adb -s "$ANDROID_SERIAL" wait-for-disconnect >/dev/null 2>&1 || true
-      if boot_android_avd "software fallback" -accel off -wipe-data; then
+    if [[ ${#ACCEL_ARGS[@]} -eq 0 ]]; then
+      if boot_android_avd "KVM accelerated" 420; then
+        ANDROID_RUNTIME_READY=1
+      fi
+    fi
+    if [[ "$ANDROID_RUNTIME_READY" != "1" ]]; then
+      if [[ ${#ACCEL_ARGS[@]} -eq 0 ]]; then
+        echo "[smoke] KVM boot failed; restarting once with software CPU and a clean AVD" >&2
+        adb -s "$ANDROID_SERIAL" emu kill >/dev/null 2>&1 || true
+        kill "$ANDROID_EMULATOR_PID" >/dev/null 2>&1 || true
+        wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true
+        ANDROID_EMULATOR_PID=""
+        timeout --kill-after=1s 10s adb kill-server >/dev/null 2>&1 || true
+        timeout --kill-after=1s 15s adb start-server >/dev/null 2>&1 || true
+        timeout --kill-after=2s 20s adb -s "$ANDROID_SERIAL" wait-for-disconnect >/dev/null 2>&1 || true
+      fi
+      if boot_android_avd "software fallback" 900 -accel off -wipe-data; then
         ANDROID_RUNTIME_READY=1
       else
         if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
@@ -447,3 +469,4 @@ if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
     python3 "$ROOT/tests/runtime/validate-evidence.py" --evidence-root "$PROJECT_ROOT/evidence" \
       --ecosystems windows web android linux
 fi
+

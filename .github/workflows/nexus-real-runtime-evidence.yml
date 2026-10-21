@@ -45,6 +45,12 @@ jobs:
             /usr/share/backgrounds/nexus/horizon-aurora.svg
       - name: Install Android SDK and user-space emulator for real APK execution
         run: |
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod 666 /dev/kvm
+            ls -l /dev/kvm
+          else
+            echo "No /dev/kvm on this runner; runtime-smoke will use its bounded software path."
+          fi
           sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -perm /111 | sort -V | tail -n 1)"
           test -n "$sdkmanager_path"
           echo "$(dirname "$sdkmanager_path")" >> "$GITHUB_PATH"
@@ -52,7 +58,7 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           yes | "$sdkmanager_path" --licenses >/dev/null || true
           "$sdkmanager_path" "platforms;android-35" "build-tools;35.0.0" "platform-tools" \
-            "emulator" "system-images;android-35;google_apis;x86_64"
+            "emulator" "system-images;android-35;default;x86_64"
           avdmanager_path="$(dirname "$sdkmanager_path")/avdmanager"
           test -x "$avdmanager_path"
           export ANDROID_USER_HOME="$HOME/.android"
@@ -62,7 +68,7 @@ jobs:
           echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           printf 'no\n' | "$avdmanager_path" create avd --force -n nexus-evidence \
-            -k "system-images;android-35;google_apis;x86_64" --device pixel_2 \
+            -k "system-images;android-35;default;x86_64" --device pixel_2 \
             -p "$ANDROID_AVD_HOME/nexus-evidence.avd"
           test -s "$ANDROID_AVD_HOME/nexus-evidence.avd/config.ini"
           grep -q '^image\.sysdir\.1=' "$ANDROID_AVD_HOME/nexus-evidence.avd/config.ini"
@@ -128,3 +134,4 @@ jobs:
             evidence/ios/ipa-running.png
             evidence/ios/ipa-running.mp4
             evidence/ios/nexus-2048.ipa
+
