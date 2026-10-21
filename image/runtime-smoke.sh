@@ -306,7 +306,7 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     IMAGE_DIR="$ANDROID_HOME/system-images/android-35/google_apis/x86_64"
     if [[ -x "$AVDMANAGER" && -d "$IMAGE_DIR" ]]; then
       echo "[smoke] Create an Android AVD on demand from the installed SDK image" >&2
-      printf 'no\n' | timeout --kill-after=2s 45s "$AVDMANAGER" create avd \
+      printf 'no\n' | timeout --kill-after=2s 45s "$AVDMANAGER" create avd --force \
         -n "$AVD_NAME" -k "$SYSTEM_IMAGE" --device pixel_2
     else
       echo "Real Android UI evidence requires avdmanager and the Android 35 Google APIs x86_64 image." >&2

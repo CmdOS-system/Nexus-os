@@ -108,8 +108,8 @@ def main():
             running_hash = validate_png(running)
         else:
             running_hash = hashes[running]
-        if ecosystem == "ios" and running_hash == second_hash:
-            raise SystemExit(f"ios: interacting/running captures are identical: {second}")
+        if ecosystem == "ios" and running_hash in {first_hash, second_hash}:
+            raise SystemExit("ios: installing/interacting/running PNG captures must all be distinct")
         if not movie.is_file() or movie.stat().st_size < 15 * 1024:
             raise SystemExit(f"{ecosystem}: missing or too-small MP4: {movie}")
         print(f"{ecosystem}: PNGs valid and distinct; MP4 {movie.stat().st_size} bytes")

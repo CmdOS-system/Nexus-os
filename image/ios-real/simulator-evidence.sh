@@ -139,5 +139,13 @@ take_sim_screenshot "$OUT/ipa-running.png" || true
 kill -INT "$VIDEO_PID" 2>/dev/null || true
 sleep 1
 wait "$VIDEO_PID" 2>/dev/null || true
-run_bounded 15 python3 "$ROOT/image/tests/runtime/validate-evidence.py" --evidence-root "$ROOT/evidence" --ecosystems ios
+for evidence in ios-installing.png ios-interacting.png ipa-running.png ipa-running.mp4; do
+  if [[ ! -s "$OUT/$evidence" ]]; then
+    echo "Missing iOS runtime evidence before validation: $OUT/$evidence" >&2
+    exit 1
+  fi
+done
+# The validator is pure Python and performs no X11/XQuartz probes; simulator PNG
+# decoding can take longer than a short smoke-test timeout on macOS runners.
+run_bounded 120 python3 "$ROOT/image/tests/runtime/validate-evidence.py" --evidence-root "$ROOT/evidence" --ecosystems ios
 echo "Built the arm64 IPA; captured and validated distinct real Simulator frames and its runtime video."

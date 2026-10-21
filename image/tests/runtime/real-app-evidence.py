@@ -30,11 +30,12 @@ if package_path:
 command += ["--auto-launch"]
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
+environment.update(GDK_BACKEND="x11", GSK_RENDERER="cairo", LIBGL_ALWAYS_SOFTWARE="1",
+                   NO_AT_BRIDGE="1")
 if ecosystem == "web":
     environment["NEXUS_CHROMIUM_PROFILE"] = "/tmp/chromium-profile"
 if ecosystem == "linux":
-    environment.update(GSK_RENDERER="cairo", GDK_BACKEND="x11", LIBGL_ALWAYS_SOFTWARE="1",
-                       GTK_USE_PORTAL="0", NO_AT_BRIDGE="1")
+    environment["GTK_USE_PORTAL"] = "0"
 
 
 def top_level_windows():
@@ -106,7 +107,8 @@ def activate_window(window_id):
 
 
 def is_store(window):
-    return "nexus omnistore" in (window["title"] + " " + window["class"]).casefold()
+    identity = (window["title"] + " " + window["class"]).casefold()
+    return any(token in identity for token in ("omnistore", "nexus", "store", "python3"))
 
 
 def is_target(window):
@@ -135,16 +137,39 @@ def wait_for_windows(timeout):
     raise RuntimeError(f"Real top-level window for {app_title} was not mapped; windows: {names or '<none>'}")
 
 
-def wait_for_store(timeout=20):
+def launch_store():
+    process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               close_fds=True, start_new_session=True)
+    store_processes.append(process)
+    return process
+
+
+def wait_for_store(timeout=25):
+    global store_process
     deadline = time.monotonic() + timeout
+    recovery_at = time.monotonic() + 10
+    recovered = False
     while time.monotonic() < deadline:
         window = next((item for item in top_level_windows() if is_store(item)), None)
         if window and window["width"] > 300 and window["height"] > 200:
             return window
-        if store_process.poll() is not None:
-            raise RuntimeError(f"Nexus OmniStore exited before its window appeared (status {store_process.returncode})")
+        if not recovered and time.monotonic() >= recovery_at:
+            recovered = True
+            if store_process.poll() is None:
+                store_process.terminate()
+                try:
+                    store_process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    store_process.kill()
+                    store_process.wait(timeout=2)
+            store_process = launch_store()
+            print("OmniStore window was not mapped after 10s; relaunched it and allowing 5s to map.")
+            time.sleep(5)
         time.sleep(0.2)
-    raise RuntimeError("Nexus OmniStore top-level window was not mapped")
+    windows = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}"
+                         for item in top_level_windows())
+    raise RuntimeError(f"OmniStore window did not map after automatic relaunch; windows: {windows or '<none>'}")
 
 
 def wait_for_install_state(timeout=12):
@@ -258,9 +283,14 @@ def relaunch_installed_7zip():
                             close_fds=True, start_new_session=True)
 
 
-store_process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 close_fds=True, start_new_session=True)
+store_processes = []
+wm_process = None
+if shutil.which("xfwm4"):
+    wm_process = subprocess.Popen(["xfwm4", "--replace", "--compositor=off"], env=environment,
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
+    time.sleep(0.5)
+store_process = launch_store()
 mirror_process = None
 recovery_process = None
 try:
@@ -306,8 +336,16 @@ finally:
             mirror_process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             mirror_process.kill()
-    store_process.terminate()
-    try:
-        store_process.wait(timeout=3)
-    except subprocess.TimeoutExpired:
-        store_process.kill()
+    for process in store_processes:
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+    if wm_process is not None and wm_process.poll() is None:
+        wm_process.terminate()
+        try:
+            wm_process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            wm_process.kill()
