@@ -22,6 +22,7 @@ const FLATHUB_REPO: &str = "https://dl.flathub.org/repo/flathub.flatpakrepo";
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Route {
     Windows,
+    WindowsUnsupportedArchitecture(u16),
     WindowsInstaller,
     AndroidApk,
     AndroidDex,
@@ -97,7 +98,13 @@ fn route(path: &Path, prefix: &[u8]) -> Route {
     use omni_loader::magic_detector::{BinaryFormat, Subsystem};
     match (detection.format, detection.subsystem) {
         (BinaryFormat::Elf, _) => Route::NativeElf,
-        (BinaryFormat::PeCandidate, _) => Route::Windows,
+        (BinaryFormat::PeCandidate, _) => match pe_machine(prefix) {
+            // The staged Wine bridge currently targets the x86 and x86_64
+            // Windows ABIs. A DOS MZ header alone is not enough to dispatch.
+            Some(0x014c) | Some(0x8664) => Route::Windows,
+            Some(machine) => Route::WindowsUnsupportedArchitecture(machine),
+            None => Route::Unknown,
+        },
         (BinaryFormat::MachO64 | BinaryFormat::MachOFat, _) => Route::MacOs,
         (BinaryFormat::WebAssemblyCandidate, _) => Route::Wasm,
         (BinaryFormat::CrxCandidate, _) => Route::ChromeExtension,
@@ -406,8 +413,34 @@ fn inspect_ipa(path: &Path) -> io::Result<IpaInspection> {
 fn pe_machine(prefix: &[u8]) -> Option<u16> {
     if !prefix.starts_with(b"MZ") || prefix.len() < 64 { return None; }
     let offset = u32::from_le_bytes(prefix.get(0x3c..0x40)?.try_into().ok()?) as usize;
-    if prefix.get(offset..offset + 4)? != b"PE\0\0" { return None; }
-    Some(u16::from_le_bytes(prefix.get(offset + 4..offset + 6)?.try_into().ok()?))
+    // e_lfanew is attacker-controlled. Keep the read within the bounded
+    // prefix supplied by the dispatcher and require a complete COFF header.
+    let signature_end = offset.checked_add(4)?;
+    if prefix.get(offset..signature_end)? != b"PE\0\0" { return None; }
+    let machine_at = signature_end;
+    let machine_end = machine_at.checked_add(2)?;
+    let section_at = machine_end;
+    let section_end = section_at.checked_add(2)?;
+    let optional_size_at = offset.checked_add(20)?;
+    let optional_size_end = optional_size_at.checked_add(2)?;
+    let machine = u16::from_le_bytes(prefix.get(machine_at..machine_end)?.try_into().ok()?);
+    let section_count = u16::from_le_bytes(prefix.get(section_at..section_end)?.try_into().ok()?);
+    let optional_header_size = u16::from_le_bytes(prefix.get(optional_size_at..optional_size_end)?.try_into().ok()?);
+    if section_count == 0 || section_count > 96 || optional_header_size < 2 {
+        return None;
+    }
+    let optional_at = offset.checked_add(24)?;
+    let optional_end = optional_at.checked_add(optional_header_size as usize)?;
+    let optional_magic_end = optional_at.checked_add(2)?;
+    let optional_magic = u16::from_le_bytes(prefix.get(optional_at..optional_magic_end)?.try_into().ok()?);
+    if optional_end > prefix.len()
+        || !matches!(optional_magic, 0x010b | 0x020b)
+        || (machine == 0x014c && optional_magic != 0x010b)
+        || (matches!(machine, 0x8664 | 0xaa64) && optional_magic != 0x020b)
+    {
+        return None;
+    }
+    Some(machine)
 }
 
 fn valid_web_url(url: &str) -> bool {
@@ -580,6 +613,9 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
             args.extend_from_slice(extra);
             run("wine", args)
         }
+        Route::WindowsUnsupportedArchitecture(machine) => Err(io::Error::other(format!(
+            "El PE declara arquitectura 0x{machine:04x}; la ruta Wine de Nexus solo admite PE x86 (0x014c) y x86_64 (0x8664)."
+        ))),
         Route::AndroidApk => {
             let package = inspect_apk(&absolute)?;
             if env::var("NEXUS_ANDROID_TARGET").as_deref() == Ok("adb") {
@@ -806,7 +842,10 @@ mod tests {
 
     #[test]
     fn routes_supported_magics_and_extensions() {
-        assert_eq!(route(Path::new("run.exe"), b"MZ"), Route::Windows);
+        let mut pe = valid_pe(0x8664, 0x020b);
+        assert_eq!(route(Path::new("run.exe"), &pe), Route::Windows);
+        pe = valid_pe(0x014c, 0x010b);
+        assert_eq!(route(Path::new("run.exe"), &pe), Route::Windows);
         assert_eq!(route(Path::new("install.msi"), &[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Route::WindowsInstaller);
         assert_eq!(route(Path::new("app.apk"), b"PK\x03\x04"), Route::AndroidApk);
         assert_eq!(route(Path::new("app.ipa"), b"PK\x03\x04"), Route::IosIpa);
@@ -822,6 +861,28 @@ mod tests {
         assert_eq!(route(Path::new("fake.apk"), b"not a zip"), Route::Unknown);
         assert_eq!(route(Path::new("fake.crx"), b"not a crx"), Route::Unknown);
         assert_eq!(route(Path::new("fake.deb"), b"not an ar archive"), Route::Unknown);
+    }
+
+    fn valid_pe(machine: u16, optional_magic: u16) -> Vec<u8> {
+        let mut pe = vec![0u8; 256];
+        pe[..2].copy_from_slice(b"MZ");
+        pe[0x3c..0x40].copy_from_slice(&64u32.to_le_bytes());
+        pe[64..68].copy_from_slice(b"PE\0\0");
+        pe[68..70].copy_from_slice(&machine.to_le_bytes());
+        pe[70..72].copy_from_slice(&1u16.to_le_bytes());
+        pe[84..86].copy_from_slice(&112u16.to_le_bytes());
+        pe[88..90].copy_from_slice(&optional_magic.to_le_bytes());
+        pe
+    }
+
+    #[test]
+    fn rejects_mz_stubs_and_routes_unsupported_pe_architectures_explicitly() {
+        assert_eq!(route(Path::new("not-pe.exe"), b"MZ"), Route::Unknown);
+        assert_eq!(
+            route(Path::new("arm.exe"), &valid_pe(0xaa64, 0x020b)),
+            Route::WindowsUnsupportedArchitecture(0xaa64)
+        );
+        assert_eq!(route(Path::new("bad-magic.exe"), &valid_pe(0x8664, 0x010b)), Route::Unknown);
     }
 
     #[test]
@@ -876,14 +937,14 @@ mod tests {
 
     #[test]
     fn pe_machine_is_read_only_after_valid_dos_and_pe_headers() {
-        let mut pe = vec![0u8; 70];
-        pe[..2].copy_from_slice(b"MZ");
-        pe[0x3c..0x40].copy_from_slice(&64u32.to_le_bytes());
-        pe[64..68].copy_from_slice(b"PE\0\0");
-        pe[68..70].copy_from_slice(&0x8664u16.to_le_bytes());
+        let mut pe = valid_pe(0x8664, 0x020b);
         assert_eq!(pe_machine(&pe), Some(0x8664));
         pe[64] = 0;
         assert_eq!(pe_machine(&pe), None);
+        pe = valid_pe(0x8664, 0x020b);
+        pe[0x3c..0x40].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(pe_machine(&pe), None);
+        assert_eq!(pe_machine(&valid_pe(0x014c, 0x020b)), None);
     }
 
     #[test]
