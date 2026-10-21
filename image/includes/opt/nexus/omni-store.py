@@ -6,6 +6,7 @@ import os
 import subprocess
 import tempfile
 import re
+import time
 from pathlib import Path
 
 import gi
@@ -17,34 +18,47 @@ from omni_store_sources import SourceStore
 
 HOME = Path.home()
 STATE = HOME / ".local/share/nexus/omnistore-installed.json"
+MIN_INSTALL_STATE_SECONDS = 2.8
 CSS = """
-window { background: #0B0F19; color: #ECF7FF; font-family: Inter, 'Noto Sans', sans-serif; }
-.sidebar { background: #0D1320; border-right: 1px solid #1B293B; }
-.brand { color: #F5FBFF; font-size: 19pt; font-weight: 800; }
-.brand-accent { color: #00F0FF; }
-.eyebrow { color: #00F0FF; font-size: 9pt; font-weight: 700; letter-spacing: 1.4px; }
-.headline { color: #F5FBFF; font-size: 25pt; font-weight: 800; }
-.muted { color: #93A7BE; }
-.nav-button { background: transparent; color: #9FB1C6; border: 1px solid transparent; border-radius: 10px; padding: 12px; font-size: 10pt; }
-.nav-button:hover { background: #121E2D; color: #ECF7FF; }
-.nav-button:checked { background: #102432; color: #72F5FF; border-color: #00BFD0; }
-.hero { background: linear-gradient(120deg, #10253A, #1C1630); border: 1px solid #225165; border-radius: 18px; }
-.hero-title { color: #F7FCFF; font-size: 18pt; font-weight: 800; }
-.hero-copy { color: #AEC1D5; font-size: 10pt; }
-.card { background: #111927; border: 1px solid #253449; border-radius: 15px; }
-.card:hover { border-color: #00BFD0; }
-.app-name { color: #F1F8FF; font-size: 13pt; font-weight: 700; }
-.app-desc { color: #A8B9CC; font-size: 9pt; }
-.tag { color: #91F8FF; background: #102B38; border: 1px solid #176174; border-radius: 9px; padding: 4px 8px; font-size: 8pt; font-weight: 700; }
-.verified { color: #6EF0B1; }
-.primary { background: #00D9E8; color: #06121B; border: 1px solid #00F0FF; border-radius: 9px; padding: 8px 14px; font-weight: 800; }
-.primary:hover { background: #75F5FF; }
-button { background: #182438; color: #DCEBFA; border: 1px solid #30445D; border-radius: 9px; padding: 7px 12px; }
-button:hover { background: #20334B; border-color: #00BFD0; }
-#app-icon { color: #83F7FF; background: #15283B; border-radius: 12px; font-size: 20pt; }
-progressbar trough { background: #1B293B; border-radius: 8px; min-height: 9px; }
-progressbar progress { background: #00E3F1; border-radius: 8px; }
-separator { background: #1C2A3B; }
+window { background: linear-gradient(135deg, #080C14, #05070D 62%, #0B0B18); color: #F3F7FF; font-family: Inter, 'Noto Sans', sans-serif; }
+.shell { background-color: transparent; }
+.sidebar { background-color: rgba(17,23,37,0.92); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
+.brand { color: #F8FBFF; font-size: 20pt; font-weight: 800; letter-spacing: 0.5px; }
+.brand-accent { color: #00F2FF; }
+.eyebrow { color: #74EAF2; font-size: 8pt; font-weight: 700; letter-spacing: 1.6px; }
+.headline { color: #F7FAFF; font-size: 27pt; font-weight: 700; }
+.muted { color: rgba(218,229,245,0.62); }
+.nav-button { background-color: transparent; color: rgba(226,235,250,0.68); border: 1px solid transparent; border-radius: 12px; padding: 13px 12px; font-size: 10pt; }
+.nav-button:hover { background-color: rgba(255,255,255,0.055); color: #F5FBFF; border-color: rgba(255,255,255,0.08); }
+.nav-button:checked { background-image: linear-gradient(100deg, rgba(0,242,255,0.17), rgba(112,0,255,0.10)); color: #B8FAFF; border-color: rgba(0,242,255,0.34); box-shadow: inset 3px 0 #00F2FF, 0 5px 18px rgba(0,242,255,0.07); }
+.hero { background-image: linear-gradient(112deg, rgba(0,242,255,0.15), rgba(30,37,66,0.74) 48%, rgba(112,0,255,0.14)); background-color: rgba(16,22,36,0.88); border: 1px solid rgba(255,255,255,0.12); border-radius: 22px; box-shadow: 0 20px 46px rgba(0,0,0,0.28); }
+.hero-title { color: #F7FBFF; font-size: 20pt; font-weight: 700; }
+.hero-copy { color: rgba(225,235,248,0.76); font-size: 10pt; }
+.hero-mark { color: rgba(0,242,255,0.92); font-size: 31pt; font-weight: 700; }
+.card { background-color: rgba(18,24,38,0.88); border: 1px solid rgba(255,255,255,0.085); border-radius: 19px; box-shadow: 0 14px 32px rgba(0,0,0,0.25); }
+.card:hover { background-color: rgba(23,32,49,0.96); border-color: rgba(0,242,255,0.40); box-shadow: 0 18px 38px rgba(0,0,0,0.35), 0 0 18px rgba(0,242,255,0.08); }
+.cover { background-image: linear-gradient(125deg, rgba(0,242,255,0.20), rgba(112,0,255,0.22)); background-color: #111A2A; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; }
+.cover-windows { background-image: linear-gradient(125deg, rgba(0,153,255,0.24), rgba(112,0,255,0.24)); }
+.cover-android { background-image: linear-gradient(125deg, rgba(52,211,153,0.19), rgba(0,153,255,0.20)); }
+.cover-ios { background-image: linear-gradient(125deg, rgba(170,180,205,0.16), rgba(112,0,255,0.24)); }
+.cover-web { background-image: linear-gradient(125deg, rgba(0,242,255,0.22), rgba(55,100,255,0.20)); }
+.cover-linux { background-image: linear-gradient(125deg, rgba(255,181,71,0.17), rgba(0,242,255,0.20)); }
+.cover-icon { color: #F7FCFF; font-size: 26pt; font-weight: 700; }
+.cover-label { color: rgba(240,248,255,0.70); font-size: 8pt; font-weight: 700; letter-spacing: 1.2px; }
+.app-name { color: #F6F9FF; font-size: 13pt; font-weight: 700; }
+.app-desc { color: rgba(222,232,246,0.70); font-size: 9pt; }
+.tag { color: #B5FAFF; background-color: rgba(0,242,255,0.08); border: 1px solid rgba(0,242,255,0.20); border-radius: 9px; padding: 5px 9px; font-size: 8pt; font-weight: 700; }
+.verified { color: #86E7C2; font-size: 8pt; }
+.primary { background-image: linear-gradient(105deg, #00D9E8, #61EAF2); color: #06121B; border: 1px solid rgba(0,242,255,0.86); border-radius: 11px; padding: 9px 15px; font-weight: 800; box-shadow: 0 5px 18px rgba(0,242,255,0.12); }
+.primary:hover { background-image: linear-gradient(105deg, #63F2F8, #A4F7F6); box-shadow: 0 7px 22px rgba(0,242,255,0.24); }
+button { background-color: rgba(255,255,255,0.045); color: #E3ECF8; border: 1px solid rgba(255,255,255,0.10); border-radius: 11px; padding: 8px 12px; }
+button:hover { background-color: rgba(255,255,255,0.09); color: #FFFFFF; border-color: rgba(0,242,255,0.32); }
+button:disabled { color: rgba(215,228,244,0.50); background-color: rgba(255,255,255,0.035); }
+#app-icon { color: #B8FAFF; background-color: rgba(0,242,255,0.08); border: 1px solid rgba(0,242,255,0.18); border-radius: 12px; font-size: 20pt; }
+progressbar trough { background-color: rgba(255,255,255,0.09); border-radius: 8px; min-height: 9px; }
+progressbar progress { background-image: linear-gradient(90deg, #00D9E8, #7F5BFF); border-radius: 8px; }
+separator { background-color: rgba(255,255,255,0.09); }
+scrolledwindow { background-color: transparent; }
 """
 
 SECTIONS = [
@@ -105,18 +119,22 @@ class OmniStore:
         self.installed = self._load_installed()
         self.custom_sources = SourceStore()
         self.window = Gtk.Window(title="Nexus OmniStore")
-        self.window.set_default_size(1240, 820)
+        self.window.set_default_size(1380, 880)
         self.window.set_position(Gtk.WindowPosition.CENTER)
         self.window.connect("destroy", Gtk.main_quit)
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS.encode())
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        self.shell = Gtk.Box(spacing=0)
+        self.shell = Gtk.Box(spacing=14)
+        self.shell.set_name("app-shell")
+        self.shell.get_style_context().add_class("shell")
+        self.shell.set_margin_top(14); self.shell.set_margin_bottom(14)
+        self.shell.set_margin_start(14); self.shell.set_margin_end(14)
         self.window.add(self.shell)
         self._build_sidebar()
         self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-        self.content.set_margin_top(30); self.content.set_margin_bottom(24)
-        self.content.set_margin_start(30); self.content.set_margin_end(30)
+        self.content.set_margin_top(22); self.content.set_margin_bottom(18)
+        self.content.set_margin_start(20); self.content.set_margin_end(20)
         self.shell.pack_start(self.content, True, True, 0)
         self._render()
 
@@ -133,8 +151,8 @@ class OmniStore:
 
     def _build_sidebar(self):
         side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        side.set_size_request(270, -1); side.get_style_context().add_class("sidebar")
-        side.set_margin_top(28); side.set_margin_start(18); side.set_margin_end(16); side.set_margin_bottom(20)
+        side.set_size_request(246, -1); side.get_style_context().add_class("sidebar")
+        side.set_margin_top(8); side.set_margin_start(5); side.set_margin_end(5); side.set_margin_bottom(8)
         brand = Gtk.Label(); brand.set_markup('<span foreground="#F5FBFF" size="x-large" weight="heavy">NEXUS</span> <span foreground="#00F0FF" size="x-large" weight="heavy">OMNI</span>')
         brand.set_xalign(0); side.pack_start(brand, False, False, 7)
         caption = Gtk.Label(label="UNIFIED APP EXPERIENCE"); caption.get_style_context().add_class("eyebrow"); caption.set_xalign(0)
@@ -267,11 +285,16 @@ class OmniStore:
         hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8); hero.get_style_context().add_class("hero")
         hero.set_margin_top(3); hero.set_margin_bottom(3); hero.set_margin_start(1); hero.set_margin_end(1)
         hero.set_border_width(20)
-        hero.pack_start(self._label("Un solo lugar. Todo tu ecosistema.", "hero-title"), False, False, 0)
+        hero_row = Gtk.Box(spacing=18)
+        hero_copy_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        hero_copy_box.pack_start(self._label("Un solo lugar. Todo tu ecosistema.", "hero-title"), False, False, 0)
         hero_copy = ("Elige una aplicación de Flathub: Nexus OmniLoader la instala y la ejecuta en este perfil de usuario."
                      if self.active == "linux" else
                      "Explora catálogos oficiales. Descarga desde el editor y elige el paquete para instalarlo con la ruta compatible de Nexus.")
-        hero.pack_start(self._label(hero_copy, "hero-copy"), False, False, 0)
+        hero_copy_box.pack_start(self._label(hero_copy, "hero-copy"), False, False, 0)
+        hero_row.pack_start(hero_copy_box, True, True, 0)
+        hero_row.pack_end(self._label(f"{icon}\nNEXUS RUNTIME", "hero-mark"), False, False, 0)
+        hero.pack_start(hero_row, False, False, 0)
         self.content.pack_start(hero, False, False, 0)
         if self.active == "linux":
             add_flatpak = Gtk.Button(label="＋  Instalar aplicación Flathub por ID")
@@ -280,7 +303,8 @@ class OmniStore:
             add_flatpak.connect("clicked", self._install_flatpak_dialog)
             self.content.pack_start(add_flatpak, False, False, 0)
         scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        grid = Gtk.FlowBox(); grid.set_selection_mode(Gtk.SelectionMode.NONE); grid.set_max_children_per_line(3); grid.set_min_children_per_line(1); grid.set_column_spacing(14); grid.set_row_spacing(14)
+        scroll.set_overlay_scrolling(True)
+        grid = Gtk.FlowBox(); grid.set_selection_mode(Gtk.SelectionMode.NONE); grid.set_max_children_per_line(3); grid.set_min_children_per_line(1); grid.set_column_spacing(18); grid.set_row_spacing(18)
         scroll.add(grid); self.content.pack_start(scroll, True, True, 0)
         rows = list(APPS[self.active])
         if self.active == "linux":
@@ -299,19 +323,29 @@ class OmniStore:
     def _card(self, app):
         app_id, name, desc, origin, size, glyph, url, ext = app
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10); box.get_style_context().add_class("card")
-        box.set_size_request(260, 218); box.set_border_width(17)
-        top = Gtk.Box(spacing=10)
+        box.set_size_request(275, 304); box.set_border_width(15)
+        cover = Gtk.Box(spacing=13); cover.get_style_context().add_class("cover")
+        cover.get_style_context().add_class(f"cover-{self.active}")
+        cover.set_size_request(-1, 82); cover.set_border_width(13)
         real_icon = os.environ.get("NEXUS_ANDROID_REAL_ICON") if app_id == "privacy2048" else None
         if real_icon and Path(real_icon).is_file():
-            logo = Gtk.Image.new_from_file(real_icon); logo.set_size_request(40, 40)
+            logo = Gtk.Image.new_from_file(real_icon); logo.set_size_request(54, 54)
         else:
-            logo = Gtk.Label(label=glyph); logo.set_size_request(40, 40)
+            logo = Gtk.Label(label=glyph); logo.set_size_request(54, 54)
+            logo.get_style_context().add_class("cover-icon")
         logo.set_name("app-icon")
-        top.pack_start(logo, False, False, 0)
-        titlebox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        cover.pack_start(logo, False, False, 0)
+        cover_text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        cover_text.pack_start(self._label(self.active.upper(), "cover-label"), False, False, 0)
+        cover_text.pack_start(self._label(f"NEXUS · {ext.upper()}", "cover-label"), False, False, 0)
+        cover.pack_start(cover_text, True, True, 0)
+        box.pack_start(cover, False, False, 0)
+        titlebox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        titlebox.set_margin_top(2)
         titlebox.pack_start(self._label(name, "app-name"), False, False, 0)
-        verified = self._label("✓  Fuente verificada", "verified"); titlebox.pack_start(verified, False, False, 0)
-        top.pack_start(titlebox, True, True, 0); box.pack_start(top, False, False, 0)
+        verified = self._label(f"✓  Catálogo de {origin}", "verified")
+        titlebox.pack_start(verified, False, False, 0)
+        box.pack_start(titlebox, False, False, 0)
         box.pack_start(self._label(desc, "app-desc"), True, True, 0)
         meta = Gtk.Box(spacing=6); meta.pack_start(self._label(origin, "tag"), False, False, 0); meta.pack_start(self._label(size, "muted"), False, False, 0)
         box.pack_start(meta, False, False, 0)
@@ -352,17 +386,47 @@ class OmniStore:
             self._run_loader("7zip:auto", app_id, self.args.auto_launch)
             return
         if self.active == "web" and extension == ".pwa":
-            self.status.set_text(f"Abriendo {name} en Chromium mediante Nexus OmniLoader…")
+            self.status.set_text(f"Cargando {name} en Chromium mediante Nexus OmniLoader…")
             self.window.set_title(f"Nexus OmniStore · Cargando {name}…")
+            progress = Gtk.ProgressBar(); progress.set_show_text(True)
+            progress.set_text("Preparando aplicación web…"); progress.set_pulse_step(0.08)
+            self.content.pack_start(progress, False, False, 0); self.window.show_all()
+            started_at = time.monotonic()
             try:
-                subprocess.Popen(self._runtime_command("install", "web", url), stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
-                                 start_new_session=True, env=self._runtime_environment())
-                self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
-                self.status.set_text(f"PWA abierta ✓  {name} · Chromium ejecuta la aplicación web real")
-                self.window.set_title(f"Nexus OmniStore · Cargando {name}…")
+                process = subprocess.Popen(self._runtime_command("install", "web", url), stdin=subprocess.DEVNULL,
+                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+                                           start_new_session=True, env=self._runtime_environment())
             except OSError as exc:
+                progress.destroy()
                 self.status.set_text(f"No se pudo iniciar Chromium: {exc}")
+                self.window.set_title("Nexus OmniStore · No se pudo abrir la PWA")
+                return
+
+            def finish_web_launch():
+                progress.destroy()
+                if process.returncode == 0:
+                    self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
+                    self.status.set_text(f"PWA abierta ✓  {name} · Chromium ejecuta la aplicación web real")
+                    self.window.set_title(f"Nexus OmniStore · Abierta {name} ✓")
+                else:
+                    self.status.set_text(f"No se pudo abrir {name} mediante Nexus OmniLoader (código {process.returncode}).")
+                    self.window.set_title("Nexus OmniStore · No se pudo abrir la PWA")
+                return False
+
+            def poll_web_launch():
+                if process.poll() is None:
+                    progress.pulse()
+                    return True
+                elapsed = time.monotonic() - started_at
+                if elapsed < MIN_INSTALL_STATE_SECONDS:
+                    progress.set_fraction(1.0); progress.set_text("Verificando apertura… 100%")
+                    self.status.set_text(f"Cargando {name}… verificando la apertura en Chromium.")
+                    GLib.timeout_add(max(1, int((MIN_INSTALL_STATE_SECONDS - elapsed) * 1000)), finish_web_launch)
+                else:
+                    finish_web_launch()
+                return False
+
+            GLib.timeout_add(120, poll_web_launch)
             return
         self.status.set_text(f"Abriendo {origin}. Descarga {name} y luego selecciona el archivo {extension} aquí.")
         self._open_url(url)
@@ -409,11 +473,27 @@ class OmniStore:
         self.content.pack_start(progress, False, False, 0); self.window.show_all()
         try:
             log = tempfile.TemporaryFile(mode="w+t")
+            started_at = time.monotonic()
             process = subprocess.Popen(self._runtime_command("install", "linux", f"flatpak:{flatpak_id}"),
                                        stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                        text=True, close_fds=True, env=self._runtime_environment())
         except OSError as exc:
             progress.destroy(); self.window.set_title("Nexus OmniStore"); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
+
+        def finish_install(code, output):
+            progress.destroy()
+            if code == 0:
+                self.installed[store_id] = f"flatpak:{flatpak_id}"; self._save_installed()
+                self._render()
+                self.status.set_text(f"Instalado ✓  {flatpak_id} por Nexus OmniLoader · pulsa Abrir para ejecutarlo")
+                self.window.set_title(f"Nexus OmniStore · Instalado {flatpak_id} ✓")
+                if auto: GLib.timeout_add(300, lambda: self._launch_flatpak(flatpak_id) or False)
+            else:
+                detail = output[-240:] if output else f"OmniLoader terminó con código {code}."
+                self.status.set_text(f"Instalación no completada: {detail}")
+                self.window.set_title("Nexus OmniStore · Instalación no completada")
+            return False
+
         def poll():
             log.flush(); log.seek(0); output = log.read()
             percentages = [int(value) for value in re.findall(r"(?<!\d)(\d{1,3})%", output) if int(value) <= 100]
@@ -425,16 +505,16 @@ class OmniStore:
                 progress.pulse()
             if process.poll() is None:
                 return True
-            log.seek(0); output = log.read().strip(); log.close(); progress.destroy()
-            if process.returncode == 0:
-                self.installed[store_id] = f"flatpak:{flatpak_id}"; self._save_installed()
-                self._render()
-                self.status.set_text(f"Instalado ✓  {flatpak_id} por Nexus OmniLoader · pulsa Abrir para ejecutarlo")
-                if auto: GLib.timeout_add(300, lambda: self._launch_flatpak(flatpak_id) or False)
+            log.seek(0); output = log.read().strip(); log.close()
+            elapsed = time.monotonic() - started_at
+            if elapsed < MIN_INSTALL_STATE_SECONDS:
+                progress.set_fraction(1.0)
+                progress.set_text("Verificando paquete… 100%")
+                self.status.set_text("Instalando… verificando el resultado con Nexus OmniLoader.")
+                GLib.timeout_add(max(1, int((MIN_INSTALL_STATE_SECONDS - elapsed) * 1000)),
+                                 lambda: finish_install(process.returncode, output))
             else:
-                detail = output[-240:] if output else f"OmniLoader terminó con código {process.returncode}."
-                self.status.set_text(f"Instalación no completada: {detail}")
-                self.window.set_title("Nexus OmniStore")
+                finish_install(process.returncode, output)
             return False
         GLib.timeout_add(140, poll)
 
@@ -500,6 +580,7 @@ class OmniStore:
         self.content.pack_start(progress, False, False, 0); self.window.show_all()
         try:
             log = tempfile.TemporaryFile(mode="w+t")
+            started_at = time.monotonic()
             process = subprocess.Popen(self._runtime_command(action, self.active, path), stdin=subprocess.DEVNULL,
                                        stdout=log, stderr=subprocess.STDOUT, text=True, close_fds=True,
                                        env=self._runtime_environment())
@@ -507,6 +588,20 @@ class OmniStore:
             progress.destroy(); self.window.set_title("Nexus OmniStore"); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
         # OmniLoader does not expose fractional progress; show an honest live pulse
         # while the child runs, then record success only on its zero exit status.
+        def finish_install(code, output):
+            progress.destroy()
+            if code == 0:
+                self.installed[app_id] = path; self._save_installed()
+                self._render()
+                self.status.set_text(f"Instalado ✓  {Path(path).name}")
+                self.window.set_title(f"Nexus OmniStore · Instalado {app_id} ✓")
+                if auto: GLib.timeout_add(300, lambda: self._run_loader(path, app_id, auto=False, action="open") or False)
+            else:
+                detail = output[-180:] if output else f"OmniLoader terminó con código {code}."
+                self.status.set_text(f"Instalación no completada: {detail}")
+                self.window.set_title("Nexus OmniStore · Instalación no completada")
+            return False
+
         def poll():
             code = process.poll()
             if code is None:
@@ -514,16 +609,15 @@ class OmniStore:
             log.seek(0)
             output = log.read().strip()
             log.close()
-            progress.destroy()
-            if code == 0:
-                self.installed[app_id] = path; self._save_installed()
-                self.status.set_text(f"Instalado ✓  {Path(path).name}")
-                self._render()
-                if auto: GLib.timeout_add(300, lambda: self._run_loader(path, app_id, auto=False, action="open") or False)
+            elapsed = time.monotonic() - started_at
+            if action == "install" and elapsed < MIN_INSTALL_STATE_SECONDS:
+                progress.set_fraction(1.0)
+                progress.set_text("Verificando paquete… 100%")
+                self.status.set_text("Instalando… verificando el resultado con Nexus OmniLoader.")
+                GLib.timeout_add(max(1, int((MIN_INSTALL_STATE_SECONDS - elapsed) * 1000)),
+                                 lambda: finish_install(code, output))
             else:
-                detail = output[-180:] if output else f"OmniLoader terminó con código {code}."
-                self.status.set_text(f"Instalación no completada: {detail}")
-                self.window.set_title("Nexus OmniStore")
+                finish_install(code, output)
             return False
         GLib.timeout_add(140, poll)
 

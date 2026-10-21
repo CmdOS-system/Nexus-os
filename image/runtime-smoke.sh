@@ -246,6 +246,7 @@ run_store_evidence() {
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
 }
+# wmctrl is intentionally optional; the evidence helper falls back to xwininfo/xdotool.
 for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
