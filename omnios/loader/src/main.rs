@@ -631,10 +631,13 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
                 if !installed.success() {
                     return Ok(installed.code().map_or(ExitCode::FAILURE, |c| ExitCode::from(c as u8)));
                 }
-                eprintln!("APK {package} instalado en el dispositivo Android activo; solicitando la actividad de inicio.");
+                eprintln!("APK {package} instalado en el dispositivo Android activo; resolviendo y abriendo su actividad MAIN/LAUNCHER.");
                 return run("adb", [
-                    OsString::from("shell"), OsString::from("monkey"),
-                    OsString::from("-p"), OsString::from(package), OsString::from("1"),
+                    OsString::from("shell"), OsString::from("am"), OsString::from("start"),
+                    OsString::from("-W"), OsString::from("-a"),
+                    OsString::from("android.intent.action.MAIN"), OsString::from("-c"),
+                    OsString::from("android.intent.category.LAUNCHER"), OsString::from("-p"),
+                    OsString::from(package),
                 ]);
             }
             require_program("waydroid", "instalar aplicaciones Android")?;

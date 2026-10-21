@@ -256,26 +256,61 @@ def android_is_foreground():
 
 
 def launch_android_package():
-    """Recover a real APK launch through Android's package/activity manager."""
+    """Resolve and start the installed APK's real MAIN/LAUNCHER activity."""
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
-    activity = os.environ.get("NEXUS_ANDROID_LAUNCH_ACTIVITY", "").strip()
-    if activity:
-        if activity.startswith("."):
-            activity = package_name + activity
-        component = f"{package_name}/{activity}"
-        result = subprocess.run(["adb", "-s", serial, "shell", "am", "start", "-W", "-n", component],
-                                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                check=False, timeout=45)
-        if result.returncode != 0:
-            print(f"Explicit Android activity launch failed; trying package launcher: {result.stdout[-500:]}",
-                  file=sys.stderr)
-    if not activity or not android_is_foreground():
-        result = subprocess.run(["adb", "-s", serial, "shell", "monkey", "-p", package_name, "1"],
-                                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                check=False, timeout=45)
-        if result.returncode != 0:
-            raise RuntimeError(f"Android could not launch installed package {package_name}: {result.stdout[-500:]}")
+    candidates = []
+    configured = os.environ.get("NEXUS_ANDROID_LAUNCH_ACTIVITY", "").strip()
+    if configured:
+        candidates.append(configured if "/" in configured else f"{package_name}/{configured if not configured.startswith('.') else package_name + configured}")
+
+    # Ask PackageManager to resolve the launcher component on the running device.
+    # This works with APKs whose manifest activity is aliased or differs from the
+    # app label and avoids monkey's fragile launcher enumeration.
+    try:
+        resolved = subprocess.run(
+            ["adb", "-s", serial, "shell", "cmd", "package", "resolve-activity", "--brief",
+             "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", package_name],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=15)
+        for line in reversed(resolved.stdout.splitlines()):
+            component = line.strip()
+            if "/" in component and package_name.casefold() in component.casefold():
+                candidates.append(component)
+                break
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"PackageManager activity resolution failed: {error}", file=sys.stderr)
+
+    # The official F-Droid build's declared launcher, retained as a concrete
+    # fallback for Android images where resolve-activity is unavailable.
+    candidates.append(f"{package_name}/{package_name}.activities.SplashActivity")
+    candidates.append("")
+
+    failures = []
+    for component in dict.fromkeys(candidates):
+        if component:
+            argv = ["adb", "-s", serial, "shell", "am", "start", "-W", "-n", component]
+        else:
+            argv = ["adb", "-s", serial, "shell", "am", "start", "-W",
+                    "-a", "android.intent.action.MAIN", "-c",
+                    "android.intent.category.LAUNCHER", "-p", package_name]
+        try:
+            result = subprocess.run(argv, text=True, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, check=False, timeout=25)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            failures.append(f"{component or 'package launcher'}: {error}")
+            continue
+        output = result.stdout[-700:]
+        if result.returncode == 0:
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                if android_is_foreground():
+                    return
+                time.sleep(0.5)
+        failures.append(f"{component or 'package launcher'} (exit {result.returncode}): {output}")
+    raise RuntimeError(
+        f"Android could not start a real MAIN/LAUNCHER activity for {package_name}: "
+        + " | ".join(failures[-4:])
+    )
 
 
 def place_windows(store_window, app_window):
@@ -458,7 +493,7 @@ def relaunch_installed_7zip():
     if not wine:
         raise RuntimeError("Wine is required to launch the installed 7-Zip GUI")
     print(f"Reopening the installed 7-Zip GUI on DISPLAY={environment.get('DISPLAY')}.")
-    return subprocess.Popen([wine, executable], env=environment, stdin=subprocess.DEVNULL,
+    return subprocess.Popen([wine, executable, r"Z:\\tmp"], env=environment, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             close_fds=True, start_new_session=True)
 
