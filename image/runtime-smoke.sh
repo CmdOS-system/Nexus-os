@@ -50,6 +50,18 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         stop_wineserver "$wine_prefix"
       fi
       sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
+      # The OmniLoader dispatch is the primary installer path. Some Wine
+      # prefixes report a successful dispatch before the NSIS child has
+      # finished creating its GUI files, so complete the same official
+      # installer through Wine if its executable is still absent.
+      if [[ -z "$sevenzip_exe" || ! -s "$sevenzip_exe" ]]; then
+        wine_bin="$(command -v wine 2>/dev/null || command -v wine64 2>/dev/null || true)"
+        if [[ -n "$wine_bin" && -s "$installer" ]]; then
+          timeout --kill-after=5s 90s env WINEPREFIX="$wine_prefix" "$wine_bin" "$installer" /S || true
+          stop_wineserver "$wine_prefix"
+          sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
+        fi
+      fi
       if [[ -z "$sevenzip_exe" || ! -s "$sevenzip_exe" ]]; then
         extract_dir="$wine_prefix/drive_c/Program Files/7-Zip"
         mkdir -p "$extract_dir"
@@ -74,6 +86,15 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
     app_id="${target#flatpak:}"
     if [[ "$action" == "--store-install" ]]; then exec "$LOADER" --install-flatpak "$app_id"; fi
     exec "$LOADER" --run-flatpak "$app_id"
+  fi
+  if [[ "$ecosystem" == "android" ]]; then
+    [[ -f "$target" ]] || { echo "Android package does not exist: $target" >&2; exit 2; }
+    [[ -n "${ANDROID_SERIAL:-}" ]] || { echo "Android install/open requires an active ADB device." >&2; exit 2; }
+    # Force Nexus OmniLoader's Android route through the active Android user
+    # space. Its APK path installs the package and requests the launch activity
+    # with ADB; this is the real app, not a rendered package preview.
+    export NEXUS_ANDROID_TARGET=adb
+    exec timeout --kill-after=5s 180s "$LOADER" "$target"
   fi
   exec "$LOADER" "$target"
 fi
@@ -294,8 +315,10 @@ if [[ -x "$BUILD_TOOLS/apksigner" ]]; then
       icon_member="$(unzip -Z1 "$APK" | grep -Ei '^res/(mipmap|drawable)[^/]*/[^/]+\\.png$' | sort | tail -n 1 || true)"
     fi
     package_label="$(sed -n "s/^application-label:'\\(.*\\)'$/\\1/p" <<<"$badging" | head -n 1)"
+    launch_activity="$(sed -n "s/^launchable-activity: name='\\([^']*\\)'.*/\\1/p" <<<"$badging" | head -n 1)"
     export NEXUS_ANDROID_PACKAGE_NAME="org.secuso.privacyfriendly2048"
     export NEXUS_ANDROID_PACKAGE_LABEL="${package_label:-F-Droid 2048}"
+    if [[ -n "$launch_activity" ]]; then export NEXUS_ANDROID_LAUNCH_ACTIVITY="$launch_activity"; fi
     if [[ -n "$icon_member" ]]; then
       APK_ICON="$TMP_DIR/fdroid-2048-icon.png"
       unzip -p "$APK" "$icon_member" > "$APK_ICON"
@@ -469,4 +492,5 @@ if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
     python3 "$ROOT/tests/runtime/validate-evidence.py" --evidence-root "$PROJECT_ROOT/evidence" \
       --ecosystems windows web android linux
 fi
+
 

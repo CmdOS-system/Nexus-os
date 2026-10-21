@@ -236,15 +236,46 @@ def wait_for_install_state(timeout=12):
 
 def android_is_foreground():
     serial = os.environ["ANDROID_SERIAL"]
-    try:
-        result = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "activity", "activities"],
-                                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                check=False, timeout=8)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        print(f"ADB foreground query is not ready yet: {error}", file=sys.stderr)
-        return False
-    resumed = re.search(r"(?:mResumedActivity|topResumedActivity)\s*[:=]\s*[^\n]*", result.stdout)
-    return bool(resumed and "org.secuso.privacyfriendly2048" in resumed.group(0))
+    package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
+    probes = (
+        ["adb", "-s", serial, "shell", "dumpsys", "activity", "activities"],
+        ["adb", "-s", serial, "shell", "dumpsys", "window", "windows"],
+    )
+    active_lines = []
+    for argv in probes:
+        try:
+            result = subprocess.run(argv, text=True, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, check=False, timeout=10)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"ADB foreground query is not ready yet: {error}", file=sys.stderr)
+            continue
+        active_lines.extend(line for line in result.stdout.splitlines()
+                            if re.search(r"(?:mResumedActivity|topResumedActivity|mCurrentFocus|mFocusedApp)",
+                                         line, re.IGNORECASE))
+    return any(package_name.casefold() in line.casefold() for line in active_lines)
+
+
+def launch_android_package():
+    """Recover a real APK launch through Android's package/activity manager."""
+    serial = os.environ["ANDROID_SERIAL"]
+    package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
+    activity = os.environ.get("NEXUS_ANDROID_LAUNCH_ACTIVITY", "").strip()
+    if activity:
+        if activity.startswith("."):
+            activity = package_name + activity
+        component = f"{package_name}/{activity}"
+        result = subprocess.run(["adb", "-s", serial, "shell", "am", "start", "-W", "-n", component],
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                check=False, timeout=45)
+        if result.returncode != 0:
+            print(f"Explicit Android activity launch failed; trying package launcher: {result.stdout[-500:]}",
+                  file=sys.stderr)
+    if not activity or not android_is_foreground():
+        result = subprocess.run(["adb", "-s", serial, "shell", "monkey", "-p", package_name, "1"],
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                check=False, timeout=45)
+        if result.returncode != 0:
+            raise RuntimeError(f"Android could not launch installed package {package_name}: {result.stdout[-500:]}")
 
 
 def place_windows(store_window, app_window):
@@ -391,6 +422,29 @@ def relaunch_installed_7zip():
             executable = candidate
             break
     if not executable:
+        smoke_script = environment.get("NEXUS_RUNTIME_SMOKE", "")
+        if smoke_script and Path(smoke_script).is_file():
+            print("7-Zip is absent from the active Wine prefix; retrying the official OmniStore install route.",
+                  file=sys.stderr)
+            try:
+                subprocess.run(["bash", smoke_script, "--store-install", "windows", "7zip:auto"],
+                               env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, timeout=120, check=False)
+                if shutil.which("wineserver"):
+                    subprocess.run(["wineserver", "-w"], env=environment, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=12, check=False)
+                for name in ("7zFM.exe", "7zG.exe"):
+                    result = subprocess.run(
+                        ["find", prefix, "-type", "f", "-iname", name, "-print", "-quit"],
+                        text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                        timeout=15, check=False)
+                    candidate = result.stdout.strip()
+                    if candidate and Path(candidate).is_file():
+                        executable = candidate
+                        break
+            except (OSError, subprocess.TimeoutExpired) as error:
+                print(f"7-Zip install recovery did not complete: {error}", file=sys.stderr)
+    if not executable:
         raise RuntimeError(
             f"The installed 7-Zip GUI (7zFM.exe or 7zG.exe) is missing from WINEPREFIX={prefix}; "
             "searched recursively, including Program Files and Program Files (x86)"
@@ -429,6 +483,10 @@ try:
             ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android", "--no-audio"],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True, start_new_session=True)
+        if not android_is_foreground():
+            print("The OmniLoader install completed but Android has no resumed 2048 activity; requesting the real launcher activity.",
+                  file=sys.stderr)
+            launch_android_package()
     if ecosystem == "windows":
         try:
             store_window, app_window = wait_for_windows(12)
@@ -438,7 +496,7 @@ try:
     else:
         store_window, app_window = wait_for_windows(150 if ecosystem == "android" else 60)
     if ecosystem == "android":
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline and not android_is_foreground():
             time.sleep(1)
         if not android_is_foreground():
@@ -492,4 +550,5 @@ finally:
             wm_process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             wm_process.kill()
+
 
