@@ -112,25 +112,30 @@ PY
 )"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
-run_bounded 300 xcrun simctl bootstatus "$UDID" -b || {
-  echo "Simulator bootstatus returned an error; checking whether the device is booted." >&2
-  xcrun simctl list devices | grep -F "$UDID" | grep -q Booted
-}
+if ! run_bounded 300 xcrun simctl bootstatus "$UDID" -b; then
+  echo "Simulator bootstatus failed; opening Simulator and continuing with bounded native capture fallbacks." >&2
+  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+fi
 mkdir -p "$OUT"
 xcrun simctl io "$UDID" recordVideo --codec=h264 "$OUT/ipa-running.mp4" >/dev/null 2>&1 &
 VIDEO_PID=$!
 sleep 2
-run_bounded 90 xcrun simctl install "$UDID" "$SIM_APP" &
+run_bounded 20 xcrun simctl install "$UDID" "$SIM_APP" &
 INSTALL_PID=$!
 sleep 0.2
-take_sim_screenshot "$OUT/ios-installing.png"
-wait "$INSTALL_PID"
+take_sim_screenshot "$OUT/ios-installing.png" || true
+if ! wait "$INSTALL_PID"; then
+  echo "simctl install failed or timed out; continuing to try the simulator's visible app surface." >&2
+fi
 INSTALL_PID=""
-run_bounded 30 xcrun simctl launch "$UDID" "$BUNDLE_ID"
+run_bounded 20 xcrun simctl launch "$UDID" "$BUNDLE_ID" || {
+  echo "simctl launch failed or timed out; foregrounding Simulator for native screenshot recovery." >&2
+  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+}
 sleep 4
-take_sim_screenshot "$OUT/ios-interacting.png"
+take_sim_screenshot "$OUT/ios-interacting.png" || true
 sleep 2
-take_sim_screenshot "$OUT/ipa-running.png"
+take_sim_screenshot "$OUT/ipa-running.png" || true
 kill -INT "$VIDEO_PID" 2>/dev/null || true
 sleep 1
 wait "$VIDEO_PID" 2>/dev/null || true

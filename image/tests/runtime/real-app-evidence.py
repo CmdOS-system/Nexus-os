@@ -38,26 +38,71 @@ if ecosystem == "linux":
 
 
 def top_level_windows():
-    """wmctrl lists only managed top-level windows, unlike xdotool's tree search."""
-    result = subprocess.run(["wmctrl", "-l", "-G"], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+    """List real X11 windows, preferring wmctrl and falling back to xwininfo/xdotool."""
     rows = []
-    for line in result.stdout.splitlines():
-        fields = line.split(None, 7)
-        if len(fields) < 8:
-            continue
-        try:
-            wm_class = subprocess.run(["xprop", "-id", fields[0], "WM_CLASS"], text=True,
+    if shutil.which("wmctrl"):
+        result = subprocess.run(["wmctrl", "-l", "-G"], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                check=False, timeout=5)
+        candidates = []
+        for line in result.stdout.splitlines():
+            fields = line.split(None, 7)
+            if len(fields) < 8:
+                continue
+            try:
+                candidates.append((fields[0], int(fields[2]), int(fields[3]),
+                                   int(fields[4]), int(fields[5]), fields[7]))
+            except ValueError:
+                continue
+    elif shutil.which("xwininfo"):
+        result = subprocess.run(["xwininfo", "-root", "-tree"], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                check=False, timeout=5)
+        pattern = re.compile(r'^(\s+)(0x[0-9a-fA-F]+)\s+"(.*?)".*?\s(\d+)x(\d+)\+(-?\d+)\+(-?\d+)')
+        parsed = [(len(m.group(1)), m.group(2), int(m.group(6)), int(m.group(7)),
+                   int(m.group(4)), int(m.group(5)), m.group(3))
+                  for line in result.stdout.splitlines() if (m := pattern.search(line))]
+        min_indent = min((row[0] for row in parsed), default=-1)
+        candidates = [(wid, x, y, width, height, title)
+                      for indent, wid, x, y, width, height, title in parsed
+                      if indent == min_indent]
+    else:
+        result = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", ".*"], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                check=False, timeout=5)
+        candidates = []
+        for wid in result.stdout.splitlines():
+            geometry = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], text=True,
                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                      check=False).stdout
+                                      check=False, timeout=3).stdout
+            values = dict(re.findall(r"^(X|Y|WIDTH|HEIGHT)=(\d+)$", geometry, re.MULTILINE))
+            title = subprocess.run(["xdotool", "getwindowname", wid], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                   check=False, timeout=3).stdout.strip()
+            try:
+                candidates.append((wid, int(values["X"]), int(values["Y"]),
+                                   int(values["WIDTH"]), int(values["HEIGHT"]), title))
+            except (KeyError, ValueError):
+                continue
+    for wid, x, y, width, height, title in candidates:
+        try:
+            wm_class = subprocess.run(["xprop", "-id", wid, "WM_CLASS"], text=True,
+                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                      check=False, timeout=3).stdout if shutil.which("xprop") else ""
             class_match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', wm_class)
             class_name = " ".join(class_match.groups()) if class_match else ""
-            rows.append({"id": fields[0], "x": int(fields[2]), "y": int(fields[3]),
-                         "width": int(fields[4]), "height": int(fields[5]),
-                         "class": class_name, "title": fields[7]})
-        except ValueError:
+            rows.append({"id": wid, "x": x, "y": y, "width": width, "height": height,
+                         "class": class_name, "title": title})
+        except subprocess.TimeoutExpired:
             continue
     return rows
+
+
+def activate_window(window_id):
+    if shutil.which("wmctrl"):
+        subprocess.run(["wmctrl", "-ia", window_id], check=False, timeout=3)
+    else:
+        subprocess.run(["xdotool", "windowactivate", "--sync", window_id], check=False, timeout=3)
 
 
 def is_store(window):
@@ -127,7 +172,7 @@ def place_windows(store_window, app_window):
     for window, x, width in ((store_window, 0, 630), (app_window, 640, 630)):
         subprocess.run(["xdotool", "windowmove", window["id"], str(x), "24"], check=False)
         subprocess.run(["xdotool", "windowsize", window["id"], str(width), "670"], check=False)
-    subprocess.run(["wmctrl", "-ia", app_window["id"]], check=False)
+    activate_window(app_window["id"])
     time.sleep(0.4)
     fresh = top_level_windows()
     store_now = next((item for item in fresh if item["id"] == store_window["id"]), None)
@@ -169,7 +214,7 @@ def assert_distinct(first, second):
 
 
 def interact(window):
-    subprocess.run(["wmctrl", "-ia", window["id"]], check=False)
+    activate_window(window["id"])
     if ecosystem == "web":
         for key in ("Right", "Down", "Left", "Up", "Right", "Down"):
             subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=False)

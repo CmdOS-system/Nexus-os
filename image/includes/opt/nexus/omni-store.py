@@ -301,7 +301,12 @@ class OmniStore:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10); box.get_style_context().add_class("card")
         box.set_size_request(260, 218); box.set_border_width(17)
         top = Gtk.Box(spacing=10)
-        logo = Gtk.Label(label=glyph); logo.set_size_request(40, 40); logo.set_name("app-icon")
+        real_icon = os.environ.get("NEXUS_ANDROID_REAL_ICON") if app_id == "privacy2048" else None
+        if real_icon and Path(real_icon).is_file():
+            logo = Gtk.Image.new_from_file(real_icon); logo.set_size_request(40, 40)
+        else:
+            logo = Gtk.Label(label=glyph); logo.set_size_request(40, 40)
+        logo.set_name("app-icon")
         top.pack_start(logo, False, False, 0)
         titlebox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         titlebox.pack_start(self._label(name, "app-name"), False, False, 0)

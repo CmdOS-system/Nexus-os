@@ -246,7 +246,7 @@ run_store_evidence() {
       "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$title" "$package"
   cp "$PROJECT_ROOT/evidence/$ecosystem/$ecosystem-interacting.png" "$PROJECT_ROOT/evidence/$ecosystem/$primary"
 }
-for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool wmctrl curl; do
+for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl; do
   command -v "$tool" >/dev/null || { echo "Required runtime smoke tool missing: $tool" >&2; exit 1; }
 done
 # adb, emulator, scrcpy, Flatpak, and Android SDK commands are optional capabilities.
@@ -268,24 +268,65 @@ if [[ -x "$BUILD_TOOLS/apksigner" ]]; then
     echo "[smoke] Verify F-Droid APK package identity" >&2
     badging="$(timeout --kill-after=1s 15s "$BUILD_TOOLS/aapt2" dump badging "$APK")"
     grep -Fq "package: name='org.secuso.privacyfriendly2048'" <<<"$badging"
+    icon_member="$(sed -n "s/^application-icon-[^:]*:'\\([^']*\\)'.*/\\1/p" <<<"$badging" | head -n 1)"
+    if [[ -z "$icon_member" ]]; then
+      icon_member="$(unzip -Z1 "$APK" | grep -E '^res/(mipmap|drawable)[^/]*/[^/]+\\.png$' | sort | head -n 1 || true)"
+    fi
+    if [[ -n "$icon_member" ]]; then
+      APK_ICON="$TMP_DIR/fdroid-2048-icon.png"
+      unzip -p "$APK" "$icon_member" > "$APK_ICON"
+      python3 - "$APK_ICON" <<'PY'
+from pathlib import Path
+import sys
+if Path(sys.argv[1]).read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit("F-Droid APK icon resource is not a PNG")
+PY
+      export NEXUS_ANDROID_REAL_ICON="$APK_ICON"
+    elif [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+      echo "The real F-Droid APK did not expose a PNG launcher icon." >&2
+      exit 1
+    fi
   fi
   export NEXUS_FDROID_APK="$APK"
 else
   echo "[smoke] Android SDK apksigner unavailable; skipping APK package inspection" >&2
 fi
-# The dedicated runtime-evidence job provisions this AVD. Boot it only when its
-# emulator and APK tooling are present; ISO Gate intentionally has neither.
+# The runtime-evidence job installs the emulator and system image, but do not
+# require an AVD to have been pre-created. Create one from the installed image
+# when needed so this path remains usable on fresh GitHub-hosted runners.
 if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     [[ -n "${NEXUS_FDROID_APK:-}" ]] && [[ -x "$BUILD_TOOLS/aapt2" ]]; then
-  if emulator -list-avds 2>/dev/null | grep -Fxq nexus-evidence; then
+  AVD_NAME="${NEXUS_AVD_NAME:-nexus-evidence}"
+  if ! emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME"; then
+    AVDMANAGER="$(command -v avdmanager 2>/dev/null || true)"
+    if [[ -z "$AVDMANAGER" ]]; then
+      AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager -perm /111 -print -quit 2>/dev/null || true)"
+    fi
+    SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+    IMAGE_DIR="$ANDROID_HOME/system-images/android-35/google_apis/x86_64"
+    if [[ -x "$AVDMANAGER" && -d "$IMAGE_DIR" ]]; then
+      echo "[smoke] Create an Android AVD on demand from the installed SDK image" >&2
+      printf 'no\n' | timeout --kill-after=2s 45s "$AVDMANAGER" create avd \
+        -n "$AVD_NAME" -k "$SYSTEM_IMAGE" --device pixel_2
+    else
+      echo "Real Android UI evidence requires avdmanager and the Android 35 Google APIs x86_64 image." >&2
+      if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then exit 1; fi
+    fi
+  fi
+  if emulator -list-avds 2>/dev/null | grep -Fxq "$AVD_NAME"; then
     export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}" NEXUS_ANDROID_TARGET=adb
-    echo "[smoke] Boot the CI Android AVD for real F-Droid APK execution" >&2
-    timeout --kill-after=5s 180s emulator -avd nexus-evidence -no-window -gpu swiftshader_indirect \
+    echo "[smoke] Boot Android AVD for real F-Droid APK installation and execution" >&2
+    ACCEL_ARGS=()
+    if ! emulator -accel-check 2>&1 | grep -Eqi 'installed and usable|is usable'; then
+      echo "[smoke] KVM acceleration unavailable; using the emulator's software CPU mode" >&2
+      ACCEL_ARGS=(-accel off)
+    fi
+    timeout --kill-after=5s 240s emulator -avd "$AVD_NAME" -no-window -gpu swiftshader_indirect \
       -no-snapshot -no-audio -no-boot-anim -camera-back none -camera-front none \
-      </dev/null >/dev/null 2>&1 &
+      "${ACCEL_ARGS[@]}" </dev/null >/dev/null 2>&1 &
     ANDROID_EMULATOR_PID=$!
-    timeout --kill-after=2s 120s adb -s "$ANDROID_SERIAL" wait-for-device
-    boot_deadline=$((SECONDS + 120))
+    timeout --kill-after=2s 180s adb -s "$ANDROID_SERIAL" wait-for-device
+    boot_deadline=$((SECONDS + 180))
     until [[ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
       (( SECONDS < boot_deadline )) || { echo "Android AVD did not finish booting" >&2; exit 1; }
       sleep 2
@@ -293,12 +334,9 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
     adb -s "$ANDROID_SERIAL" shell settings put global window_animation_scale 0 >/dev/null
     adb -s "$ANDROID_SERIAL" shell settings put global transition_animation_scale 0 >/dev/null
     run_store_evidence android privacy2048 "2048" "$NEXUS_FDROID_APK"
-  else
-    echo "[smoke] Android SDK is available but nexus-evidence AVD is absent; skipping APK UI capture" >&2
-    if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
-      echo "Real Android UI evidence is required, but the nexus-evidence AVD was not created." >&2
-      exit 1
-    fi
+  elif [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
+    echo "Could not create an Android AVD; refusing to replace real APK UI evidence with synthetic output." >&2
+    exit 1
   fi
 else
   echo "[smoke] Android AVD/APK tooling unavailable; retaining signature and manifest checks only" >&2
