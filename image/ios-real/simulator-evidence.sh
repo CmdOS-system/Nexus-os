@@ -50,18 +50,21 @@ PY
 }
 
 take_sim_screenshot() {
-  local output="$1"
+  local output="$1" temporary="${1%.png}.capture.png"
   # CoreSimulator screenshots work on headless hosted macOS workers where
   # screencapture may wait forever for a WindowServer desktop session.
-  if run_bounded 20 xcrun simctl io "$UDID" screenshot "$output" && [[ -s "$output" ]]; then
+  rm -f "$temporary"
+  if run_bounded 20 xcrun simctl io "$UDID" screenshot "$temporary" && [[ -s "$temporary" ]]; then
+    mv -f "$temporary" "$output"
     return 0
   fi
-  rm -f "$output"
+  rm -f "$temporary"
   echo "CoreSimulator screenshot did not return; trying a short native desktop capture." >&2
-  if run_bounded 3 screencapture -x "$output" && [[ -s "$output" ]]; then
+  if run_bounded 3 screencapture -x "$temporary" && [[ -s "$temporary" ]]; then
+    mv -f "$temporary" "$output"
     return 0
   fi
-  rm -f "$output"
+  rm -f "$temporary"
   echo "No real iOS Simulator frame could be captured: $output" >&2
   return 1
 }
@@ -149,6 +152,7 @@ mkdir -p "$OUT"
 xcrun simctl io "$UDID" recordVideo --codec=h264 "$OUT/ipa-running.mp4" >/dev/null 2>&1 &
 VIDEO_PID=$!
 sleep 2
+take_sim_screenshot "$OUT/ios-installing.png" || true
 run_bounded 20 xcrun simctl install "$UDID" "$SIM_APP" &
 INSTALL_PID=$!
 sleep 0.2

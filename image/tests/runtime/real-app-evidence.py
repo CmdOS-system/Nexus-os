@@ -92,8 +92,13 @@ def top_level_windows():
                                       check=False, timeout=3).stdout if shutil.which("xprop") else ""
             class_match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', wm_class)
             class_name = " ".join(class_match.groups()) if class_match else ""
+            pid_output = subprocess.run(["xprop", "-id", wid, "_NET_WM_PID"], text=True,
+                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                        check=False, timeout=3).stdout if shutil.which("xprop") else ""
+            pid_match = re.search(r'=\s*(\d+)', pid_output)
             rows.append({"id": wid, "x": x, "y": y, "width": width, "height": height,
-                         "class": class_name, "title": title})
+                         "class": class_name, "title": title,
+                         "pid": int(pid_match.group(1)) if pid_match else None})
         except subprocess.TimeoutExpired:
             continue
     return rows
@@ -108,7 +113,8 @@ def activate_window(window_id):
 
 def is_store(window):
     identity = (window["title"] + " " + window["class"]).casefold()
-    return any(token in identity for token in ("omnistore", "nexus", "store", "python3"))
+    process_match = "store_process" in globals() and store_process is not None and window.get("pid") == store_process.pid
+    return process_match or any(token in identity for token in ("omnistore", "nexus", "store", "python3"))
 
 
 def is_target(window):
@@ -150,10 +156,32 @@ def wait_for_store(timeout=25):
     deadline = time.monotonic() + timeout
     recovery_at = time.monotonic() + 10
     recovered = False
+    process_window = None
     while time.monotonic() < deadline:
-        window = next((item for item in top_level_windows() if is_store(item)), None)
-        if window and window["width"] > 300 and window["height"] > 200:
-            return window
+        windows = top_level_windows()
+        window = next((item for item in windows if is_store(item)), None)
+        if not window and store_process.poll() is None:
+            window = next((item for item in windows if item.get("pid") == store_process.pid), None)
+        if window:
+            process_window = window
+            if window["width"] <= 300 or window["height"] <= 200:
+                if shutil.which("wmctrl"):
+                    subprocess.run(["wmctrl", "-ir", window["id"], "-e", "0,30,76,650,530"],
+                                   check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+                subprocess.run(["xdotool", "windowsize", window["id"], "650", "530"],
+                               check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+                subprocess.run(["xdotool", "windowmove", window["id"], "30", "76"],
+                               check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+                activate_window(window["id"])
+                refreshed = next((item for item in top_level_windows() if item["id"] == window["id"]), None)
+                if refreshed:
+                    window = refreshed
+                    process_window = refreshed
+            if window["width"] > 300 and window["height"] > 200:
+                return window
+            # Some GTK/X11 builds briefly report a 10x10 client even after the
+            # WM resize request. Preserve the real process-owned window and keep
+            # retrying instead of treating this transient geometry as fatal.
         if not recovered and time.monotonic() >= recovery_at:
             recovered = True
             if store_process.poll() is None:
@@ -167,6 +195,9 @@ def wait_for_store(timeout=25):
             print("OmniStore window was not mapped after 10s; relaunched it and allowing 5s to map.")
             time.sleep(5)
         time.sleep(0.2)
+    if process_window and store_process.poll() is None:
+        print(f"OmniStore owns a mapped X11 window ({process_window['width']}x{process_window['height']}); continuing after resize attempts.", file=sys.stderr)
+        return process_window
     windows = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}"
                          for item in top_level_windows())
     raise RuntimeError(f"OmniStore window did not map after automatic relaunch; windows: {windows or '<none>'}")
