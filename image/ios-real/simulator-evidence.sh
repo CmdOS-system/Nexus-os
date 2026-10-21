@@ -55,7 +55,7 @@ take_sim_screenshot() {
   # Keep this evidence tied to the simulator device framebuffer. A macOS desktop
   # screencapture is not an iOS app frame and must not be substituted for it.
   rm -f "$temporary"
-  if run_bounded 60 xcrun simctl io "$UDID" screenshot "$temporary" && [[ -s "$temporary" ]]; then
+  if run_bounded 20 xcrun simctl io "$UDID" screenshot "$temporary" && [[ -s "$temporary" ]]; then
     mv -f "$temporary" "$output"
     return 0
   fi
@@ -77,15 +77,15 @@ capture_installing_frame() {
 
 HOST_ARCH="$(uname -m)"
 if [[ "$HOST_ARCH" == "arm64" ]]; then SIM_ARCH=arm64; else SIM_ARCH=x86_64; fi
-SIM_SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-DEVICE_SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+SIM_SDK="$(run_bounded 20 xcrun --sdk iphonesimulator --show-sdk-path)"
+DEVICE_SDK="$(run_bounded 20 xcrun --sdk iphoneos --show-sdk-path)"
 SOURCE="$ROOT/image/ios-real/Nexus2048App.swift"
 BUNDLE_ID="com.nexus.omni2048"
 
 make_app() {
   local destination="$1" sdk="$2" target="$3"
   mkdir -p "$destination"
-  xcrun swiftc -parse-as-library -target "$target" -sdk "$sdk" \
+  run_bounded 240 xcrun swiftc -parse-as-library -target "$target" -sdk "$sdk" \
     -framework UIKit -O "$SOURCE" -o "$destination/Nexus2048"
   cat > "$destination/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -105,7 +105,7 @@ make_app() {
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
 </dict></plist>
 PLIST
-  codesign --force --sign - "$destination"
+  run_bounded 30 codesign --force --sign - "$destination"
 }
 
 SIM_APP="$BUILD/Nexus2048-Simulator.app"
@@ -113,10 +113,10 @@ DEVICE_APP="$BUILD/Payload/Nexus2048.app"
 make_app "$SIM_APP" "$SIM_SDK" "$SIM_ARCH-apple-ios17.0-simulator"
 make_app "$DEVICE_APP" "$DEVICE_SDK" "arm64-apple-ios17.0"
 [[ "$(lipo -archs "$DEVICE_APP/Nexus2048")" == *arm64* ]]
-ditto -c -k --sequesterRsrc --keepParent "$BUILD/Payload" "$OUT/nexus-2048.ipa"
+run_bounded 30 ditto -c -k --sequesterRsrc --keepParent "$BUILD/Payload" "$OUT/nexus-2048.ipa"
 
 DEVICE_JSON="$BUILD/devices.json"
-xcrun simctl list devices available -j > "$DEVICE_JSON"
+run_bounded 20 xcrun simctl list devices available -j > "$DEVICE_JSON"
 UDID="$(python3 - "$DEVICE_JSON" <<'PY'
 import json, sys
 devices=json.load(open(sys.argv[1], encoding="utf-8"))["devices"]
@@ -127,14 +127,14 @@ for runtime in sorted(devices, reverse=True):
 raise SystemExit("No available iPhone Simulator device")
 PY
 )"
-xcrun simctl boot "$UDID" 2>/dev/null || true
-open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+run_bounded 30 xcrun simctl boot "$UDID" 2>/dev/null || true
+run_bounded 10 open -g -a Simulator --args -CurrentDeviceUDID "$UDID" || true
 if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
   echo "SpringBoard did not become ready; resetting this simulator and retrying once." >&2
   run_bounded 30 xcrun simctl shutdown "$UDID" || true
   run_bounded 120 xcrun simctl erase "$UDID" || true
   run_bounded 30 xcrun simctl boot "$UDID" || true
-  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+  run_bounded 10 open -g -a Simulator --args -CurrentDeviceUDID "$UDID" || true
   if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
     echo "Simulator remains unavailable after reset; cannot produce genuine iOS app evidence." >&2
     exit 1
@@ -144,25 +144,23 @@ fi
 # actual device screen before installation begins. Never substitute the host desktop.
 if ! capture_installing_frame; then
   echo "Simulator framebuffer is not ready before installation; retrying after Simulator activation." >&2
-  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+  run_bounded 10 open -g -a Simulator --args -CurrentDeviceUDID "$UDID" || true
   sleep 2
   capture_installing_frame || true
 fi
 # Keep the simulator in a medium floating macOS window when a GUI session is
 # available. The headless CI capture path remains the simulator framebuffer.
-osascript >/dev/null 2>&1 <<'APPLESCRIPT' || true
-tell application "System Events"
-  if exists process "Simulator" then
-    tell process "Simulator"
-      set frontmost to true
-      if (count of windows) > 0 then
-        set position of window 1 to {430, 70}
-        set size of window 1 to {560, 690}
-      end if
-    end tell
-  end if
-end tell
-APPLESCRIPT
+run_bounded 10 osascript \
+  -e 'tell application "System Events"' \
+  -e 'if exists process "Simulator" then' \
+  -e 'tell process "Simulator"' \
+  -e 'set frontmost to true' \
+  -e 'if (count of windows) > 0 then' \
+  -e 'set position of window 1 to {430, 70}' \
+  -e 'set size of window 1 to {560, 690}' \
+  -e 'end if' -e 'end tell' -e 'end if' -e 'end tell' \
+  >/dev/null 2>&1 || true
+
 mkdir -p "$OUT"
 xcrun simctl io "$UDID" recordVideo --codec=h264 "$OUT/ipa-running.mp4" >/dev/null 2>&1 &
 VIDEO_PID=$!
@@ -178,7 +176,7 @@ if ! wait "$INSTALL_PID"; then
   run_bounded 30 xcrun simctl shutdown "$UDID" || true
   run_bounded 120 xcrun simctl erase "$UDID" || true
   run_bounded 30 xcrun simctl boot "$UDID" || true
-  open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+  run_bounded 10 open -g -a Simulator --args -CurrentDeviceUDID "$UDID" || true
   run_bounded 180 xcrun simctl bootstatus "$UDID" -b
   capture_installing_frame || true
   run_bounded 180 xcrun simctl install "$UDID" "$SIM_APP"
@@ -192,7 +190,7 @@ if [[ ! -s "$OUT/ios-installing.png" ]]; then
     exit 1
   }
 fi
-run_bounded 90 xcrun simctl launch "$UDID" "$BUNDLE_ID"
+run_bounded 45 xcrun simctl launch "$UDID" "$BUNDLE_ID"
 sleep 4
 take_sim_screenshot "$OUT/ios-interacting.png"
 sleep 2

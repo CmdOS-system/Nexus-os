@@ -256,62 +256,97 @@ def android_is_foreground():
 
 
 def launch_android_package():
-    """Resolve and start the installed APK's real MAIN/LAUNCHER activity."""
+    """Install if needed, resolve, and launch the APK's real Android activity."""
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
+    apk_path = os.environ.get("NEXUS_FDROID_APK", package_path)
+    if not apk_path or not Path(apk_path).is_file():
+        raise RuntimeError(f"Cannot recover Android launch without the real APK: {apk_path!r}")
+
     candidates = []
     configured = os.environ.get("NEXUS_ANDROID_LAUNCH_ACTIVITY", "").strip()
     if configured:
-        candidates.append(configured if "/" in configured else f"{package_name}/{configured if not configured.startswith('.') else package_name + configured}")
+        candidates.append(configured if "/" in configured else
+                          f"{package_name}/{configured if not configured.startswith('.') else package_name + configured}")
 
-    # Ask PackageManager to resolve the launcher component on the running device.
-    # This works with APKs whose manifest activity is aliased or differs from the
-    # app label and avoids monkey's fragile launcher enumeration.
-    try:
-        resolved = subprocess.run(
-            ["adb", "-s", serial, "shell", "cmd", "package", "resolve-activity", "--brief",
-             "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", package_name],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=15)
-        for line in reversed(resolved.stdout.splitlines()):
-            component = line.strip()
-            if "/" in component and package_name.casefold() in component.casefold():
-                candidates.append(component)
-                break
-    except (OSError, subprocess.TimeoutExpired) as error:
-        print(f"PackageManager activity resolution failed: {error}", file=sys.stderr)
-
-    # The official F-Droid build's declared launcher, retained as a concrete
-    # fallback for Android images where resolve-activity is unavailable.
-    candidates.append(f"{package_name}/{package_name}.activities.SplashActivity")
-    candidates.append("")
-
-    failures = []
-    for component in dict.fromkeys(candidates):
-        if component:
-            argv = ["adb", "-s", serial, "shell", "am", "start", "-W", "-n", component]
-        else:
-            argv = ["adb", "-s", serial, "shell", "am", "start", "-W",
-                    "-a", "android.intent.action.MAIN", "-c",
-                    "android.intent.category.LAUNCHER", "-p", package_name]
+    def resolve_activity():
         try:
-            result = subprocess.run(argv, text=True, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, check=False, timeout=25)
+            result = subprocess.run(
+                ["adb", "-s", serial, "shell", "cmd", "package", "resolve-activity", "--brief",
+                 "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER",
+                 "-p", package_name],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=15)
+            for line in reversed(result.stdout.splitlines()):
+                component = line.strip()
+                if "/" in component and package_name.casefold() in component.casefold():
+                    return component
         except (OSError, subprocess.TimeoutExpired) as error:
-            failures.append(f"{component or 'package launcher'}: {error}")
-            continue
-        output = result.stdout[-700:]
-        if result.returncode == 0:
-            deadline = time.monotonic() + 20
-            while time.monotonic() < deadline:
-                if android_is_foreground():
-                    return
-                time.sleep(0.5)
-        failures.append(f"{component or 'package launcher'} (exit {result.returncode}): {output}")
-    raise RuntimeError(
-        f"Android could not start a real MAIN/LAUNCHER activity for {package_name}: "
-        + " | ".join(failures[-4:])
-    )
+            print(f"PackageManager activity resolution failed: {error}", file=sys.stderr)
+        return ""
 
+    def attempt_launch():
+        resolved = resolve_activity()
+        launch_candidates = list(dict.fromkeys([*candidates, resolved]))
+        failures = []
+        for component in launch_candidates:
+            if not component:
+                continue
+            try:
+                result = subprocess.run(
+                    ["adb", "-s", serial, "shell", "am", "start", "-W", "-n", component],
+                    text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    check=False, timeout=30)
+            except (OSError, subprocess.TimeoutExpired) as error:
+                failures.append(f"{component}: {error}")
+                continue
+            if result.returncode == 0:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if android_is_foreground():
+                        return True, failures
+                    time.sleep(0.5)
+            failures.append(f"{component} (exit {result.returncode}): {result.stdout[-400:]}")
+
+        try:
+            result = subprocess.run(
+                ["adb", "-s", serial, "shell", "am", "start", "-W",
+                 "-a", "android.intent.action.MAIN", "-c",
+                 "android.intent.category.LAUNCHER", "-p", package_name],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30)
+            if result.returncode == 0:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if android_is_foreground():
+                        return True, failures
+                    time.sleep(0.5)
+            failures.append(f"package launcher (exit {result.returncode}): {result.stdout[-400:]}")
+        except (OSError, subprocess.TimeoutExpired) as error:
+            failures.append(f"package launcher: {error}")
+        return False, failures
+
+    launched, failures = attempt_launch()
+    if launched:
+        return
+
+    # Reinstall the exact verified F-Droid APK once to recover a package
+    # manager state that reports success while retaining no launchable activity.
+    install = subprocess.run(
+        ["adb", "-s", serial, "install", "-r", apk_path],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        check=False, timeout=180)
+    if install.returncode == 0 and "success" in install.stdout.casefold():
+        launched, retry_failures = attempt_launch()
+        if launched:
+            return
+        failures.extend(retry_failures)
+    else:
+        failures.append(f"APK reinstall (exit {install.returncode}): {install.stdout[-500:]}")
+    raise RuntimeError(
+        f"Android could not start the real MAIN/LAUNCHER activity for {package_name}: "
+        + " | ".join(failures[-5:])
+    )
 
 def place_windows(store_window, app_window):
     # Keep the desktop visible around two moderate floating windows. The Android

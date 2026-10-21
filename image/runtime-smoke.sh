@@ -66,13 +66,17 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         extract_dir="$wine_prefix/drive_c/Program Files/7-Zip"
         mkdir -p "$extract_dir"
         extractor="$(command -v 7z 2>/dev/null || command -v 7zz 2>/dev/null || command -v 7za 2>/dev/null || true)"
-        if [[ -n "$extractor" ]]; then
-          timeout --kill-after=2s 30s "$extractor" x "$installer" "-o$extract_dir" -y \
+        if [[ -n "$extractor" && -s "$installer" ]]; then
+          echo "Extracting the official 7-Zip self-extracting package with $extractor after Wine installation did not produce the GUI." >&2
+          timeout --kill-after=2s 45s "$extractor" x "$installer" "-o$extract_dir" -y \
             >/dev/null 2>&1 || true
         fi
         sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
       fi
-      test -n "$sevenzip_exe" && test -s "$sevenzip_exe"
+      if [[ -z "$sevenzip_exe" || ! -s "$sevenzip_exe" ]]; then
+        echo "Could not install or extract 7-Zip GUI from $installer; install p7zip-full (7z/7zz) and check Wine logs." >&2
+        exit 1
+      fi
       echo "7-Zip 26.04 installed from the official signed Windows installer."
       exit 0
     fi

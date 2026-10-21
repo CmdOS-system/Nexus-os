@@ -38,7 +38,7 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64 wine32:i386 fonts-wine \
-            xvfb xauth x11-utils xdotool wmctrl dbus-x11 xfwm4 xfconf ffmpeg \
+            xvfb xauth x11-utils xdotool wmctrl dbus-x11 xfwm4 xfconf ffmpeg p7zip-full \
             python3-pil python3-gi gir1.2-gtk-3.0 unzip zip file curl \
             gcc-aarch64-linux-gnu qemu-user-static clang lld llvm flatpak scrcpy
           sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
