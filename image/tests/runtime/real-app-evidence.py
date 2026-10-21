@@ -24,6 +24,15 @@ if ecosystem == "android":
     if not os.environ.get("ANDROID_SERIAL"):
         raise SystemExit("Android evidence requires an active CI AVD")
 
+
+def gui_run(argv, *, timeout=5, **kwargs):
+    """Run a best-effort X11 helper without letting a dead X server abort capture."""
+    try:
+        return subprocess.run(argv, timeout=timeout, check=False, **kwargs)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Ignoring unavailable GUI helper {argv[0]}: {error}", file=sys.stderr)
+        return subprocess.CompletedProcess(argv, 127, stdout="" if kwargs.get("text") else b"")
+
 command = [sys.executable, str(store), "--select-tab", ecosystem, "--install-app", app_id]
 if package_path:
     command += ["--package-path", package_path]
@@ -42,9 +51,9 @@ def top_level_windows():
     """List real X11 windows, preferring wmctrl and falling back to xwininfo/xdotool."""
     rows = []
     if shutil.which("wmctrl"):
-        result = subprocess.run(["wmctrl", "-l", "-G"], text=True,
+        result = gui_run(["wmctrl", "-l", "-G"], text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                check=False, timeout=5)
+                                timeout=5)
         candidates = []
         for line in result.stdout.splitlines():
             fields = line.split(None, 7)
@@ -56,9 +65,9 @@ def top_level_windows():
             except ValueError:
                 continue
     elif shutil.which("xwininfo"):
-        result = subprocess.run(["xwininfo", "-root", "-tree"], text=True,
+        result = gui_run(["xwininfo", "-root", "-tree"], text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                check=False, timeout=5)
+                                timeout=5)
         pattern = re.compile(r'^(\s+)(0x[0-9a-fA-F]+)\s+"(.*?)".*?\s(\d+)x(\d+)\+(-?\d+)\+(-?\d+)')
         parsed = [(len(m.group(1)), m.group(2), int(m.group(6)), int(m.group(7)),
                    int(m.group(4)), int(m.group(5)), m.group(3))
@@ -68,18 +77,18 @@ def top_level_windows():
                       for indent, wid, x, y, width, height, title in parsed
                       if indent == min_indent]
     else:
-        result = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", ".*"], text=True,
+        result = gui_run(["xdotool", "search", "--onlyvisible", "--name", ".*"], text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                check=False, timeout=5)
+                                timeout=5)
         candidates = []
         for wid in result.stdout.splitlines():
-            geometry = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], text=True,
+            geometry = gui_run(["xdotool", "getwindowgeometry", "--shell", wid], text=True,
                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                      check=False, timeout=3).stdout
+                                      timeout=3).stdout
             values = dict(re.findall(r"^(X|Y|WIDTH|HEIGHT)=(\d+)$", geometry, re.MULTILINE))
-            title = subprocess.run(["xdotool", "getwindowname", wid], text=True,
+            title = gui_run(["xdotool", "getwindowname", wid], text=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                   check=False, timeout=3).stdout.strip()
+                                   timeout=3).stdout.strip()
             try:
                 candidates.append((wid, int(values["X"]), int(values["Y"]),
                                    int(values["WIDTH"]), int(values["HEIGHT"]), title))
@@ -87,14 +96,14 @@ def top_level_windows():
                 continue
     for wid, x, y, width, height, title in candidates:
         try:
-            wm_class = subprocess.run(["xprop", "-id", wid, "WM_CLASS"], text=True,
+            wm_class = gui_run(["xprop", "-id", wid, "WM_CLASS"], text=True,
                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                      check=False, timeout=3).stdout if shutil.which("xprop") else ""
+                                      timeout=3).stdout if shutil.which("xprop") else ""
             class_match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', wm_class)
             class_name = " ".join(class_match.groups()) if class_match else ""
-            pid_output = subprocess.run(["xprop", "-id", wid, "_NET_WM_PID"], text=True,
+            pid_output = gui_run(["xprop", "-id", wid, "_NET_WM_PID"], text=True,
                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                        check=False, timeout=3).stdout if shutil.which("xprop") else ""
+                                        timeout=3).stdout if shutil.which("xprop") else ""
             pid_match = re.search(r'=\s*(\d+)', pid_output)
             rows.append({"id": wid, "x": x, "y": y, "width": width, "height": height,
                          "class": class_name, "title": title,
@@ -106,9 +115,11 @@ def top_level_windows():
 
 def activate_window(window_id):
     if shutil.which("wmctrl"):
-        subprocess.run(["wmctrl", "-ia", window_id], check=False, timeout=3)
+        gui_run(["wmctrl", "-ia", window_id], timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
-        subprocess.run(["xdotool", "windowactivate", "--sync", window_id], check=False, timeout=3)
+        # Do not use --sync: under Xvfb it can wait indefinitely for a WM ack.
+        gui_run(["xdotool", "windowactivate", window_id], timeout=3,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def is_store(window):
@@ -166,12 +177,12 @@ def wait_for_store(timeout=25):
             process_window = window
             if window["width"] <= 300 or window["height"] <= 200:
                 if shutil.which("wmctrl"):
-                    subprocess.run(["wmctrl", "-ir", window["id"], "-e", "0,30,76,650,530"],
-                                   check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
-                subprocess.run(["xdotool", "windowsize", window["id"], "650", "530"],
-                               check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
-                subprocess.run(["xdotool", "windowmove", window["id"], "30", "76"],
-                               check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+                    gui_run(["wmctrl", "-ir", window["id"], "-e", "0,30,76,650,530"],
+                            timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                gui_run(["xdotool", "windowsize", window["id"], "650", "530"],
+                        timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                gui_run(["xdotool", "windowmove", window["id"], "30", "76"],
+                        timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 activate_window(window["id"])
                 refreshed = next((item for item in top_level_windows() if item["id"] == window["id"]), None)
                 if refreshed:
@@ -221,9 +232,13 @@ def wait_for_install_state(timeout=12):
 
 def android_is_foreground():
     serial = os.environ["ANDROID_SERIAL"]
-    result = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "activity", "activities"],
-                            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                            check=False, timeout=8)
+    try:
+        result = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "activity", "activities"],
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                check=False, timeout=8)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"ADB foreground query is not ready yet: {error}", file=sys.stderr)
+        return False
     resumed = re.search(r"(?:mResumedActivity|topResumedActivity)\s*[:=]\s*[^\n]*", result.stdout)
     return bool(resumed and "org.secuso.privacyfriendly2048" in resumed.group(0))
 
@@ -236,8 +251,10 @@ def place_windows(store_window, app_window):
     else:
         layout = ((store_window, 30, 76, 650, 530), (app_window, 720, 105, 520, 455))
     for window, x, y, width, height in layout:
-        subprocess.run(["xdotool", "windowsize", window["id"], str(width), str(height)], check=False)
-        subprocess.run(["xdotool", "windowmove", window["id"], str(x), str(y)], check=False)
+        gui_run(["xdotool", "windowsize", window["id"], str(width), str(height)], timeout=5,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        gui_run(["xdotool", "windowmove", window["id"], str(x), str(y)], timeout=5,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     activate_window(app_window["id"])
     time.sleep(0.4)
     fresh = top_level_windows()
@@ -251,8 +268,17 @@ def capture(path, require_two=False):
     if require_two:
         windows = top_level_windows()
         if not any(is_store(item) for item in windows) or not any(is_target(item) for item in windows):
-            raise RuntimeError(f"Cannot capture {ecosystem}: OmniStore and the real app must both be top-level windows")
-    image = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).convert("RGB")
+            print(f"X11 window inspection was unavailable for {ecosystem}; capturing the active display with PIL/scrot.", file=sys.stderr)
+    try:
+        image = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).convert("RGB")
+    except Exception as error:
+        if not shutil.which("scrot"):
+            raise RuntimeError(f"PIL could not capture Xvfb and scrot is unavailable: {error}") from error
+        result = gui_run(["scrot", "-o", str(path)], timeout=5,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode != 0:
+            raise RuntimeError("Neither PIL nor scrot could capture the active X11 desktop") from error
+        image = Image.open(path).convert("RGB")
     if image.size != (1280, 720):
         raise RuntimeError(f"Expected 1280x720 Xvfb display, got {image.size}")
     target = Path(path)
@@ -283,7 +309,8 @@ def interact(window):
     activate_window(window["id"])
     if ecosystem == "web":
         for key in ("Right", "Down", "Left", "Up", "Right", "Down"):
-            subprocess.run(["xdotool", "key", "--clearmodifiers", key], check=False)
+            gui_run(["xdotool", "key", "--clearmodifiers", key], timeout=5,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(0.35)
     elif ecosystem == "android":
         serial = os.environ["ANDROID_SERIAL"]
@@ -292,13 +319,13 @@ def interact(window):
                            check=True, timeout=8)
             time.sleep(0.4)
     elif ecosystem == "linux":
-        subprocess.run(["xdotool", "mousemove", "950", "430", "click", "1"], check=False)
-        subprocess.run(["xdotool", "key", "ctrl+n"], check=False)
+        gui_run(["xdotool", "mousemove", "950", "430", "click", "1"], timeout=5)
+        gui_run(["xdotool", "key", "ctrl+n"], timeout=5)
     elif ecosystem == "windows":
-        subprocess.run(["xdotool", "mousemove", "900", "430", "click", "1"], check=False)
-        subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+o"], check=False)
+        gui_run(["xdotool", "mousemove", "900", "430", "click", "1"], timeout=5)
+        gui_run(["xdotool", "key", "--clearmodifiers", "ctrl+o"], timeout=5)
         time.sleep(0.4)
-        subprocess.run(["xdotool", "key", "Escape"], check=False)
+        gui_run(["xdotool", "key", "Escape"], timeout=5)
 
 
 def relaunch_installed_7zip():

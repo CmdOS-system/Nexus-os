@@ -336,16 +336,24 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
       local mode="$1" boot_deadline
       shift
       echo "[smoke] Boot Android AVD in $mode mode for real F-Droid APK execution" >&2
-      timeout --kill-after=5s 240s emulator -avd "$AVD_NAME" -no-window -gpu swiftshader_indirect \
+      local emulator_log="$TMP_DIR/android-emulator-${mode// /-}.log"
+      : > "$emulator_log"
+      timeout --kill-after=5s 420s emulator -avd "$AVD_NAME" -port 5554 -memory 2048 \
+        -no-window -gpu swiftshader_indirect \
         -no-snapshot -no-audio -no-boot-anim -camera-back none -camera-front none "$@" \
-        </dev/null >/dev/null 2>&1 &
+        </dev/null >>"$emulator_log" 2>&1 &
       ANDROID_EMULATOR_PID=$!
-      if ! timeout --kill-after=2s 90s adb -s "$ANDROID_SERIAL" wait-for-device; then
+      timeout --kill-after=1s 15s adb start-server >/dev/null 2>&1 || true
+      if ! timeout --kill-after=2s 180s adb -s "$ANDROID_SERIAL" wait-for-device; then
+        tail -n 40 "$emulator_log" >&2 || true
         return 1
       fi
-      boot_deadline=$((SECONDS + 150))
+      boot_deadline=$((SECONDS + 300))
       until [[ "$(timeout --kill-after=1s 8s adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
-        (( SECONDS < boot_deadline )) || return 1
+        if (( SECONDS >= boot_deadline )); then
+          tail -n 40 "$emulator_log" >&2 || true
+          return 1
+        fi
         sleep 2
       done
       return 0
@@ -356,14 +364,16 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
       kill "$ANDROID_EMULATOR_PID" >/dev/null 2>&1 || true
       wait "$ANDROID_EMULATOR_PID" 2>/dev/null || true
       ANDROID_EMULATOR_PID=""
+      timeout --kill-after=1s 10s adb kill-server >/dev/null 2>&1 || true
+      timeout --kill-after=1s 15s adb start-server >/dev/null 2>&1 || true
       timeout --kill-after=2s 20s adb -s "$ANDROID_SERIAL" wait-for-disconnect >/dev/null 2>&1 || true
       boot_android_avd "software fallback" -accel off -wipe-data || {
         echo "Android user-space emulator did not boot after software-mode recovery." >&2
         exit 1
       }
     fi
-    adb -s "$ANDROID_SERIAL" shell settings put global window_animation_scale 0 >/dev/null
-    adb -s "$ANDROID_SERIAL" shell settings put global transition_animation_scale 0 >/dev/null
+    timeout --kill-after=1s 15s adb -s "$ANDROID_SERIAL" shell settings put global window_animation_scale 0 >/dev/null 2>&1 || true
+    timeout --kill-after=1s 15s adb -s "$ANDROID_SERIAL" shell settings put global transition_animation_scale 0 >/dev/null 2>&1 || true
     run_store_evidence android privacy2048 "2048" "$NEXUS_FDROID_APK"
   elif [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
     echo "Could not create an Android AVD; refusing to replace real APK UI evidence with synthetic output." >&2

@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$ROOT/evidence/ios"
 BUILD="$(mktemp -d)"
 mkdir -p "$OUT"
+rm -f "$OUT/ios-installing.png" "$OUT/ios-interacting.png" "$OUT/ipa-running.png" "$OUT/ipa-running.mp4"
 VIDEO_PID=""
 INSTALL_PID=""
 cleanup() {
@@ -123,6 +124,9 @@ PY
 )"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+# Save a real framebuffer frame immediately after boot, before bootstatus or
+# package installation can consume their longer bounded waits.
+take_sim_screenshot "$OUT/ios-installing.png" || true
 if ! run_bounded 180 xcrun simctl bootstatus "$UDID" -b; then
   echo "SpringBoard did not become ready; resetting this simulator and retrying once." >&2
   run_bounded 30 xcrun simctl shutdown "$UDID" || true
