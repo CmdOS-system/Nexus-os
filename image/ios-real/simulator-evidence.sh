@@ -75,10 +75,14 @@ capture_installing_frame() {
   return 1
 }
 
+# Give CoreSimulatorService time to publish its runtimes on a fresh hosted runner.
+# The first query may trigger service startup and take close to a minute.
+run_bounded 90 xcrun simctl list runtimes >/dev/null 2>&1 || true
+
 HOST_ARCH="$(uname -m)"
 if [[ "$HOST_ARCH" == "arm64" ]]; then SIM_ARCH=arm64; else SIM_ARCH=x86_64; fi
-SIM_SDK="$(run_bounded 20 xcrun --sdk iphonesimulator --show-sdk-path)"
-DEVICE_SDK="$(run_bounded 20 xcrun --sdk iphoneos --show-sdk-path)"
+SIM_SDK="$(run_bounded 90 xcrun --sdk iphonesimulator --show-sdk-path)"
+DEVICE_SDK="$(run_bounded 90 xcrun --sdk iphoneos --show-sdk-path)"
 SOURCE="$ROOT/image/ios-real/Nexus2048App.swift"
 BUNDLE_ID="com.nexus.omni2048"
 
@@ -86,7 +90,7 @@ make_app() {
   local destination="$1" sdk="$2" target="$3"
   mkdir -p "$destination"
   run_bounded 240 xcrun swiftc -parse-as-library -target "$target" -sdk "$sdk" \
-    -framework UIKit -O "$SOURCE" -o "$destination/Nexus2048"
+    -Xcc -isysroot -Xcc "$sdk" -framework UIKit -O "$SOURCE" -o "$destination/Nexus2048"
   cat > "$destination/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -116,7 +120,7 @@ make_app "$DEVICE_APP" "$DEVICE_SDK" "arm64-apple-ios17.0"
 run_bounded 30 ditto -c -k --sequesterRsrc --keepParent "$BUILD/Payload" "$OUT/nexus-2048.ipa"
 
 DEVICE_JSON="$BUILD/devices.json"
-run_bounded 20 xcrun simctl list devices available -j > "$DEVICE_JSON"
+run_bounded 90 xcrun simctl list devices available -j > "$DEVICE_JSON"
 UDID="$(python3 - "$DEVICE_JSON" <<'PY'
 import json, sys
 devices=json.load(open(sys.argv[1], encoding="utf-8"))["devices"]

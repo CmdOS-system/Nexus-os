@@ -631,7 +631,11 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
                 if !installed.success() {
                     return Ok(installed.code().map_or(ExitCode::FAILURE, |c| ExitCode::from(c as u8)));
                 }
-                eprintln!("APK {package} instalado en el dispositivo Android activo; resolviendo y abriendo su actividad MAIN/LAUNCHER.");
+                eprintln!("APK {package} instalado en el dispositivo Android activo.");
+                if env::var("NEXUS_ANDROID_INSTALL_ONLY").as_deref() == Ok("1") {
+                    return Ok(ExitCode::SUCCESS);
+                }
+                eprintln!("Resolviendo y abriendo su actividad MAIN/LAUNCHER.");
                 return run("adb", [
                     OsString::from("shell"), OsString::from("am"), OsString::from("start"),
                     OsString::from("-W"), OsString::from("-a"),

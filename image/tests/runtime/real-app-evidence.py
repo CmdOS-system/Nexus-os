@@ -36,11 +36,17 @@ def gui_run(argv, *, timeout=5, **kwargs):
 command = [sys.executable, str(store), "--select-tab", ecosystem, "--install-app", app_id]
 if package_path:
     command += ["--package-path", package_path]
-command += ["--auto-launch"]
+if ecosystem != "android":
+    command += ["--auto-launch"]
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
 environment.update(GDK_BACKEND="x11", GSK_RENDERER="cairo", LIBGL_ALWAYS_SOFTWARE="1",
                    NO_AT_BRIDGE="1")
+if ecosystem == "android":
+    # The installer records success only after ADB confirms package installation.
+    # Launch is a separate step so an activity-start error cannot masquerade as
+    # an APK installation failure.
+    environment["NEXUS_ANDROID_INSTALL_ONLY"] = "1"
 if ecosystem == "web":
     environment["NEXUS_CHROMIUM_PROFILE"] = "/tmp/chromium-profile"
 if ecosystem == "linux":
@@ -133,7 +139,7 @@ def is_target(window):
     if ecosystem == "web" and "chrom" in identity and not is_store(window):
         return True
     accepted = {
-        "windows": ("7-zip", "7zfm", "7zip"),
+        "windows": ("7-zip", "7zfm", "7zip", "sevenzip"),
         "web": ("2048",),
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
         "android": ("2048", "scrcpy"),
@@ -163,6 +169,22 @@ def launch_store():
                                close_fds=True, start_new_session=True)
     store_processes.append(process)
     return process
+
+
+def restart_store_if_unmapped():
+    global store_process
+    windows = top_level_windows()
+    if any(is_store(item) and item["width"] > 300 and item["height"] > 200 for item in windows):
+        return
+    if store_process.poll() is None:
+        store_process.terminate()
+        try:
+            store_process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            store_process.kill()
+            store_process.wait(timeout=2)
+    store_process = launch_store()
+    wait_for_store(timeout=25)
 
 
 def wait_for_store(timeout=25):
@@ -463,8 +485,18 @@ def interact(window):
             time.sleep(0.35)
     elif ecosystem == "android":
         serial = os.environ["ANDROID_SERIAL"]
+        try:
+            size = subprocess.run(["adb", "-s", serial, "shell", "wm", "size"],
+                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  check=False, timeout=8).stdout
+            matches = re.findall(r"(\d+)x(\d+)", size)
+            width, height = (map(int, matches[-1]) if matches else (720, 1280))
+        except (OSError, subprocess.TimeoutExpired):
+            width, height = 720, 1280
+        start_x, end_x, y = int(width * 0.78), int(width * 0.22), int(height * 0.52)
         for _ in range(3):
-            subprocess.run(["adb", "-s", serial, "shell", "input", "swipe", "850", "620", "250", "620", "220"],
+            subprocess.run(["adb", "-s", serial, "shell", "input", "swipe",
+                            str(start_x), str(y), str(end_x), str(y), "220"],
                            check=True, timeout=8)
             time.sleep(0.4)
     elif ecosystem == "linux":
@@ -541,7 +573,7 @@ def relaunch_installed_7zip():
     # A Wine virtual desktop gives 7-Zip a stable, medium-sized X11
     # surface on headless runners where its HWND otherwise remains a 1x1 IME.
     # The installed 7-Zip executable still provides the application UI.
-    return subprocess.Popen([wine, "explorer", "/desktop=Nexus-7-Zip,960x620", executable],
+    return subprocess.Popen([wine, "explorer", "/desktop=SevenZip,960x640", executable],
                             env=environment, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             close_fds=True, start_new_session=True)
@@ -570,19 +602,34 @@ try:
     wait_for_install_state()
     capture(installing_png, require_store=True)
     if ecosystem == "android":
-        mirror_process = subprocess.Popen(
-            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android", "--no-audio"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            close_fds=True, start_new_session=True)
         if not android_is_foreground():
-            print("The OmniLoader install completed but Android has no resumed 2048 activity; requesting the real launcher activity.",
+            print("APK installation succeeded but Android has no resumed 2048 activity; requesting the real launcher activity.",
                   file=sys.stderr)
             launch_android_package()
+        if not android_is_foreground():
+            raise RuntimeError("The installed F-Droid 2048 package did not become Android's foreground activity")
+        # Start the mirror only after Android resumes the real app. Keep its
+        # output so a missing native X11 surface is diagnosable from CI.
+        mirror_log = Path("/tmp/nexus-scrcpy-android.log")
+        mirror_handle = mirror_log.open("w")
+        mirror_process = subprocess.Popen(
+            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"],
+             "--window-title", "2048 - Android", "--window-width", "920",
+             "--window-height", "640", "--no-audio"],
+            stdin=subprocess.DEVNULL, stdout=mirror_handle, stderr=subprocess.STDOUT,
+            close_fds=True, start_new_session=True)
+        time.sleep(1)
+        if mirror_process.poll() is not None:
+            mirror_handle.close()
+            details = mirror_log.read_text(errors="replace")[-2000:]
+            raise RuntimeError(f"scrcpy exited before mapping the real Android app window: {details}")
     if ecosystem == "windows":
         try:
             store_window, app_window = wait_for_windows(12)
-        except RuntimeError:
+        except RuntimeError as first_error:
+            print(f"7-Zip window did not map on first launch: {first_error}", file=sys.stderr)
             recovery_process = relaunch_installed_7zip()
+            restart_store_if_unmapped()
             store_window, app_window = wait_for_windows(45)
     else:
         store_window, app_window = wait_for_windows(150 if ecosystem == "android" else 60)
@@ -628,6 +675,9 @@ finally:
             mirror_process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             mirror_process.kill()
+        finally:
+            if "mirror_handle" in locals() and not mirror_handle.closed:
+                mirror_handle.close()
     for process in store_processes:
         if process.poll() is None:
             process.terminate()
