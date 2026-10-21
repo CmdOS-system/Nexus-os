@@ -245,6 +245,7 @@ trap 'exit 143' TERM
 trap 'exit 130' INT
 NO_AT_BRIDGE=1 xfwm4 --replace --compositor=off </dev/null >/dev/null 2>&1 &
 wm_pid=$!
+export NEXUS_XFWM4_STARTED=1
 bash -c 'trap - INT; exec ffmpeg -nostdin -hide_banner -loglevel error -y \
   -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -an \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart "$1"' \

@@ -144,6 +144,13 @@ def is_target(window):
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
         "android": ("2048", "scrcpy"),
     }.get(ecosystem, (app_title.casefold(),))
+    if ecosystem == "windows" and window["width"] >= 300 and window["height"] >= 200:
+        # Wine's virtual desktop is the mapped X11 top-level surface; the real
+        # 7-Zip GUI is launched inside it. Ignore 1x1 Wine IME helper windows.
+        wine_class = any(token in window["class"].casefold()
+                         for token in ("explorer.exe", "wine", "7zfm.exe"))
+        if wine_class:
+            return True
     return any(value in identity for value in accepted)
 
 
@@ -395,17 +402,19 @@ def capture(path, require_store=False, require_two=False):
     windows = top_level_windows()
     if require_store and not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                  for item in windows):
-        # GTK can unmap or temporarily report a 10x10 client during install
-        # transitions. Ask the live OmniStore process to remap and resize its
-        # own window, then re-read the X11 tree before rejecting the capture.
-        try:
-            wait_for_store(timeout=8)
-        except RuntimeError as error:
-            print(f"OmniStore window recovery before capture failed: {error}", file=sys.stderr)
-        windows = top_level_windows()
-        if not any(is_store(item) and item["width"] > 300 and item["height"] > 200
+        # Keep the active OmniStore process untouched when its install title
+        # changes faster than X11 refreshes. Wait briefly for its existing GTK
+        # surface to reappear before the normal non-black framebuffer checks.
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            windows = top_level_windows()
+            if any(is_store(item) and item["width"] > 300 and item["height"] > 200
                    for item in windows):
-            raise RuntimeError(f"Cannot capture {ecosystem}: Nexus OmniStore has no mapped desktop-sized X11 window")
+                break
+            pump_gtk_events()
+            time.sleep(0.2)
+        else:
+            raise RuntimeError(f"Cannot capture {ecosystem}: Nexus OmniStore X11 surface did not return after 3s; process status={store_process.poll()}")
     if require_two and (not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                 for item in windows) or
                         not any(is_target(item) and item["width"] > 300 and item["height"] > 200
@@ -573,7 +582,17 @@ def relaunch_installed_7zip():
     # A Wine virtual desktop gives 7-Zip a stable, medium-sized X11
     # surface on headless runners where its HWND otherwise remains a 1x1 IME.
     # The installed 7-Zip executable still provides the application UI.
-    return subprocess.Popen([wine, "explorer", "/desktop=SevenZip,960x640", executable],
+    winepath = shutil.which("winepath")
+    windows_executable = executable
+    if winepath:
+        converted = subprocess.run([winepath, "-w", executable], env=environment,
+                                   text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                   timeout=5, check=False)
+        if converted.returncode == 0 and converted.stdout.strip():
+            windows_executable = converted.stdout.strip()
+    # explorer.exe expects a DOS path when it starts a child inside a Wine
+    # virtual desktop. Passing the host /... path leaves only its 1x1 IME.
+    return subprocess.Popen([wine, "explorer", "/desktop=7-Zip,900x620", windows_executable],
                             env=environment, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             close_fds=True, start_new_session=True)
@@ -582,10 +601,10 @@ def relaunch_installed_7zip():
 store_processes = []
 wm_process = None
 if shutil.which("xfwm4"):
-    # run_recorded_test starts xfwm4 before launching this script. Replacing
-    # that WM tears down the active Xfce/D-Bus session and can unmap GTK windows.
-    wm_ready = False
-    if shutil.which("wmctrl"):
+    # The runtime wrapper starts the WM before this test. Its explicit marker
+    # avoids replacing xfwm4 when wmctrl cannot query EWMH under Xvfb.
+    wm_ready = environment.get("NEXUS_XFWM4_STARTED") == "1"
+    if not wm_ready and shutil.which("wmctrl"):
         wm_ready = gui_run(["wmctrl", "-m"], text=True, stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL, timeout=3).returncode == 0
     if not wm_ready:
