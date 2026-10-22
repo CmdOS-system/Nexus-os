@@ -8,7 +8,6 @@ import sys
 import tempfile
 import re
 import time
-import zipfile
 from pathlib import Path
 
 import gi
@@ -22,9 +21,9 @@ HOME = Path.home()
 STATE = HOME / ".local/share/nexus/omnistore-installed.json"
 MIN_INSTALL_STATE_SECONDS = 2.8
 CSS = """
-window { background: linear-gradient(135deg, #05070D, #080C14 58%, #0B0B18); color: #F3F7FF; font-family: Inter, 'Noto Sans', sans-serif; }
+window { background-color: rgba(5,7,13,0.84); color: #F3F7FF; font-family: Inter, 'Noto Sans', sans-serif; }
 .shell { background-color: transparent; }
-.sidebar { background-image: linear-gradient(155deg, rgba(26,35,53,0.91), rgba(12,17,29,0.94)); border: 1px solid rgba(255,255,255,0.09); border-radius: 22px; box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
+.sidebar { background-image: linear-gradient(155deg, rgba(18,27,43,0.78), rgba(8,13,24,0.82)); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
 .brand { color: #F8FBFF; font-size: 20pt; font-weight: 800; letter-spacing: 0.5px; }
 .brand-accent { color: #00F2FF; }
 .eyebrow { color: #74EAF2; font-size: 8pt; font-weight: 700; letter-spacing: 1.6px; }
@@ -33,13 +32,12 @@ window { background: linear-gradient(135deg, #05070D, #080C14 58%, #0B0B18); col
 .nav-button { background-color: transparent; color: rgba(226,235,250,0.68); border: 1px solid transparent; border-radius: 12px; padding: 13px 12px; font-size: 10pt; }
 .nav-button:hover { background-color: rgba(255,255,255,0.055); color: #F5FBFF; border-color: rgba(255,255,255,0.08); }
 .nav-button:checked { background-image: linear-gradient(100deg, rgba(0,242,255,0.17), rgba(112,0,255,0.10)); color: #B8FAFF; border-color: rgba(0,242,255,0.34); box-shadow: inset 3px 0 #00F2FF, 0 5px 18px rgba(0,242,255,0.07); }
-.hero { background-image: linear-gradient(112deg, rgba(0,242,255,0.16), rgba(30,37,66,0.70) 48%, rgba(112,0,255,0.17)); background-color: rgba(16,22,36,0.78); border: 1px solid rgba(255,255,255,0.13); border-radius: 22px; box-shadow: 0 20px 46px rgba(0,0,0,0.28); }
+.hero { background-image: linear-gradient(112deg, rgba(0,242,255,0.12), rgba(15,23,39,0.70) 48%, rgba(112,0,255,0.12)); background-color: rgba(10,16,28,0.68); border: 1px solid rgba(255,255,255,0.10); border-radius: 22px; box-shadow: 0 20px 46px rgba(0,0,0,0.28); }
 .hero-title { color: #F7FBFF; font-size: 20pt; font-weight: 700; }
 .hero-copy { color: rgba(225,235,248,0.76); font-size: 10pt; }
 .hero-mark { color: rgba(0,242,255,0.92); font-size: 31pt; font-weight: 700; }
-.card { background-image: linear-gradient(145deg, rgba(25,33,50,0.86), rgba(13,19,31,0.88)); border: 1px solid rgba(255,255,255,0.09); border-radius: 19px; box-shadow: 0 14px 32px rgba(0,0,0,0.25); }
-.card:hover { background-image: linear-gradient(145deg, rgba(31,44,62,0.94), rgba(16,24,39,0.96)); border-color: rgba(0,242,255,0.42); box-shadow: 0 18px 38px rgba(0,0,0,0.35), 0 0 18px rgba(0,242,255,0.10); }
-.cover { background-image: linear-gradient(125deg, rgba(0,242,255,0.20), rgba(112,0,255,0.22)); background-color: #111A2A; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; }
+.card { background-image: linear-gradient(145deg, rgba(21,30,47,0.78), rgba(8,14,25,0.82)); border: 1px solid rgba(255,255,255,0.08); border-radius: 19px; box-shadow: 0 14px 32px rgba(0,0,0,0.25); }
+.card:hover { background-image: linear-gradient(145deg, rgba(25,40,58,0.88), rgba(11,20,33,0.91)); border-color: rgba(0,242,255,0.38); box-shadow: 0 18px 38px rgba(0,0,0,0.35), 0 0 18px rgba(0,242,255,0.10); }
 .cover-windows { background-image: linear-gradient(125deg, rgba(0,153,255,0.24), rgba(112,0,255,0.24)); }
 .cover-android { background-image: linear-gradient(125deg, rgba(52,211,153,0.19), rgba(0,153,255,0.20)); }
 .cover-ios { background-image: linear-gradient(125deg, rgba(170,180,205,0.16), rgba(112,0,255,0.24)); }
@@ -125,10 +123,10 @@ class OmniStore:
         self.window = Gtk.Window(title="Nexus OmniStore")
         screen = self.window.get_screen()
         screen_width, screen_height = screen.get_width(), screen.get_height()
-        # Keep the store a normal floating desktop window on laptop displays;
-        # the window manager retains its titlebar and standard controls.
-        self.window.set_default_size(max(640, min(1120, screen_width - 160)),
-                                     max(480, min(700, screen_height - 140)))
+        # Keep OmniStore an intentionally floating window with native WM chrome.
+        self.window.set_visual(screen.get_rgba_visual() or screen.get_system_visual())
+        self.window.set_default_size(max(760, min(960, screen_width - 260)),
+                                     max(520, min(620, screen_height - 140)))
         self.window.set_resizable(True)
         self.window.set_position(Gtk.WindowPosition.CENTER)
         self.window.connect("destroy", Gtk.main_quit)
@@ -333,7 +331,7 @@ class OmniStore:
     def _card(self, app):
         app_id, name, desc, origin, size, glyph, url, ext = app
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10); box.get_style_context().add_class("card")
-        box.set_size_request(275, 304); box.set_border_width(15)
+        box.set_size_request(250, 286); box.set_border_width(15)
         cover = Gtk.Box(spacing=13); cover.get_style_context().add_class("cover")
         cover.get_style_context().add_class(f"cover-{self.active}")
         cover.set_size_request(-1, 82); cover.set_border_width(13)
@@ -402,44 +400,25 @@ class OmniStore:
             progress.set_text("Preparando aplicación web…"); progress.set_pulse_step(0.08)
             self.content.pack_start(progress, False, False, 0); self.window.show_all()
             started_at = time.monotonic()
-            fallback = {"shown": False}
             try:
                 process = subprocess.Popen(self._runtime_command("install", "web", url), stdin=subprocess.DEVNULL,
                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
                                            start_new_session=True, env=self._runtime_environment())
             except OSError as exc:
                 progress.destroy()
-                if app_id == "2048-web":
-                    self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
-                    self._show_2048_fallback(f"Chromium no pudo iniciarse ({exc}); se ejecuta el juego 2048 local.")
-                else:
-                    self.status.set_text(f"No se pudo iniciar Chromium: {exc}")
-                    self.window.set_title("Nexus OmniStore · No se pudo abrir la PWA")
+                self.status.set_text(f"No se pudo iniciar Chromium: {exc}")
+                self.window.set_title("Nexus OmniStore · No se pudo abrir la PWA")
                 return
 
             def finish_web_launch():
                 progress.destroy()
-                if fallback["shown"]:
-                    return False
                 if process.returncode == 0:
                     self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
                     self.status.set_text(f"PWA abierta ✓  {name} · Chromium ejecuta la aplicación web real")
                     self.window.set_title(f"Nexus OmniStore · Abierta {name} ✓")
                 else:
-                    if app_id == "2048-web":
-                        self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
-                        self._show_2048_fallback("Chromium no pudo abrir la PWA; se ejecuta el juego 2048 local.")
-                    else:
-                        self.status.set_text(f"No se pudo abrir {name} mediante Nexus OmniLoader (código {process.returncode}).")
-                        self.window.set_title("Nexus OmniStore · No se pudo abrir la PWA")
-                return False
-
-            def recover_missing_web_window():
-                if app_id != "2048-web" or self._has_2048_window():
-                    return False
-                fallback["shown"] = True
-                self.installed[app_id] = f"web:{url}"; self._save_installed(); self._render()
-                self._show_2048_fallback("Chromium no mapeó una ventana X11 en 5 segundos; se ejecuta el juego 2048 local.")
+                    self.status.set_text(f"No se pudo abrir {name} mediante Nexus OmniLoader (código {process.returncode}).")
+                    self.window.set_title("Nexus OmniStore · No se pudo abrir la PWA")
                 return False
 
             def poll_web_launch():
@@ -456,8 +435,6 @@ class OmniStore:
                 return False
 
             GLib.timeout_add(120, poll_web_launch)
-            if app_id == "2048-web":
-                GLib.timeout_add_seconds(5, recover_missing_web_window)
             return
         self.status.set_text(f"Abriendo {origin}. Descarga {name} y luego selecciona el archivo {extension} aquí.")
         self._open_url(url)
@@ -510,11 +487,6 @@ class OmniStore:
                                        text=True, close_fds=True, env=self._runtime_environment())
         except OSError as exc:
             progress.destroy()
-            if (self.active == "android" and os.environ.get("NEXUS_ANDROID_INSTALL_ONLY") == "1"
-                    and Path(path).suffix.casefold() == ".apk" and self._valid_android_apk(path)):
-                self.installed[app_id] = path; self._save_installed(); self._render()
-                self._show_2048_fallback(f"ADB/OmniLoader no inició ({exc}); APK válido, ejecutando 2048 local.")
-                return
             self.window.set_title("Nexus OmniStore"); self.status.set_text(f"No se pudo iniciar OmniLoader: {exc}"); return
 
         def finish_install(code, output):
@@ -570,63 +542,8 @@ class OmniStore:
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
                              start_new_session=True, env=self._runtime_environment())
             self.status.set_text(f"Aplicación web iniciada en Chromium: {url}")
-            if "play2048.co" in url:
-                GLib.timeout_add_seconds(5, lambda: self._show_2048_fallback(
-                    "Chromium no mapeó 2048 en 5 segundos; se ejecuta el juego local.")
-                    if not self._has_2048_window() else False)
         except OSError as exc:
-            if "play2048.co" in url:
-                self._show_2048_fallback(f"No se pudo iniciar Chromium ({exc}); se ejecuta el juego local.")
-            else:
-                self.status.set_text(f"No se pudo iniciar la PWA: {exc}")
-
-    @staticmethod
-    def _has_2048_window():
-        try:
-            result = subprocess.run(["wmctrl", "-l", "-G"], text=True,
-                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                    timeout=1, check=False)
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        for line in result.stdout.splitlines():
-            fields = line.split(None, 7)
-            if len(fields) >= 8 and fields[7].casefold().startswith("2048"):
-                try:
-                    if int(fields[4]) >= 300 and int(fields[5]) >= 200:
-                        return True
-                except ValueError:
-                    continue
-        return False
-
-    def _show_2048_fallback(self, message):
-        helper = Path(__file__).with_name("nexus-2048.py")
-        if not helper.is_file():
-            self.status.set_text(f"{message} (no se encontró el lanzador GTK local).")
-            return False
-        try:
-            subprocess.Popen([sys.executable, str(helper)], stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             close_fds=True, start_new_session=True,
-                             env={**os.environ, "GDK_BACKEND": "x11", "GSK_RENDERER": "cairo",
-                                  "LIBGL_ALWAYS_SOFTWARE": "1", "NO_AT_BRIDGE": "1"})
-            self.status.set_text(f"Instalado ✓  {message}")
-            self.window.set_title("Nexus OmniStore · Instalado 2048 ✓")
-        except OSError as exc:
-            self.status.set_text(f"Instalado ✓  No se pudo iniciar el tablero local: {exc}")
-            self.window.set_title("Nexus OmniStore · Instalado 2048 ✓")
-        return False
-
-    @staticmethod
-    def _valid_android_apk(path):
-        try:
-            with zipfile.ZipFile(path) as apk:
-                names = set(apk.namelist())
-                if not {"AndroidManifest.xml", "classes.dex"}.issubset(names) or apk.testzip() is not None:
-                    return False
-                dex_header = apk.read("classes.dex")[:8]
-                return len(dex_header) == 8 and dex_header.startswith(b"dex\n") and dex_header[7] == 0
-        except (OSError, zipfile.BadZipFile):
-            return False
+            self.status.set_text(f"No se pudo iniciar la PWA: {exc}")
 
     @staticmethod
     def _filter(extension):
@@ -687,19 +604,8 @@ class OmniStore:
                 self._render()
                 self.status.set_text(f"Instalado ✓  {Path(path).name}")
                 self.window.set_title(f"Nexus OmniStore · Instalado {app_id} ✓")
-                if self.active == "android" and os.environ.get("NEXUS_ANDROID_INSTALL_ONLY") == "1":
-                    GLib.timeout_add_seconds(5, lambda: self._show_2048_fallback(
-                        "ADB no mapeó 2048 en 5 segundos; se ejecuta el juego local.")
-                        if not self._has_2048_window() else False)
                 if auto: GLib.timeout_add(300, lambda: self._run_loader(path, app_id, auto=False, action="open") or False)
             else:
-                if (self.active == "android" and os.environ.get("NEXUS_ANDROID_INSTALL_ONLY") == "1"
-                        and Path(path).suffix.casefold() == ".apk" and self._valid_android_apk(path)):
-                    self.installed[app_id] = path; self._save_installed(); self._render()
-                    self.status.set_text("Instalado ✓  APK válido; ADB no respondió a tiempo. Iniciando 2048 local.")
-                    self.window.set_title(f"Nexus OmniStore · Instalado {app_id} ✓")
-                    self._show_2048_fallback("ADB no respondió a tiempo; se ejecuta el juego 2048 local.")
-                    return False
                 detail = output[-180:] if output else f"OmniLoader terminó con código {code}."
                 self.status.set_text(f"Instalación no completada: {detail}")
                 self.window.set_title("Nexus OmniStore · Instalación no completada")

@@ -11,6 +11,7 @@ papirus-icon-theme
 fonts-inter
 librsvg2-common
 alsa-utils
+picom
 
 python3-gi
 gir1.2-gtk-3.0

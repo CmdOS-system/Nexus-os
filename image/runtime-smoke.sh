@@ -232,6 +232,7 @@ set -euo pipefail
 video_file="$1"; shift
 wm_pid=""
 recorder_pid=""
+compositor_pid=""
 stop_pid() {
   local pid="$1" attempt
   [[ -n "$pid" ]] || return 0
@@ -272,6 +273,7 @@ cleanup_recording() {
     finish_recorder "$recorder_pid" || true
   fi
   stop_pid "$wm_pid"
+  stop_pid "$compositor_pid"
   pkill -TERM -u "$(id -u)" -x xfconfd 2>/dev/null || true
 }
 trap cleanup_recording EXIT
@@ -280,6 +282,11 @@ trap 'exit 130' INT
 NO_AT_BRIDGE=1 xfwm4 --replace --compositor=off </dev/null >/dev/null 2>&1 &
 wm_pid=$!
 export NEXUS_XFWM4_STARTED=1
+if command -v picom >/dev/null 2>&1 && [[ -s "$ROOT/includes/etc/nexus/picom.conf" ]]; then
+  picom --config "$ROOT/includes/etc/nexus/picom.conf" </dev/null >/dev/null 2>&1 &
+  compositor_pid=$!
+  sleep 0.25
+fi
 bash -c 'trap - INT; exec ffmpeg -nostdin -hide_banner -loglevel error -y \
   -f x11grab -video_size 1280x720 -framerate 15 -i "$DISPLAY" -an \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart "$1"' \
@@ -478,7 +485,7 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
         timeout --kill-after=1s 15s adb start-server >/dev/null 2>&1 || true
         timeout --kill-after=2s 20s adb -s "$ANDROID_SERIAL" wait-for-disconnect >/dev/null 2>&1 || true
       fi
-      if boot_android_avd "software fallback" 900 -accel off -wipe-data; then
+      if boot_android_avd "software-only emulator" 900 -accel off -wipe-data; then
         ANDROID_RUNTIME_READY=1
       else
         if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then

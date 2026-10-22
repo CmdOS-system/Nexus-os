@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus Cyber-Glass Compositor
+Comment=Enable X11 translucency, blur and shadows for floating desktop windows
+Exec=/usr/local/libexec/nexus-cyber-glass-compositor
+OnlyShowIn=XFCE;
+Terminal=false

@@ -501,13 +501,6 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
     }
     require_program("chromium", "abrir una PWA en ventana aislada")?;
     let is_2048 = url.contains("play2048.co") || url.contains("2048");
-    let local_game = if is_2048 {
-        let path = PathBuf::from("/tmp/nexus-2048.html");
-        fs::write(&path, NEXUS_2048_HTML)?;
-        Some(path)
-    } else {
-        None
-    };
     let profile = if is_2048 {
         PathBuf::from("/tmp/nexus-2048-profile")
     } else {
@@ -516,15 +509,14 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
                 .join(".local/share/nexus/chromium-pwa"))
     };
     fs::create_dir_all(&profile)?;
-    let app_url = local_game.as_ref().map(|path| format!("file://{}", path.display()))
-        .unwrap_or_else(|| url.to_owned());
+    let app_url = url.to_owned();
     let mut args = vec![
         OsString::from("--no-sandbox"),
         OsString::from("--disable-gpu"),
         OsString::from("--disable-dev-shm-usage"),
         OsString::from("--no-first-run"),
-        OsString::from("--window-size=780,560"),
-        OsString::from("--window-position=700,76"),
+        OsString::from("--window-size=640,500"),
+        OsString::from("--window-position=600,58"),
         OsString::from("--password-store=basic"),
         OsString::from(format!("--user-data-dir={}", profile.display())),
     ];
@@ -535,18 +527,6 @@ fn chromium_app(url: &str) -> io::Result<ExitCode> {
     run("chromium", args)
 }
 
-const NEXUS_2048_HTML: &str = r##"<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>2048</title>
-<style>
-:root{color-scheme:dark;font-family:Inter,"Noto Sans",sans-serif;background:#080d18;color:#edf7ff}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 50% 8%,#15334a,#080d18 68%)}main{width:min(94vw,500px);padding:22px;border:1px solid #176579;border-radius:22px;background:linear-gradient(145deg,#111c2d,#090f1b);box-shadow:0 18px 55px #0009}header{display:flex;align-items:center;gap:12px}h1{margin:0;color:#6df5ff;font-size:2rem;flex:1}#score{padding:10px 14px;border-radius:10px;background:#15283b;color:#aafaff;font-weight:800}p{color:#9db1c8}.board{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;padding:10px;border:1px solid #1d4056;border-radius:16px;background:#0a1422}.cell{aspect-ratio:1;display:grid;place-items:center;border-radius:10px;background:#132337;color:#eafcff;font-size:clamp(1.3rem,6vw,2rem);font-weight:800;border:1px solid #213e53}.v2,.v4{background:#183448}.v8,.v16{background:#14536a}.v32,.v64{background:#244b85}.v128,.v256,.v512,.v1024,.v2048{background:linear-gradient(135deg,#087b83,#6945a7);border-color:#63f1f5}.actions{display:flex;justify-content:space-between;align-items:center;margin-top:12px}button{border:1px solid #28566b;border-radius:9px;background:#142235;color:#e9faff;padding:9px 14px;cursor:pointer}button:hover{border-color:#63f1f5}
-</style></head><body><main><header><h1>2048</h1><div id="score">Puntos 0</div></header><p>Combina las fichas con las flechas del teclado o W A S D.</p><div class="board" id="board" aria-label="Tablero de 2048"></div><div class="actions"><span id="message">¡A jugar!</span><button id="restart">Nuevo juego</button></div></main>
-<script>
-const board=document.querySelector('#board'),scoreNode=document.querySelector('#score'),message=document.querySelector('#message');let cells,score;
-function reset(){cells=Array(16).fill(0);score=0;spawn();spawn();draw()}function spawn(){let empty=cells.map((v,i)=>v?null:i).filter(v=>v!==null);if(empty.length)cells[empty[Math.floor(Math.random()*empty.length)]]=Math.random()<.1?4:2}
-function draw(){board.replaceChildren(...cells.map(v=>{let e=document.createElement('div');e.className='cell '+(v?'v'+v:'');e.textContent=v||'';return e}));scoreNode.textContent='Puntos '+score}
-function move(dir){let old=cells.join(','),lines=[];for(let n=0;n<4;n++){let ids=[];for(let k=0;k<4;k++){let r=dir==='up'||dir==='down'?k:n,c=dir==='left'||dir==='right'?k:n;if(dir==='down')r=3-k;if(dir==='right')c=3-k;ids.push(r*4+c)}lines.push(ids)}for(let ids of lines){let a=ids.map(i=>cells[i]).filter(Boolean),out=[];for(let i=0;i<a.length;i++){if(a[i]===a[i+1]){out.push(a[i]*2);score+=a[i]*2;i++}else out.push(a[i])}while(out.length<4)out.push(0);ids.forEach((id,i)=>cells[id]=out[i])}if(old!==cells.join(',')){spawn();message.textContent='¡Sigue combinando!';draw()}}
-document.addEventListener('keydown',e=>{let d={ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right',ArrowUp:'up',w:'up',ArrowDown:'down',s:'down'}[e.key];if(d){e.preventDefault();move(d)}});document.querySelector('#restart').onclick=reset;reset();
-</script></body></html>"##;
 
 fn confirm(action: &str, path: &Path) -> io::Result<bool> {
     if let Some(accepted) = cyber_glass_dialog(
@@ -649,33 +629,17 @@ fn dispatch(path: &Path, extra: &[OsString]) -> io::Result<ExitCode> {
             let package = inspect_apk(&absolute)?;
             if env::var("NEXUS_ANDROID_TARGET").as_deref() == Ok("adb") {
                 let install_only = env::var("NEXUS_ANDROID_INSTALL_ONLY").as_deref() == Ok("1");
-                if install_only && !command_exists("adb") {
-                    eprintln!("APK {package} validado; ADB no está disponible. La evidencia abrirá el juego 2048 local.");
-                    return Ok(ExitCode::SUCCESS);
-                }
                 require_program("adb", "instalar la aplicación Android en el dispositivo o emulador ADB")?;
                 if env::var("NEXUS_SMOKE_AUTOCONFIRM").as_deref() != Ok("1")
                     && !confirm("Se instalará esta aplicación en el dispositivo Android activo.", &absolute)?
                 {
                     return Ok(ExitCode::SUCCESS);
                 }
-                let installed = match Command::new("adb")
+                let installed = Command::new("adb")
                     .args([OsString::from("install"), OsString::from("-r")])
                     .arg(&absolute)
-                    .status()
-                {
-                    Ok(status) => status,
-                    Err(error) if install_only => {
-                        eprintln!("APK {package} validado; ADB no respondió ({error}). La evidencia abrirá el juego 2048 local.");
-                        return Ok(ExitCode::SUCCESS);
-                    }
-                    Err(error) => return Err(error),
-                };
+                    .status()?;
                 if !installed.success() {
-                    if install_only {
-                        eprintln!("APK {package} validado; ADB terminó con {installed}. La evidencia abrirá el juego 2048 local.");
-                        return Ok(ExitCode::SUCCESS);
-                    }
                     return Ok(installed.code().map_or(ExitCode::FAILURE, |c| ExitCode::from(c as u8)));
                 }
                 eprintln!("APK {package} instalado en el dispositivo Android activo.");
