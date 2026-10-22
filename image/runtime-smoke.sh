@@ -95,10 +95,24 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
   if [[ "$ecosystem" == "android" ]]; then
     [[ -f "$target" ]] || { echo "Android package does not exist: $target" >&2; exit 2; }
     [[ -n "${ANDROID_SERIAL:-}" ]] || { echo "Android install/open requires an active ADB device." >&2; exit 2; }
-    # Force Nexus OmniLoader's Android route through the active Android user
-    # space. Its APK path installs the package and requests the launch activity
-    # with ADB; this is the real app, not a rendered package preview.
+    # Install through OmniLoader, then verify package-manager registration.
+    # When the evidence driver requested install-only, defer activity launch to
+    # it so an ADB launch timeout cannot turn a successful APK install into a
+    # failed OmniStore install state.
     export NEXUS_ANDROID_TARGET=adb
+    if [[ "$action" == "--store-install" && "${NEXUS_ANDROID_INSTALL_ONLY:-0}" == "1" ]]; then
+      install_status=0
+      timeout --kill-after=5s 180s "$LOADER" "$target" || install_status=$?
+      package_name="${NEXUS_ANDROID_PACKAGE_NAME:-org.secuso.privacyfriendly2048}"
+      package_path="$(timeout --kill-after=1s 12s adb -s "$ANDROID_SERIAL" shell pm path "$package_name" 2>/dev/null || true)"
+      if grep -q '^package:' <<<"$package_path"; then
+        echo "Verified the real APK package in PackageManager; deferring app activity launch to the runtime evidence driver."
+        exit 0
+      fi
+      echo "OmniLoader did not leave $package_name installed (status $install_status): $package_path" >&2
+      if (( install_status == 0 )); then install_status=1; fi
+      exit "$install_status"
+    fi
     exec timeout --kill-after=5s 180s "$LOADER" "$target"
   fi
   exec "$LOADER" "$target"

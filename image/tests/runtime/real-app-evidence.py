@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -282,6 +283,41 @@ def android_is_foreground():
                             if re.search(r"(?:mResumedActivity|topResumedActivity|mCurrentFocus|mFocusedApp)",
                                          line, re.IGNORECASE))
     return any(package_name.casefold() in line.casefold() for line in active_lines)
+
+
+def stop_mirror_process(process):
+    if process is None or process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except (OSError, ProcessLookupError):
+        process.terminate()
+    try:
+        process.wait(timeout=4)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            process.kill()
+        process.wait(timeout=3)
+
+
+def launch_android_framebuffer_viewer():
+    """Show the live framebuffer streamed from the real ADB device in a desktop window."""
+    ffplay = shutil.which("ffplay")
+    if not ffplay:
+        raise RuntimeError("Android screen mirror fallback requires ffplay from the installed FFmpeg package")
+    serial = os.environ["ANDROID_SERIAL"]
+    command = (
+        f'adb -s "{serial}" exec-out screenrecord --output-format=h264 - | '
+        f'"{ffplay}" -hide_banner -loglevel error -an -f h264 -i pipe:0 '
+        '-window_title "2048 - Android" -x 430 -y 600'
+    )
+    print("scrcpy did not map a desktop window; opening a live ADB framebuffer stream in ffplay.",
+          file=sys.stderr)
+    return subprocess.Popen(["bash", "-o", "pipefail", "-c", command], env=environment,
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
 
 
 def launch_android_package():
@@ -578,6 +614,15 @@ def relaunch_installed_7zip(*, virtual_desktop=False):
     wine = shutil.which("wine") or shutil.which("wine64")
     if not wine:
         raise RuntimeError("Wine is required to launch the installed 7-Zip GUI")
+    wineboot = shutil.which("wineboot")
+    if wineboot:
+        subprocess.run([wineboot, "-u"], env=environment, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=60, check=False)
+    if shutil.which("wineserver"):
+        subprocess.run(["wineserver", "-w"], env=environment, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=15, check=False)
     print(f"Reopening the installed 7-Zip GUI on DISPLAY={environment.get('DISPLAY')}.")
     # Prefer the installed GUI executable directly: this lets Wine map the
     # real 7-Zip top-level window under Xvfb. Keep a named virtual desktop as
@@ -640,7 +685,7 @@ try:
         if mirror_process.poll() is not None:
             mirror_handle.close()
             details = mirror_log.read_text(errors="replace")[-2000:]
-            raise RuntimeError(f"scrcpy exited before mapping the real Android app window: {details}")
+            print(f"scrcpy exited before mapping the live Android surface: {details}", file=sys.stderr)
     if ecosystem == "windows":
         try:
             store_window, app_window = wait_for_windows(12)
@@ -663,8 +708,19 @@ try:
                 recovery_process = relaunch_installed_7zip(virtual_desktop=True)
                 restart_store_if_unmapped()
                 store_window, app_window = wait_for_windows(30)
+    elif ecosystem == "android":
+        try:
+            store_window, app_window = wait_for_windows(20)
+        except RuntimeError as mirror_error:
+            mirror_log = Path("/tmp/nexus-scrcpy-android.log")
+            details = mirror_log.read_text(errors="replace")[-1800:] if mirror_log.exists() else str(mirror_error)
+            print(f"scrcpy did not expose the real device surface: {details}", file=sys.stderr)
+            stop_mirror_process(mirror_process)
+            mirror_handle.close()
+            mirror_process = launch_android_framebuffer_viewer()
+            store_window, app_window = wait_for_windows(35)
     else:
-        store_window, app_window = wait_for_windows(150 if ecosystem == "android" else 60)
+        store_window, app_window = wait_for_windows(60)
     if ecosystem == "android":
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline and not android_is_foreground():
@@ -676,17 +732,8 @@ try:
     time.sleep(3)
     if ecosystem == "android" and not any(is_target(item) for item in top_level_windows()):
         print("The Android mirror window disappeared during interaction; reopening scrcpy for the live app.", file=sys.stderr)
-        if mirror_process is not None and mirror_process.poll() is None:
-            mirror_process.terminate()
-            try:
-                mirror_process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                mirror_process.kill()
-                mirror_process.wait(timeout=2)
-        mirror_process = subprocess.Popen(
-            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            close_fds=True, start_new_session=True)
+        stop_mirror_process(mirror_process)
+        mirror_process = launch_android_framebuffer_viewer()
         store_window, app_window = wait_for_windows(30)
         place_windows(store_window, app_window)
         interact(app_window)
@@ -702,14 +749,9 @@ finally:
         except subprocess.TimeoutExpired:
             recovery_process.kill()
     if mirror_process is not None:
-        mirror_process.terminate()
-        try:
-            mirror_process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            mirror_process.kill()
-        finally:
-            if "mirror_handle" in locals() and not mirror_handle.closed:
-                mirror_handle.close()
+        stop_mirror_process(mirror_process)
+    if "mirror_handle" in locals() and not mirror_handle.closed:
+        mirror_handle.close()
     for process in store_processes:
         if process.poll() is None:
             process.terminate()
