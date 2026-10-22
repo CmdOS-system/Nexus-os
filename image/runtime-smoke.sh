@@ -108,6 +108,19 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       timeout --kill-after=3s 30s "$LOADER" "$target" || install_status=$?
       package_name="${NEXUS_ANDROID_PACKAGE_NAME:-org.secuso.privacyfriendly2048}"
       package_path="$(timeout --kill-after=1s 12s adb -s "$ANDROID_SERIAL" shell pm path "$package_name" 2>/dev/null || true)"
+      if ! grep -q '^package:' <<<"$package_path" && (( install_status == 0 )); then
+        # ADB can briefly report "Device disconnected" after PackageManager
+        # commits an APK. Reconnect and verify registration again before
+        # OmniStore decides whether the genuine package install succeeded.
+        for attempt in 1 2; do
+          adb start-server >/dev/null 2>&1 || true
+          adb reconnect offline >/dev/null 2>&1 || true
+          timeout --kill-after=2s 40s adb -s "$ANDROID_SERIAL" wait-for-device >/dev/null 2>&1 || continue
+          package_path="$(timeout --kill-after=1s 12s adb -s "$ANDROID_SERIAL" shell pm path "$package_name" 2>/dev/null || true)"
+          grep -q '^package:' <<<"$package_path" && break
+          sleep 2
+        done
+      fi
       if grep -q '^package:' <<<"$package_path"; then
         echo "Verified the real APK package in PackageManager; deferring app activity launch to the runtime evidence driver."
         exit 0

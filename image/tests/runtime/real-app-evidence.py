@@ -339,7 +339,29 @@ def validate_live_runtime_window(window):
     print(result.stdout.strip())
 
 
-def launch_android_package():
+def reconnect_android_device(timeout=35):
+    """Recover a slow/offline emulator without substituting a host-side app."""
+    serial = os.environ["ANDROID_SERIAL"]
+    for argv, limit in ((["adb", "start-server"], 8), (["adb", "reconnect", "offline"], 8)):
+        try:
+            subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           check=False, timeout=limit)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"ADB recovery command {argv[1]} did not finish: {error}", file=sys.stderr)
+    try:
+        ready = subprocess.run(["adb", "-s", serial, "wait-for-device"], text=True,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               check=False, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(f"Android emulator {serial} did not reconnect within {timeout}s: {error}") from error
+    state = subprocess.run(["adb", "-s", serial, "get-state"], text=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           check=False, timeout=8)
+    if ready.returncode != 0 or state.returncode != 0 or state.stdout.strip() != "device":
+        raise RuntimeError(f"Android emulator {serial} is not ready: {(state.stdout or ready.stdout).strip()[-400:]}")
+
+
+def _launch_android_package_once():
     """Install and launch the real APK, requiring PackageManager verification."""
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
@@ -388,6 +410,21 @@ def launch_android_package():
         raise RuntimeError(f"Android launcher did not respond within 5s: {error}") from error
     if result.returncode != 0:
         raise RuntimeError(f"Android launcher failed (exit {result.returncode}): {result.stdout[-400:]}")
+
+
+def launch_android_package():
+    """Retry the real APK launch once after reconnecting an offline ADB device."""
+    last_error = None
+    for attempt in range(2):
+        try:
+            if attempt:
+                print("ADB lost the Android device; reconnecting before retrying the real APK launch.",
+                      file=sys.stderr)
+                reconnect_android_device()
+            return _launch_android_package_once()
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+            last_error = error
+    raise RuntimeError(f"Real Android APK launch failed after ADB recovery: {last_error}") from last_error
 
 def place_windows(store_window, app_window):
     if not store_window or not app_window or any(
@@ -809,8 +846,29 @@ try:
         if not store_window:
             raise RuntimeError("Nexus OmniStore did not remap after its bounded recovery attempt.")
     if app_window is None:
-        launch_real_runtime_app()
-        store_window, app_window = wait_for_windows(20)
+        if ecosystem == "android":
+            recovery_errors = []
+            for attempt in range(2):
+                try:
+                    if attempt:
+                        reconnect_android_device()
+                    launch_android_package()
+                    stop_mirror_process(mirror_process)
+                    mirror_process = launch_scrcpy_window()
+                    store_window, app_window = wait_for_windows(25)
+                    if app_window:
+                        break
+                    recovery_errors.append("scrcpy did not map the real device surface")
+                except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                    recovery_errors.append(str(error))
+                    print(f"Android runtime recovery attempt {attempt + 1} failed: {error}",
+                          file=sys.stderr)
+            if not app_window:
+                raise RuntimeError("The real Android 2048 window remained unavailable after ADB/scrcpy recovery: "
+                                   + "; ".join(recovery_errors))
+        else:
+            launch_real_runtime_app()
+            store_window, app_window = wait_for_windows(20)
         if not app_window:
             raise RuntimeError(f"The real {app_title} window did not map after its direct runtime launch.")
     if ecosystem == "android":

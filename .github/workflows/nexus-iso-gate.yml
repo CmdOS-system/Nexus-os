@@ -58,7 +58,7 @@ jobs:
           sudo apt-get install -y qemu-system-x86 ovmf xorriso squashfs-tools curl jq xz-utils \
             gcc-mingw-w64-x86-64 wine wine64 winetricks cabextract winbind fonts-liberation xvfb file unzip p7zip-full \
             dbus-x11 xauth xfce4-session xfdesktop4 xfce4-panel xfwm4 xfce4-settings \
-            ffmpeg python3-pil python3-gi gir1.2-gtk-3.0 x11-utils xdotool gcc-aarch64-linux-gnu \
+            ffmpeg python3-pil python3-gi python3-xlib gir1.2-gtk-3.0 x11-utils xdotool wmctrl gcc-aarch64-linux-gnu \
             qemu-user-static clang lld arc-theme papirus-icon-theme fonts-inter librsvg2-common zenity
           sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
             /usr/share/backgrounds/nexus/horizon-aurora.svg

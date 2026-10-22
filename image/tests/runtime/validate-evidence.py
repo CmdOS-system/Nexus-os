@@ -88,26 +88,51 @@ def validate_png(path):
     return hashlib.sha256(data).hexdigest()
 
 
+def native_x11_window(window_id):
+    """Read X11 geometry, WM_CLASS, and owner PID through Python-Xlib."""
+    try:
+        from Xlib import X, display
+    except ImportError as error:
+        raise ValueError("wmctrl/xprop are missing and Python-Xlib is unavailable") from error
+    connection = display.Display(os.environ["DISPLAY"])
+    try:
+        window = connection.create_resource_object("window", int(window_id, 0))
+        attrs = window.get_attributes()
+        geometry = window.get_geometry()
+        if attrs.map_state != X.IsViewable:
+            raise ValueError(f"X11 window {window_id} is not viewable")
+        class_property = window.get_full_property(connection.intern_atom("WM_CLASS"), X.AnyPropertyType)
+        class_bytes = bytes(class_property.value) if class_property else b""
+        class_parts = [part.decode(errors="replace") for part in class_bytes.rstrip(b"\0").split(b"\0")]
+        wm_class = " ".join(part for part in class_parts if part).casefold()
+        pid_property = window.get_full_property(connection.intern_atom("_NET_WM_PID"), X.AnyPropertyType)
+        pid = int(pid_property.value[0]) if pid_property and len(pid_property.value) else 0
+        return int(geometry.width), int(geometry.height), pid, wm_class
+    finally:
+        connection.close()
+
+
 def validate_live_window(ecosystem, window_id):
     """Inspect the mapped X11 window and its owner while the runtime is live."""
     if not os.environ.get("DISPLAY"):
         raise ValueError("live X11 identity check requires DISPLAY")
-    if not shutil.which("xprop") or not shutil.which("wmctrl"):
-        raise ValueError("live X11 identity check requires xprop and wmctrl")
-    listing = subprocess.run(["wmctrl", "-lpG"], check=True, text=True,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
-    row = next((line.split(None, 7) for line in listing.stdout.splitlines()
-                if line.split(None, 1)[0] == window_id), None)
-    if not row or len(row) < 7:
-        raise ValueError(f"X11 window {window_id} is not present in wmctrl -lpG")
-    pid = int(row[2])
-    width, height = int(row[5]), int(row[6])
+    if shutil.which("xprop") and shutil.which("wmctrl"):
+        listing = subprocess.run(["wmctrl", "-lpG"], check=True, text=True,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+        row = next((line.split(None, 7) for line in listing.stdout.splitlines()
+                    if line.split(None, 1)[0] == window_id), None)
+        if not row or len(row) < 7:
+            raise ValueError(f"X11 window {window_id} is not present in wmctrl -lpG")
+        pid = int(row[2])
+        width, height = int(row[5]), int(row[6])
+        props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS"], check=True,
+                               text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5).stdout
+        match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
+        wm_class = " ".join(match.groups()).casefold() if match else ""
+    else:
+        width, height, pid, wm_class = native_x11_window(window_id)
     if width < 300 or height < 200 or pid <= 1:
         raise ValueError(f"runtime window is tiny or has no process owner: {width}x{height}, pid={pid}")
-    props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS"], check=True,
-                           text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5).stdout
-    match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
-    wm_class = " ".join(match.groups()).casefold() if match else ""
     cmdline_path = Path(f"/proc/{pid}/cmdline")
     cmdline = cmdline_path.read_bytes().replace(b"\0", b" ").decode(errors="replace").casefold() if cmdline_path.exists() else ""
     comm_path = Path(f"/proc/{pid}/comm")
