@@ -46,7 +46,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       timeout --kill-after=3s 45s "$wineboot_bin" -u
       sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
       if [[ -z "$sevenzip_exe" ]]; then
-        curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
+        curl -fL --connect-timeout 60 --max-time 300 --retry 5 --retry-delay 3 \
           https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe -o "$installer"
         timeout --kill-after=5s 60s "$LOADER" "$installer" /S || \
           echo "The silent 7-Zip installer did not finish cleanly; searching the prefix and trying archive extraction." >&2
@@ -115,7 +115,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         for attempt in 1 2; do
           adb start-server >/dev/null 2>&1 || true
           adb reconnect offline >/dev/null 2>&1 || true
-          timeout --kill-after=2s 40s adb -s "$ANDROID_SERIAL" wait-for-device >/dev/null 2>&1 || continue
+          timeout --kill-after=2s 120s adb -s "$ANDROID_SERIAL" wait-for-device >/dev/null 2>&1 || continue
           package_path="$(timeout --kill-after=1s 12s adb -s "$ANDROID_SERIAL" shell pm path "$package_name" 2>/dev/null || true)"
           grep -q '^package:' <<<"$package_path" && break
           sleep 2
@@ -341,7 +341,7 @@ command -v wine64 >/dev/null || test -x /usr/lib/wine/wine64 || { echo "wine64 i
 if [[ -x "$BUILD_TOOLS/apksigner" ]]; then
   APK="$TMP_DIR/privacyfriendly2048.apk"
   echo "[smoke] Download F-Droid 2048 APK" >&2
-  timeout --kill-after=2s 100s curl -fL --retry 3 --connect-timeout 15 --max-time 90 \
+  timeout --kill-after=2s 1820s curl -fL --connect-timeout 60 --max-time 300 --retry 5 --retry-delay 3 \
     https://f-droid.org/repo/org.secuso.privacyfriendly2048_100.apk -o "$APK"
   run_test "Verify F-Droid APK signature" "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
   if [[ -x "$BUILD_TOOLS/aapt2" ]]; then

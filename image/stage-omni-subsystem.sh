@@ -21,8 +21,10 @@ install -m 0644 "$ROOT/includes/usr/lib/nexus/nexus-system-sound.py" "$STAGING/u
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-curl --fail --location --retry 3 --output "$tmp/$ASSET" "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/${ASSET}"
-digest="$(curl --fail --silent --show-error "$RELEASE_API" | jq -er --arg name "$ASSET" '.assets[] | select(.name == $name) | .digest | select(startswith("sha256:")) | sub("^sha256:"; "")')"
+curl --fail --location --connect-timeout 60 --max-time 300 --retry 5 --retry-delay 3 \
+  --output "$tmp/$ASSET" "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/${ASSET}"
+digest="$(curl --fail --silent --show-error --connect-timeout 60 --max-time 300 \
+  --retry 5 --retry-delay 3 "$RELEASE_API" | jq -er --arg name "$ASSET" '.assets[] | select(.name == $name) | .digest | select(startswith("sha256:")) | sub("^sha256:"; "")')"
 [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || { echo "Invalid Wasmtime release digest from official GitHub API" >&2; exit 1; }
 printf '%s  %s\n' "$digest" "$tmp/$ASSET" | sha256sum --check --status || { echo "Wasmtime archive checksum mismatch" >&2; exit 1; }
 mkdir "$tmp/extract"
@@ -31,7 +33,7 @@ wasmtime="$(find "$tmp/extract" -type f -name wasmtime -perm /111 -print -quit)"
 test -n "$wasmtime" && "$wasmtime" --version | grep -F "${WASMTIME_VERSION}"
 install -m 0755 "$wasmtime" "$STAGING/usr/bin/wasmtime"
 mkdir -p "$STAGING/usr/share/doc/wasmtime"
-curl --fail --location --retry 3 \
+curl --fail --location --connect-timeout 60 --max-time 300 --retry 5 --retry-delay 3 \
   "https://raw.githubusercontent.com/bytecodealliance/wasmtime/v${WASMTIME_VERSION}/LICENSE" \
   --output "$STAGING/usr/share/doc/wasmtime/LICENSE"
 printf 'Staged nexus-omniloader and verified Wasmtime %s in %s\n' "$WASMTIME_VERSION" "$STAGING"

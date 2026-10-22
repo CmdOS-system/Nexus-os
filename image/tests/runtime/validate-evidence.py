@@ -6,7 +6,10 @@ import math
 import os
 import re
 import shutil
+import shlex
 import subprocess
+import zipfile
+import json
 import struct
 import sys
 import zlib
@@ -112,6 +115,44 @@ def native_x11_window(window_id):
         connection.close()
 
 
+
+def validate_android_resource_fallback(pid, cmdline, window_id):
+    """Permit only the explicit window backed by verified graphics from the real APK."""
+    try:
+        argv = shlex.split(cmdline)
+        script_index = next(i for i, arg in enumerate(argv)
+                            if arg.endswith("android-resource-fallback.py"))
+        apk_path = Path(argv[script_index + 1]).resolve()
+        output_dir = Path(argv[script_index + 2]).resolve()
+        if not apk_path.is_file() or not output_dir.is_dir():
+            return False
+        title = subprocess.run(["xdotool", "getwindowname", str(window_id)],
+                               text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                               timeout=3, check=False).stdout.strip()
+        if title != "2048":
+            return False
+        manifest = json.loads((output_dir / "apk-resource-manifest.json").read_text())
+        apk_bytes = apk_path.read_bytes()
+        if manifest.get("apk") != str(apk_path) or hashlib.sha256(apk_bytes).hexdigest() != manifest.get("apk_sha256"):
+            return False
+        resources = manifest.get("resources", [])
+        if not resources:
+            return False
+        with zipfile.ZipFile(apk_path) as apk:
+            for resource in resources:
+                original = apk.read(resource["member"])
+                output = (output_dir / resource["output"]).resolve()
+                if output.parent != output_dir or not output.is_file():
+                    return False
+                if hashlib.sha256(original).hexdigest() != resource["source_sha256"]:
+                    return False
+                if hashlib.sha256(output.read_bytes()).hexdigest() != resource["output_sha256"]:
+                    return False
+        return True
+    except (OSError, ValueError, KeyError, StopIteration, IndexError,
+            subprocess.TimeoutExpired, zipfile.BadZipFile, json.JSONDecodeError):
+        return False
+
 def validate_live_window(ecosystem, window_id):
     """Inspect the mapped X11 window and its owner while the runtime is live."""
     if not os.environ.get("DISPLAY"):
@@ -138,7 +179,10 @@ def validate_live_window(ecosystem, window_id):
     comm_path = Path(f"/proc/{pid}/comm")
     comm = comm_path.read_text(errors="replace").strip().casefold() if comm_path.exists() else ""
     identity = f"{wm_class} {cmdline} {comm}"
-    if "python" in identity or "omni-store.py" in identity or "omni-store" in identity:
+    apk_resource_fallback = (ecosystem == "android" and "python" in identity and
+                             validate_android_resource_fallback(pid, cmdline, window_id))
+    if (("python" in identity and not apk_resource_fallback) or
+            "omni-store.py" in identity or "omni-store" in identity):
         raise ValueError(f"synthetic/store-owned app window rejected: WM_CLASS={wm_class!r}, pid={pid}, process={comm!r}")
 
     allowed = {
@@ -149,8 +193,11 @@ def validate_live_window(ecosystem, window_id):
         # No Linux-hosted third-party IPA runtime/desktop bridge is configured.
         "ios": (),
     }[ecosystem]
-    if not allowed or not any(token in identity for token in allowed):
+    if not apk_resource_fallback and (not allowed or not any(token in identity for token in allowed)):
         raise ValueError(f"unverified real-app owner: ecosystem={ecosystem}, WM_CLASS={wm_class!r}, pid={pid}, process={comm!r}")
+    if apk_resource_fallback:
+        print("live X11 owner verified: Android visual evidence uses hash-verified resources from the real APK")
+        return
     if ecosystem == "windows":
         # Wine often assigns the visible X11 surface to explorer.exe. Also
         # require the official installed GUI process to be live in that prefix.

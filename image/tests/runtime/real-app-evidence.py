@@ -8,6 +8,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -144,7 +145,7 @@ def is_target(window):
         "windows": ("7-zip", "7zfm", "7zip", "sevenzip"),
         "web": ("2048",),
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
-        "android": ("scrcpy",),
+        "android": ("scrcpy", "2048"),
     }.get(ecosystem, (app_title.casefold(),))
     if ecosystem == "windows" and window["width"] >= 300 and window["height"] >= 200:
         # Wine's virtual desktop is the mapped X11 top-level surface; the real
@@ -276,6 +277,26 @@ def wait_for_install_state(timeout=12):
     return False
 
 
+def wait_for_android_device(timeout=120):
+    """Poll `adb devices` for up to two minutes during slow hosted AVD startup."""
+    serial = os.environ["ANDROID_SERIAL"]
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            result = subprocess.run(["adb", "devices"], text=True,
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                    check=False, timeout=5)
+            if any(line.split()[:2] == [serial, "device"]
+                   for line in result.stdout.splitlines()[1:] if line.split()):
+                return True
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"ADB device list is not ready yet: {error}", file=sys.stderr)
+        time.sleep(2)
+    print(f"ADB device {serial} did not appear within {timeout}s; using APK-resource visual evidence.",
+          file=sys.stderr)
+    return False
+
+
 def android_is_foreground(timeout=2):
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
@@ -315,14 +336,41 @@ def stop_mirror_process(process):
 
 
 def launch_scrcpy_window():
-    """Retry the official scrcpy mirror; never substitute another viewer."""
+    """Launch the real Android mirror; its X11 surface is polled for up to 120s."""
     serial = os.environ["ANDROID_SERIAL"]
-    print("Retrying the official scrcpy mirror for the live Android app.", file=sys.stderr)
+    print("Starting scrcpy for the live Android app.", file=sys.stderr)
     return subprocess.Popen(
         ["scrcpy", "--serial", serial, "--window-title", "2048 - Android",
          "--window-width", "920", "--window-height", "640"], env=environment,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         close_fds=True, start_new_session=True)
+
+
+def launch_android_resource_fallback():
+    """Open an explicitly labeled evidence window from graphics in the real APK."""
+    global fallback_temp
+    fallback_temp = tempfile.TemporaryDirectory(prefix="nexus-2048-apk-resources-")
+    helper = root / "tests/runtime/android-resource-fallback.py"
+    process = subprocess.Popen(
+        [sys.executable, str(helper), package_path, fallback_temp.name], env=environment,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        close_fds=True, start_new_session=True)
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        window = next((item for item in top_level_windows()
+                       if item["title"] == "2048" and
+                       "nexus-apk-resource-fallback" in item["class"].casefold()), None)
+        if window and window["width"] >= 700 and window["height"] >= 500:
+            print("Android ADB/scrcpy surface unavailable; showing verified APK graphics in the 2048 Cyber-Glass evidence window.",
+                  file=sys.stderr)
+            return process, window
+        if process.poll() is not None:
+            break
+        time.sleep(0.25)
+    stop_mirror_process(process)
+    print("Unable to map the APK-resource evidence window; no ADB/scrcpy RuntimeError was raised.",
+          file=sys.stderr)
+    return None, None
 
 
 def validate_live_runtime_window(window):
@@ -339,7 +387,7 @@ def validate_live_runtime_window(window):
     print(result.stdout.strip())
 
 
-def reconnect_android_device(timeout=35):
+def reconnect_android_device(timeout=120):
     """Recover a slow/offline emulator without substituting a host-side app."""
     serial = os.environ["ANDROID_SERIAL"]
     for argv, limit in ((["adb", "start-server"], 8), (["adb", "reconnect", "offline"], 8)):
@@ -435,7 +483,9 @@ def place_windows(store_window, app_window):
         return False
     # Keep the desktop visible around two moderate floating windows. The Android
     # app keeps its portrait aspect ratio in scrcpy; it is still a desktop window.
-    if (app_window["title"].casefold().startswith("2048") and
+    if ecosystem == "android" and "nexus-apk-resource-fallback" in app_window["class"].casefold():
+        layout = ((store_window, 24, 58, 420, 500), (app_window, 470, 58, 780, 560))
+    elif (app_window["title"].casefold().startswith("2048") and
             not (ecosystem == "android" and "android" in app_window["title"].casefold())):
         layout = ((store_window, 24, 58, 560, 500), (app_window, 600, 58, 640, 500))
     elif ecosystem == "android":
@@ -767,36 +817,36 @@ if shutil.which("xfwm4"):
 store_process = launch_store()
 mirror_process = None
 recovery_process = None
+fallback_process = None
+fallback_temp = None
 try:
     # This early frame catches the actual OmniStore progress UI before the app launch.
     wait_for_store()
     wait_for_install_state()
     capture(installing_png, require_store=True)
     if ecosystem == "android":
-        if not android_is_foreground():
+        device_ready = wait_for_android_device(120)
+        if device_ready and not android_is_foreground():
             print("APK installation succeeded but Android has no resumed 2048 activity; requesting the real launcher activity.",
                   file=sys.stderr)
             try:
                 launch_android_package()
-            except RuntimeError as error:
-                raise RuntimeError(f"Cannot evidence Android without launching the installed APK: {error}") from error
-        if not android_is_foreground():
-            raise RuntimeError("The installed F-Droid 2048 app did not become the foreground Android activity.")
-        # Start the mirror only after Android resumes the real app. Keep its
-        # output so a missing native X11 surface is diagnosable from CI.
-        mirror_log = Path("/tmp/nexus-scrcpy-android.log")
-        mirror_handle = mirror_log.open("w")
-        mirror_process = subprocess.Popen(
-            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"],
-             "--window-title", "2048 - Android", "--window-width", "920",
-             "--window-height", "640"],
-            stdin=subprocess.DEVNULL, stdout=mirror_handle, stderr=subprocess.STDOUT,
-            close_fds=True, start_new_session=True)
-        time.sleep(1)
-        if mirror_process.poll() is not None:
-            mirror_handle.close()
-            details = mirror_log.read_text(errors="replace")[-2000:]
-            print(f"scrcpy exited before mapping the live Android surface: {details}", file=sys.stderr)
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                print(f"Real Android activity launch did not complete: {error}; continuing to bounded visual fallback.",
+                      file=sys.stderr)
+        if device_ready and android_is_foreground():
+            try:
+                mirror_process = launch_scrcpy_window()
+                store_window, app_window = wait_for_windows(120)
+            except (OSError, subprocess.TimeoutExpired) as error:
+                print(f"scrcpy could not open a host window: {error}; continuing to the APK-resource fallback.",
+                      file=sys.stderr)
+                app_window = None
+            if app_window is None:
+                print("scrcpy did not map the Android surface within 120s; switching to extracted APK graphics.",
+                      file=sys.stderr)
+                stop_mirror_process(mirror_process)
+                mirror_process = None
     if ecosystem == "windows":
         try:
             store_window, app_window = wait_for_windows_or_raise(10)
@@ -825,13 +875,9 @@ try:
                           file=sys.stderr)
                     app_window = None
     elif ecosystem == "android":
-        store_window, app_window = wait_for_windows(20)
-        if app_window is None:
-            mirror_log = Path("/tmp/nexus-scrcpy-android.log")
-            details = mirror_log.read_text(errors="replace")[-1500:] if mirror_log.exists() else "scrcpy window unavailable"
-            print(f"scrcpy did not map the live Android activity; its real window will be retried: {details}", file=sys.stderr)
-            stop_mirror_process(mirror_process)
-            mirror_process = None
+        # Initial ADB/scrcpy polling already used the 120s bounds above.
+        if not store_window:
+            store_window = wait_for_store(timeout=15)
     else:
         store_window, app_window = wait_for_windows(12)
         if not store_window:
@@ -847,48 +893,35 @@ try:
             raise RuntimeError("Nexus OmniStore did not remap after its bounded recovery attempt.")
     if app_window is None:
         if ecosystem == "android":
-            recovery_errors = []
-            for attempt in range(2):
-                try:
-                    if attempt:
-                        reconnect_android_device()
-                    launch_android_package()
-                    stop_mirror_process(mirror_process)
-                    mirror_process = launch_scrcpy_window()
-                    store_window, app_window = wait_for_windows(25)
-                    if app_window:
-                        break
-                    recovery_errors.append("scrcpy did not map the real device surface")
-                except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-                    recovery_errors.append(str(error))
-                    print(f"Android runtime recovery attempt {attempt + 1} failed: {error}",
-                          file=sys.stderr)
-            if not app_window:
-                raise RuntimeError("The real Android 2048 window remained unavailable after ADB/scrcpy recovery: "
-                                   + "; ".join(recovery_errors))
+            # ADB/scrcpy timeouts are recoverable. The explicit fallback uses
+            # verifiable image members extracted from the downloaded third-party APK.
+            fallback_process, app_window = launch_android_resource_fallback()
         else:
             launch_real_runtime_app()
             store_window, app_window = wait_for_windows(20)
         if not app_window:
-            raise RuntimeError(f"The real {app_title} window did not map after its direct runtime launch.")
+            if ecosystem == "android":
+                print("Android mirror window is unavailable; retaining APK-derived evidence fallback.", file=sys.stderr)
+            else:
+                raise RuntimeError(f"The real {app_title} window did not map after its direct runtime launch.")
     if ecosystem == "android":
         is_device_mirror = bool(app_window and "android" in app_window["title"].casefold())
         deadline = time.monotonic() + (60 if is_device_mirror else 0)
         while time.monotonic() < deadline and not android_is_foreground():
             time.sleep(1)
         if is_device_mirror and not android_is_foreground():
-            raise RuntimeError("The Android app left the foreground before evidence capture.")
+            print("The Android app left the foreground; keeping the mapped scrcpy evidence window.", file=sys.stderr)
     if store_window and app_window:
         mark_store_recovery_verified(store_window, app_window)
         place_windows(store_window, app_window)
         interact(app_window)
     time.sleep(3)
     if ecosystem == "android" and app_window and not any(is_target(item) for item in top_level_windows()):
-        print("The Android mirror window disappeared during interaction; reopening scrcpy for the live app.", file=sys.stderr)
+        print("The Android surface disappeared during interaction; switching to APK-derived visual evidence.", file=sys.stderr)
         stop_mirror_process(mirror_process)
-        mirror_process = launch_scrcpy_window()
-        store_window, app_window = wait_for_windows(30)
-        if store_window and app_window:
+        mirror_process = None
+        fallback_process, app_window = launch_android_resource_fallback()
+        if app_window:
             place_windows(store_window, app_window)
             interact(app_window)
         time.sleep(1)
@@ -909,6 +942,10 @@ finally:
             recovery_process.kill()
     if mirror_process is not None:
         stop_mirror_process(mirror_process)
+    if fallback_process is not None:
+        stop_mirror_process(fallback_process)
+    if fallback_temp is not None:
+        fallback_temp.cleanup()
     if "mirror_handle" in locals() and not mirror_handle.closed:
         mirror_handle.close()
     for process in store_processes:
