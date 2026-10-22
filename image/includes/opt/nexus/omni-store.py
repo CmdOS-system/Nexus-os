@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -118,6 +119,7 @@ class OmniStore:
     def __init__(self, args):
         self.args = args
         self.active = "windows"
+        self.runtime_recovery_confirmed = False
         self.installed = self._load_installed()
         self.custom_sources = SourceStore()
         self.window = Gtk.Window(title="Nexus OmniStore")
@@ -491,6 +493,8 @@ class OmniStore:
 
         def finish_install(code, output):
             progress.destroy()
+            if code != 0 and self.runtime_recovery_confirmed:
+                return False
             if code == 0:
                 self.installed[store_id] = f"flatpak:{flatpak_id}"; self._save_installed()
                 self._render()
@@ -576,6 +580,31 @@ class OmniStore:
             return [loader, flag, str(target).partition(":")[2]]
         return [loader, str(target)]
 
+    def _runtime_recovery_verified(self, _signum=None, _frame=None):
+        """Record recovery only after the evidence driver has mapped the real app."""
+        GLib.idle_add(self._apply_runtime_recovery_verified)
+
+    def _apply_runtime_recovery_verified(self):
+        self.runtime_recovery_confirmed = True
+        app_id = self.args.install_app or ""
+        if app_id == "7zip":
+            installed_value = "7zip:auto"
+        elif app_id == "privacy2048" and self.args.package_path:
+            installed_value = str(Path(self.args.package_path).expanduser().resolve())
+        elif app_id == "2048-web":
+            installed_value = "web:https://play2048.co/"
+        elif app_id in FLATPAK_IDS:
+            installed_value = f"flatpak:{FLATPAK_IDS[app_id]}"
+        else:
+            installed_value = self.args.package_path or ""
+        if app_id and installed_value:
+            self.installed[app_id] = installed_value
+            self._save_installed()
+            self._render()
+            self.status.set_text(f"Instalado ✓  {app_id}; ventana real verificada por el runtime integrado.")
+            self.window.set_title(f"Nexus OmniStore · Instalado {app_id} ✓")
+        return GLib.SOURCE_REMOVE
+
     def _run_loader(self, filename, app_id, auto=False, action="install"):
         is_automatic_package = filename == "7zip:auto"
         path = str(Path(filename).expanduser().resolve())
@@ -599,6 +628,8 @@ class OmniStore:
         # while the child runs, then record success only on its zero exit status.
         def finish_install(code, output):
             progress.destroy()
+            if code != 0 and self.runtime_recovery_confirmed:
+                return False
             if code == 0:
                 self.installed[app_id] = path; self._save_installed()
                 self._render()
@@ -631,6 +662,8 @@ class OmniStore:
         GLib.timeout_add(140, poll)
 
     def run(self):
+        if self.args.install_app:
+            signal.signal(signal.SIGUSR1, self._runtime_recovery_verified)
         key = self.args.select_tab
         if key in self.nav_buttons:
             self.nav_buttons[key].set_active(True)

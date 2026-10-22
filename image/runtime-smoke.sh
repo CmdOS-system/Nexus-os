@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+export ROOT
 LOADER="${NEXUS_OMNILOADER:-$ROOT/staging/usr/bin/nexus-omniloader}"
 
 # A Wine GUI from a previous Xvfb session can leave wineserver bound to that
@@ -41,11 +42,15 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       installer="$cache_dir/7z2604-x64.exe"
       wine_prefix="${WINEPREFIX:-$HOME/.local/share/nexus/wine/omnistore}"
       mkdir -p "$cache_dir"
+      export WINEPREFIX="$wine_prefix" WINEARCH="${WINEARCH:-win64}"
+      wineboot_bin="$(command -v wineboot 2>/dev/null || true)"
+      [[ -n "$wineboot_bin" ]] || { echo "wineboot is required to initialize the 7-Zip Wine prefix." >&2; exit 1; }
+      timeout --kill-after=3s 45s "$wineboot_bin" -u
       sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
       if [[ -z "$sevenzip_exe" ]]; then
         curl -fL --retry 2 --connect-timeout 10 --max-time 60 \
           https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe -o "$installer"
-        timeout --kill-after=5s 60s env WINEPREFIX="$wine_prefix" "$LOADER" "$installer" /S || \
+        timeout --kill-after=5s 60s "$LOADER" "$installer" /S || \
           echo "The silent 7-Zip installer did not finish cleanly; searching the prefix and trying archive extraction." >&2
         stop_wineserver "$wine_prefix"
       fi
@@ -57,7 +62,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       if [[ -z "$sevenzip_exe" || ! -s "$sevenzip_exe" ]]; then
         wine_bin="$(command -v wine 2>/dev/null || command -v wine64 2>/dev/null || true)"
         if [[ -n "$wine_bin" && -s "$installer" ]]; then
-          timeout --kill-after=5s 90s env WINEPREFIX="$wine_prefix" "$wine_bin" "$installer" /S || true
+          timeout --kill-after=5s 90s "$wine_bin" "$installer" /S "/D=C:\\Program Files\\7-Zip" || true
           stop_wineserver "$wine_prefix"
           sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
         fi
@@ -77,7 +82,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         echo "Could not install or extract 7-Zip GUI from $installer; install p7zip-full (7z/7zz) and check Wine logs." >&2
         exit 1
       fi
-      echo "7-Zip 26.04 installed from the official signed Windows installer."
+      echo "7-Zip 26.04 installed from the official Windows release package."
       exit 0
     fi
     wine_prefix="${WINEPREFIX:-$HOME/.local/share/nexus/wine/omnistore}"
@@ -109,28 +114,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         echo "Verified the real APK package in PackageManager; deferring app activity launch to the runtime evidence driver."
         exit 0
       fi
-      # A slow AVD without KVM may time out in ADB even after the APK has been
-      # validated. Do not turn that CI timing issue into a failed OmniStore
-      # install state: the evidence driver will show its native 2048 recovery
-      # surface beside the still-open store window.
-      if python3 - "$target" <<'PY'
-import sys, zipfile
-with zipfile.ZipFile(sys.argv[1]) as apk:
-    names = set(apk.namelist())
-    if not {"AndroidManifest.xml", "classes.dex"}.issubset(names):
-        raise SystemExit(1)
-    dex_header = apk.read("classes.dex")[:8]
-    if len(dex_header) != 8 or not dex_header.startswith(b"dex\n") or dex_header[7] != 0:
-        raise SystemExit(1)
-    bad = apk.testzip()
-    if bad:
-        raise SystemExit(1)
-PY
-      then
-        echo "APK archive and AndroidManifest.xml are valid; ADB did not confirm installation in time (status $install_status). Continuing with native 2048 evidence recovery." >&2
-        exit 0
-      fi
-      echo "APK validation failed; AndroidManifest.xml is missing or the archive is corrupt: $target" >&2
+      echo "Android PackageManager did not register $package_name after OmniLoader install (status $install_status); the evidence driver may retry the real APK installation, but this install step is not marked successful." >&2
       exit 1
     fi
     exec timeout --kill-after=5s 180s "$LOADER" "$target"

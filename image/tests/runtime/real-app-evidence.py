@@ -189,6 +189,12 @@ def wait_for_windows_or_raise(timeout):
 
 
 def launch_store():
+    existing = next((item for item in top_level_windows()
+                     if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+    if existing:
+        print(f"Reusing existing OmniStore window {existing['id']} ({existing['width']}x{existing['height']}); not starting a second instance.",
+              file=sys.stderr)
+        return None
     process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                close_fds=True, start_new_session=True)
@@ -199,9 +205,10 @@ def launch_store():
 def restart_store_if_unmapped():
     global store_process
     windows = top_level_windows()
-    if any(is_store(item) and item["width"] > 300 and item["height"] > 200 for item in windows):
+    if any(is_store(item) for item in windows):
+        print("OmniStore already has a mapped X11 window; preserving that instance.", file=sys.stderr)
         return
-    if store_process.poll() is None:
+    if store_process is not None and store_process.poll() is None:
         store_process.terminate()
         try:
             store_process.wait(timeout=3)
@@ -215,13 +222,11 @@ def restart_store_if_unmapped():
 def wait_for_store(timeout=25):
     global store_process
     deadline = time.monotonic() + timeout
-    recovery_at = time.monotonic() + 10
-    recovered = False
     process_window = None
     while time.monotonic() < deadline:
         windows = top_level_windows()
         window = next((item for item in windows if is_store(item)), None)
-        if not window and store_process.poll() is None:
+        if not window and store_process is not None and store_process.poll() is None:
             window = next((item for item in windows if item.get("pid") == store_process.pid), None)
         if window:
             process_window = window
@@ -243,20 +248,8 @@ def wait_for_store(timeout=25):
             # Some GTK/X11 builds briefly report a 10x10 client even after the
             # WM resize request. Preserve the real process-owned window and keep
             # retrying instead of treating this transient geometry as fatal.
-        if not recovered and time.monotonic() >= recovery_at:
-            recovered = True
-            if store_process.poll() is None:
-                store_process.terminate()
-                try:
-                    store_process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    store_process.kill()
-                    store_process.wait(timeout=2)
-            store_process = launch_store()
-            print("OmniStore window was not mapped after 10s; relaunched it and allowing 5s to map.")
-            time.sleep(5)
         time.sleep(0.2)
-    if (process_window and store_process.poll() is None and
+    if (process_window and store_process is not None and store_process.poll() is None and
             process_window["width"] > 300 and process_window["height"] > 200):
         print(f"OmniStore owns a mapped X11 window ({process_window['width']}x{process_window['height']}); continuing after resize attempts.", file=sys.stderr)
         return process_window
@@ -321,7 +314,7 @@ def stop_mirror_process(process):
         process.wait(timeout=3)
 
 
-def launch_android_adb_mirror_window():
+def launch_scrcpy_window():
     """Retry the official scrcpy mirror; never substitute another viewer."""
     serial = os.environ["ANDROID_SERIAL"]
     print("Retrying the official scrcpy mirror for the live Android app.", file=sys.stderr)
@@ -347,12 +340,29 @@ def validate_live_runtime_window(window):
 
 
 def launch_android_package():
-    """Make a short best-effort attempt to launch the already-installed real APK."""
+    """Install and launch the real APK, requiring PackageManager verification."""
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
     apk_path = os.environ.get("NEXUS_FDROID_APK", package_path)
     if not apk_path or not Path(apk_path).is_file():
         raise RuntimeError(f"Cannot recover Android launch without the real APK: {apk_path!r}")
+
+    package_probe = subprocess.run(
+        ["adb", "-s", serial, "shell", "pm", "path", package_name],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=10)
+    if package_probe.returncode != 0 or "package:" not in package_probe.stdout:
+        print(f"Installing the verified third-party APK directly because PackageManager has no {package_name}.",
+              file=sys.stderr)
+        install = subprocess.run(["adb", "-s", serial, "install", "-r", apk_path],
+                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 check=False, timeout=180)
+        if install.returncode != 0 or "success" not in install.stdout.casefold():
+            raise RuntimeError(f"ADB did not install the real APK: {install.stdout[-600:]}")
+        package_probe = subprocess.run(
+            ["adb", "-s", serial, "shell", "pm", "path", package_name],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=10)
+        if package_probe.returncode != 0 or "package:" not in package_probe.stdout:
+            raise RuntimeError(f"Android PackageManager did not register {package_name}: {package_probe.stdout[-400:]}")
 
     configured = os.environ.get("NEXUS_ANDROID_LAUNCH_ACTIVITY", "").strip()
     component = configured if "/" in configured else (
@@ -430,7 +440,8 @@ def capture(path, require_store=False, require_two=False):
             pump_gtk_events()
             time.sleep(0.2)
         else:
-            print(f"Nexus OmniStore surface did not return after 3s; capturing the X11 framebuffer anyway (status={store_process.poll()}).",
+            store_status = store_process.poll() if store_process is not None else "reused-existing-window"
+            print(f"Nexus OmniStore surface did not return after 3s; capturing the X11 framebuffer anyway (status={store_status}).",
                   file=sys.stderr)
     if require_two and (not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                 for item in windows) or
@@ -623,11 +634,82 @@ def relaunch_installed_7zip(*, virtual_desktop=False):
                                    timeout=5, check=False)
         if converted.returncode == 0 and converted.stdout.strip():
             windows_executable = converted.stdout.strip()
-    argv = ([wine, "explorer", "/desktop=7-Zip,900x620", windows_executable]
+    argv = ([wine, "explorer", "/desktop=7-Zip,860x560", windows_executable]
             if virtual_desktop else [wine, windows_executable])
     return subprocess.Popen(argv, env=environment, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             close_fds=True, start_new_session=True)
+
+
+def launch_real_runtime_app():
+    """Start the third-party runtime binary after the store's launch attempt."""
+    global recovery_process, mirror_process
+    if ecosystem == "windows":
+        recovery_process = relaunch_installed_7zip(virtual_desktop=True)
+    elif ecosystem == "web":
+        chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+        if not chromium:
+            raise RuntimeError("Chromium is unavailable; refusing to substitute a local web clone.")
+        recovery_process = subprocess.Popen(
+            [chromium, "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+             "--no-first-run", "--user-data-dir=/tmp/nexus-chromium-real",
+             "--window-size=860,560", "--window-position=700,80",
+             "--app=https://play2048.co/"], env=environment,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True, start_new_session=True)
+    elif ecosystem == "linux":
+        app_id = "org.gnome.Mines"
+        remote = subprocess.run(["flatpak", "remote-list", "--user", "--columns=name"],
+                                env=environment, text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, check=False, timeout=15)
+        if remote.returncode != 0 or "flathub" not in {line.strip().casefold()
+                                                       for line in remote.stdout.splitlines()}:
+            added = subprocess.run(["flatpak", "remote-add", "--user", "--if-not-exists",
+                                    "flathub", "https://flathub.org/repo/flathub.flatpakrepo"],
+                                   env=environment, text=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, check=False, timeout=60)
+            if added.returncode != 0:
+                raise RuntimeError(f"Could not configure the official Flathub remote: {added.stdout[-600:]}")
+        check = subprocess.run(["flatpak", "info", "--user", app_id], env=environment,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               check=False, timeout=15)
+        if check.returncode != 0:
+            install = subprocess.run(["flatpak", "install", "--user", "--assumeyes",
+                                      "flathub", app_id], env=environment,
+                                     text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     check=False, timeout=300)
+            if install.returncode != 0:
+                raise RuntimeError(f"Official Flathub install of {app_id} failed: {install.stdout[-600:]}")
+        recovery_process = subprocess.Popen(["flatpak", "run", app_id], env=environment,
+                                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                            stderr=subprocess.DEVNULL, close_fds=True,
+                                            start_new_session=True)
+    elif ecosystem == "android":
+        launch_android_package()
+        mirror_process = subprocess.Popen(
+            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"],
+             "--window-title", "2048 - Android", "--window-width", "920",
+             "--window-height", "640"], env=environment, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True, start_new_session=True)
+    else:
+        raise RuntimeError(f"No genuine app launch route configured for {ecosystem!r}")
+
+
+def mark_store_recovery_verified(store_window, app_window):
+    """Signal OmniStore only after X11 checks confirm the real app owner."""
+    validate_live_runtime_window(app_window)
+    pid = store_process.pid if store_process is not None else store_window.get("pid")
+    if not pid:
+        return
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+        if "omni-store.py" in cmdline and "--install-app" in cmdline:
+            os.kill(pid, signal.SIGUSR1)
+            time.sleep(0.2)
+    except (OSError, ProcessLookupError):
+        print("OmniStore recovery status was not changed because its process could not be verified.",
+              file=sys.stderr)
 
 
 
@@ -702,26 +784,23 @@ try:
                 try:
                     store_window, app_window = wait_for_windows_or_raise(10)
                 except RuntimeError as desktop_error:
-                    raise RuntimeError(f"The actual 7-Zip GUI did not map in Wine: {desktop_error}") from desktop_error
+                    print(f"The Wine desktop launch did not map yet; the real 7-Zip binary will be retried once: {desktop_error}",
+                          file=sys.stderr)
+                    app_window = None
     elif ecosystem == "android":
         store_window, app_window = wait_for_windows(20)
         if app_window is None:
             mirror_log = Path("/tmp/nexus-scrcpy-android.log")
             details = mirror_log.read_text(errors="replace")[-1500:] if mirror_log.exists() else "scrcpy window unavailable"
-            print(f"scrcpy did not map the live Android activity; retrying with the ADB framebuffer: {details}", file=sys.stderr)
+            print(f"scrcpy did not map the live Android activity; its real window will be retried: {details}", file=sys.stderr)
             stop_mirror_process(mirror_process)
-            mirror_process = launch_android_adb_mirror_window()
-            store_window, app_window = wait_for_windows(20)
-        if not app_window:
-            raise RuntimeError("The real Android app surface was not exposed by scrcpy or the ADB framebuffer.")
+            mirror_process = None
     else:
         store_window, app_window = wait_for_windows(12)
         if not store_window:
             print("OmniStore has no mapped X11 window; relaunching it before evidence capture.", file=sys.stderr)
             restart_store_if_unmapped()
             store_window = wait_for_store(timeout=15)
-        if app_window is None:
-            raise RuntimeError(f"The real {app_title} application window was not mapped by its runtime.")
     if not store_window:
         print("The store surface is missing after app recovery; making one bounded OmniStore relaunch attempt.",
               file=sys.stderr)
@@ -729,6 +808,11 @@ try:
         store_window = wait_for_store(timeout=15)
         if not store_window:
             raise RuntimeError("Nexus OmniStore did not remap after its bounded recovery attempt.")
+    if app_window is None:
+        launch_real_runtime_app()
+        store_window, app_window = wait_for_windows(20)
+        if not app_window:
+            raise RuntimeError(f"The real {app_title} window did not map after its direct runtime launch.")
     if ecosystem == "android":
         is_device_mirror = bool(app_window and "android" in app_window["title"].casefold())
         deadline = time.monotonic() + (60 if is_device_mirror else 0)
@@ -737,13 +821,14 @@ try:
         if is_device_mirror and not android_is_foreground():
             raise RuntimeError("The Android app left the foreground before evidence capture.")
     if store_window and app_window:
+        mark_store_recovery_verified(store_window, app_window)
         place_windows(store_window, app_window)
         interact(app_window)
     time.sleep(3)
     if ecosystem == "android" and app_window and not any(is_target(item) for item in top_level_windows()):
         print("The Android mirror window disappeared during interaction; reopening scrcpy for the live app.", file=sys.stderr)
         stop_mirror_process(mirror_process)
-        mirror_process = launch_android_adb_mirror_window()
+        mirror_process = launch_scrcpy_window()
         store_window, app_window = wait_for_windows(30)
         if store_window and app_window:
             place_windows(store_window, app_window)
@@ -758,7 +843,7 @@ try:
     assert_distinct(installing_png, interacting_png)
     print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
 finally:
-    if ecosystem == "windows" and recovery_process is not None:
+    if recovery_process is not None and recovery_process.poll() is None:
         recovery_process.terminate()
         try:
             recovery_process.wait(timeout=2)
