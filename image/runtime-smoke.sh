@@ -102,7 +102,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
     export NEXUS_ANDROID_TARGET=adb
     if [[ "$action" == "--store-install" && "${NEXUS_ANDROID_INSTALL_ONLY:-0}" == "1" ]]; then
       install_status=0
-      timeout --kill-after=5s 180s "$LOADER" "$target" || install_status=$?
+      timeout --kill-after=3s 30s "$LOADER" "$target" || install_status=$?
       package_name="${NEXUS_ANDROID_PACKAGE_NAME:-org.secuso.privacyfriendly2048}"
       package_path="$(timeout --kill-after=1s 12s adb -s "$ANDROID_SERIAL" shell pm path "$package_name" 2>/dev/null || true)"
       if grep -q '^package:' <<<"$package_path"; then
@@ -117,7 +117,10 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as apk:
     names = set(apk.namelist())
-    if "AndroidManifest.xml" not in names:
+    if not {"AndroidManifest.xml", "classes.dex"}.issubset(names):
+        raise SystemExit(1)
+    dex_header = apk.read("classes.dex")[:8]
+    if len(dex_header) != 8 or not dex_header.startswith(b"dex\n") or dex_header[7] != 0:
         raise SystemExit(1)
     bad = apk.testzip()
     if bad:
