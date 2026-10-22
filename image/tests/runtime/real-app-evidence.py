@@ -526,7 +526,7 @@ def pump_gtk_events():
         gtk.main_iteration_do(False)
 
 
-def relaunch_installed_7zip():
+def relaunch_installed_7zip(*, virtual_desktop=False):
     prefix = environment.get("WINEPREFIX", "")
     if not prefix:
         raise RuntimeError("7-Zip recovery requires the active WINEPREFIX")
@@ -579,9 +579,9 @@ def relaunch_installed_7zip():
     if not wine:
         raise RuntimeError("Wine is required to launch the installed 7-Zip GUI")
     print(f"Reopening the installed 7-Zip GUI on DISPLAY={environment.get('DISPLAY')}.")
-    # A Wine virtual desktop gives 7-Zip a stable, medium-sized X11
-    # surface on headless runners where its HWND otherwise remains a 1x1 IME.
-    # The installed 7-Zip executable still provides the application UI.
+    # Prefer the installed GUI executable directly: this lets Wine map the
+    # real 7-Zip top-level window under Xvfb. Keep a named virtual desktop as
+    # a second launch strategy for systems where the app requires a desktop.
     winepath = shutil.which("winepath")
     windows_executable = executable
     if winepath:
@@ -590,10 +590,9 @@ def relaunch_installed_7zip():
                                    timeout=5, check=False)
         if converted.returncode == 0 and converted.stdout.strip():
             windows_executable = converted.stdout.strip()
-    # explorer.exe expects a DOS path when it starts a child inside a Wine
-    # virtual desktop. Passing the host /... path leaves only its 1x1 IME.
-    return subprocess.Popen([wine, "explorer", "/desktop=7-Zip,900x620", windows_executable],
-                            env=environment, stdin=subprocess.DEVNULL,
+    argv = ([wine, "explorer", "/desktop=7-Zip,900x620", windows_executable]
+            if virtual_desktop else [wine, windows_executable])
+    return subprocess.Popen(argv, env=environment, stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             close_fds=True, start_new_session=True)
 
@@ -634,7 +633,7 @@ try:
         mirror_process = subprocess.Popen(
             ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"],
              "--window-title", "2048 - Android", "--window-width", "920",
-             "--window-height", "640", "--no-audio"],
+             "--window-height", "640"],
             stdin=subprocess.DEVNULL, stdout=mirror_handle, stderr=subprocess.STDOUT,
             close_fds=True, start_new_session=True)
         time.sleep(1)
@@ -647,9 +646,23 @@ try:
             store_window, app_window = wait_for_windows(12)
         except RuntimeError as first_error:
             print(f"7-Zip window did not map on first launch: {first_error}", file=sys.stderr)
-            recovery_process = relaunch_installed_7zip()
+            recovery_process = relaunch_installed_7zip(virtual_desktop=False)
             restart_store_if_unmapped()
-            store_window, app_window = wait_for_windows(45)
+            try:
+                store_window, app_window = wait_for_windows(18)
+            except RuntimeError as direct_error:
+                print(f"Direct 7-Zip GUI launch did not map: {direct_error}; retrying in a Wine desktop.",
+                      file=sys.stderr)
+                if recovery_process.poll() is None:
+                    recovery_process.terminate()
+                    try:
+                        recovery_process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        recovery_process.kill()
+                        recovery_process.wait(timeout=2)
+                recovery_process = relaunch_installed_7zip(virtual_desktop=True)
+                restart_store_if_unmapped()
+                store_window, app_window = wait_for_windows(30)
     else:
         store_window, app_window = wait_for_windows(150 if ecosystem == "android" else 60)
     if ecosystem == "android":
@@ -671,7 +684,7 @@ try:
                 mirror_process.kill()
                 mirror_process.wait(timeout=2)
         mirror_process = subprocess.Popen(
-            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android", "--no-audio"],
+            ["scrcpy", "--serial", os.environ["ANDROID_SERIAL"], "--window-title", "2048 - Android"],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True, start_new_session=True)
         store_window, app_window = wait_for_windows(30)

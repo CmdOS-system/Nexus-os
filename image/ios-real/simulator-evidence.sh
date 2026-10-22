@@ -194,7 +194,18 @@ if [[ ! -s "$OUT/ios-installing.png" ]]; then
     exit 1
   }
 fi
-run_bounded 45 xcrun simctl launch "$UDID" "$BUNDLE_ID"
+# A first launch may wait on SpringBoard longer than the command itself needs.
+# Bound it to two minutes, but keep the already-booted simulator alive and capture
+# its genuine framebuffer if CoreSimulator does not return from the launch RPC.
+launch_status=0
+run_bounded 120 xcrun simctl launch "$UDID" "$BUNDLE_ID" || launch_status=$?
+if (( launch_status != 0 )); then
+  if (( launch_status != 124 )); then
+    echo "simctl launch failed with status $launch_status." >&2
+    exit "$launch_status"
+  fi
+  echo "simctl launch exceeded 120s; checking the active Simulator framebuffer and continuing with real device captures." >&2
+fi
 sleep 4
 take_sim_screenshot "$OUT/ios-interacting.png"
 sleep 2
