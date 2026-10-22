@@ -19,12 +19,10 @@ find_7zip_gui() {
   local prefix="$1" candidate
   for candidate in \
     "$prefix/drive_c/Program Files/7-Zip/7zFM.exe" \
-    "$prefix/drive_c/Program Files (x86)/7-Zip/7zFM.exe" \
-    "$prefix/drive_c/Program Files/7-Zip/7zG.exe" \
-    "$prefix/drive_c/Program Files (x86)/7-Zip/7zG.exe"; do
+    "$prefix/drive_c/Program Files (x86)/7-Zip/7zFM.exe"; do
     if [[ -s "$candidate" ]]; then printf '%s\n' "$candidate"; return 0; fi
   done
-  find "$prefix" -type f \( -iname '7zFM.exe' -o -iname '7zG.exe' \) -print -quit 2>/dev/null || true
+  find "$prefix" -type f -iname '7zFM.exe' -print -quit 2>/dev/null || true
 }
 
 # Store actions share this entry point so clicks and CI smoke runs pass through
@@ -79,7 +77,7 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
         sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
       fi
       if [[ -z "$sevenzip_exe" || ! -s "$sevenzip_exe" ]]; then
-        echo "Could not install or extract 7-Zip GUI from $installer; install p7zip-full (7z/7zz) and check Wine logs." >&2
+        echo "Could not install or extract the official 7-Zip File Manager (7zFM.exe) from $installer; install p7zip-full (7z/7zz) and check Wine logs." >&2
         exit 1
       fi
       echo "7-Zip 26.04 installed from the official Windows release package."

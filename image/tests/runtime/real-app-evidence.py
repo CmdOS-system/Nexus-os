@@ -566,9 +566,9 @@ def relaunch_installed_7zip(*, virtual_desktop=False):
     if not prefix:
         raise RuntimeError("7-Zip recovery requires the active WINEPREFIX")
     executable = ""
-    # The official installer can target either Program Files tree, and some
-    # releases also provide 7zG.exe as the usable graphical frontend.
-    for name in ("7zFM.exe", "7zG.exe"):
+    # Launch the official 7-Zip File Manager executable; 7zG is not the file
+    # manager UI required by this evidence flow.
+    for name in ("7zFM.exe",):
         result = subprocess.run(
             ["find", prefix, "-type", "f", "-iname", name, "-print", "-quit"],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15,
@@ -589,7 +589,7 @@ def relaunch_installed_7zip(*, virtual_desktop=False):
                 if shutil.which("wineserver"):
                     subprocess.run(["wineserver", "-w"], env=environment, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL, timeout=12, check=False)
-                for name in ("7zFM.exe", "7zG.exe"):
+                for name in ("7zFM.exe",):
                     result = subprocess.run(
                         ["find", prefix, "-type", "f", "-iname", name, "-print", "-quit"],
                         text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -602,7 +602,7 @@ def relaunch_installed_7zip(*, virtual_desktop=False):
                 print(f"7-Zip install recovery did not complete: {error}", file=sys.stderr)
     if not executable:
         raise RuntimeError(
-            f"The installed 7-Zip GUI (7zFM.exe or 7zG.exe) is missing from WINEPREFIX={prefix}; "
+            f"The official 7-Zip File Manager (7zFM.exe) is missing from WINEPREFIX={prefix}; "
             "searched recursively, including Program Files and Program Files (x86)"
         )
     if shutil.which("wineserver"):
