@@ -536,8 +536,7 @@ fi
 
 if [[ "${NEXUS_REQUIRE_REAL_EVIDENCE:-0}" == "1" ]]; then
   run_test "Validate real ecosystem evidence PNGs and MP4s" \
-    python3 "$ROOT/tests/runtime/validate-evidence.py" --evidence-root "$PROJECT_ROOT/evidence" \
-      --ecosystems windows web android linux
+    python3 "$ROOT/tests/runtime/validate-evidence.py" --evidence-root "$PROJECT_ROOT/evidence"
 fi
 
 

@@ -144,7 +144,7 @@ def is_target(window):
         "windows": ("7-zip", "7zfm", "7zip", "sevenzip"),
         "web": ("2048",),
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
-        "android": ("2048", "scrcpy"),
+        "android": ("scrcpy",),
     }.get(ecosystem, (app_title.casefold(),))
     if ecosystem == "windows" and window["width"] >= 300 and window["height"] >= 200:
         # Wine's virtual desktop is the mapped X11 top-level surface; the real
@@ -173,7 +173,7 @@ def wait_for_windows(timeout):
                          if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
     app_window = next((item for item in top_level_windows()
                        if is_target(item) and item["width"] > 300 and item["height"] > 200), None)
-    print(f"{ecosystem} windows did not finish mapping before timeout; returning available surfaces for GTK recovery: {names or '<none>'}",
+    print(f"{ecosystem} runtime windows did not finish mapping before timeout: {names or '<none>'}",
           file=sys.stderr)
     return store_window, app_window
 
@@ -322,21 +322,28 @@ def stop_mirror_process(process):
 
 
 def launch_android_adb_mirror_window():
-    """Show the live framebuffer streamed from the real ADB device in a desktop window."""
-    ffplay = shutil.which("ffplay")
-    if not ffplay:
-        raise RuntimeError("The live Android desktop mirror requires ffplay from the installed FFmpeg package")
+    """Retry the official scrcpy mirror; never substitute another viewer."""
     serial = os.environ["ANDROID_SERIAL"]
-    command = (
-        f'adb -s "{serial}" exec-out screenrecord --output-format=h264 - | '
-        f'"{ffplay}" -hide_banner -loglevel error -an -f h264 -i pipe:0 '
-        '-window_title "2048 - Android" -x 430 -y 600'
-    )
-    print("scrcpy did not map a desktop window; opening a live ADB framebuffer stream in ffplay.",
-          file=sys.stderr)
-    return subprocess.Popen(["bash", "-o", "pipefail", "-c", command], env=environment,
-                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
+    print("Retrying the official scrcpy mirror for the live Android app.", file=sys.stderr)
+    return subprocess.Popen(
+        ["scrcpy", "--serial", serial, "--window-title", "2048 - Android",
+         "--window-width", "920", "--window-height", "640"], env=environment,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        close_fds=True, start_new_session=True)
+
+
+def validate_live_runtime_window(window):
+    if not window or not window.get("id"):
+        raise RuntimeError(f"No mapped real {ecosystem} app window is available for ownership validation")
+    validator = root / "tests/runtime/validate-evidence.py"
+    result = subprocess.run(
+        [sys.executable, str(validator), "--live-ecosystem", ecosystem,
+         "--live-window-id", window["id"]], env=environment,
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        timeout=10, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"Live X11 process/WM_CLASS validation rejected {ecosystem}: {result.stdout.strip()}")
+    print(result.stdout.strip())
 
 
 def launch_android_package():
@@ -432,6 +439,10 @@ def capture(path, require_store=False, require_two=False):
         details = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}"
                              for item in windows) or "<none>"
         raise RuntimeError(f"Cannot create real runtime evidence without both mapped application windows: {details}")
+    if require_two:
+        live_target = next(item for item in windows if is_target(item)
+                           and item["width"] > 300 and item["height"] > 200)
+        validate_live_runtime_window(live_target)
     image = None
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
