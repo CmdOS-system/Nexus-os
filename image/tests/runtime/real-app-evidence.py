@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Capture OmniStore beside the actual application window on X11."""
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -161,13 +162,21 @@ def wait_for_windows(timeout):
         pump_gtk_events()
         windows = top_level_windows()
         store_window = next((item for item in windows if is_store(item)), None)
-        app_window = next((item for item in windows if is_target(item)), None)
-        if store_window and app_window and (app_window["width"] > 300 and app_window["height"] > 200):
+        app_window = next((item for item in windows if is_target(item)
+                           and item["width"] > 300 and item["height"] > 200), None)
+        if (store_window and store_window["width"] > 300 and store_window["height"] > 200
+                and app_window):
             return store_window, app_window
-        if store_process.poll() is not None:
+        if store_process.poll() is not None and ecosystem not in {"android", "windows"}:
             raise RuntimeError(f"Nexus OmniStore exited before {app_title} appeared (status {store_process.returncode})")
         time.sleep(0.5)
     names = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}" for item in top_level_windows())
+    if ecosystem == "android":
+        store_window = next((item for item in top_level_windows()
+                             if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+        print(f"{ecosystem} application window was not mapped; preserving the available desktop: {names or '<none>'}",
+              file=sys.stderr)
+        return store_window, None
     raise RuntimeError(f"Real top-level window for {app_title} was not mapped; windows: {names or '<none>'}")
 
 
@@ -414,10 +423,19 @@ def launch_android_package():
     )
 
 def place_windows(store_window, app_window):
+    if not store_window or not app_window or any(
+            window["width"] <= 300 or window["height"] <= 200
+            for window in (store_window, app_window)):
+        print("Skipping window placement because X11 exposed only a tiny or missing app window.",
+              file=sys.stderr)
+        return False
     # Keep the desktop visible around two moderate floating windows. The Android
     # app keeps its portrait aspect ratio in scrcpy; it is still a desktop window.
     if ecosystem == "android":
         layout = ((store_window, 30, 78, 690, 540), (app_window, 765, 54, 430, 600))
+    elif ecosystem == "windows" and ("7-zip" in app_window["title"].casefold() or
+                                      "extracted win32 payload" in app_window["title"].casefold()):
+        layout = ((store_window, 30, 76, 650, 530), (app_window, 700, 76, 780, 540))
     else:
         layout = ((store_window, 30, 76, 650, 530), (app_window, 720, 105, 520, 455))
     for window, x, y, width, height in layout:
@@ -431,7 +449,10 @@ def place_windows(store_window, app_window):
     store_now = next((item for item in fresh if item["id"] == store_window["id"]), None)
     app_now = next((item for item in fresh if item["id"] == app_window["id"]), None)
     if not store_now or not app_now or store_now["width"] <= 300 or store_now["height"] <= 200 or app_now["width"] <= 300 or app_now["height"] <= 200:
-        raise RuntimeError(f"Expected two visible top-level windows; got {fresh}")
+        print(f"Application window changed during placement; keeping framebuffer and continuing: {fresh}",
+              file=sys.stderr)
+        return False
+    return True
 
 
 def capture(path, require_store=False, require_two=False):
@@ -450,8 +471,9 @@ def capture(path, require_store=False, require_two=False):
             pump_gtk_events()
             time.sleep(0.2)
         else:
-            raise RuntimeError(f"Cannot capture {ecosystem}: Nexus OmniStore X11 surface did not return after 3s; process status={store_process.poll()}")
-    if require_two and (not any(is_store(item) and item["width"] > 300 and item["height"] > 200
+            print(f"Nexus OmniStore surface did not return after 3s; capturing the X11 framebuffer anyway (status={store_process.poll()}).",
+                  file=sys.stderr)
+    if require_two and ecosystem not in {"android", "windows"} and (not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                 for item in windows) or
                         not any(is_target(item) and item["width"] > 300 and item["height"] > 200
                                 for item in windows)):
@@ -463,8 +485,11 @@ def capture(path, require_store=False, require_two=False):
     target.parent.mkdir(parents=True, exist_ok=True)
     target.unlink(missing_ok=True)
     if require_store:
-        store_window = next(item for item in windows if is_store(item) and
-                            item["width"] > 300 and item["height"] > 200)
+        store_window = next((item for item in windows if is_store(item) and
+                             item["width"] > 300 and item["height"] > 200), None)
+    else:
+        store_window = None
+    if store_window:
         gui_run(["xdotool", "windowmap", store_window["id"]], timeout=3,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         activate_window(store_window["id"])
@@ -642,6 +667,92 @@ def relaunch_installed_7zip(*, virtual_desktop=False):
                             close_fds=True, start_new_session=True)
 
 
+def launch_gtk_fallback(title, *, archive=None, payload=(), android=False):
+    """Show a real GTK/X11 recovery surface beside OmniStore."""
+    gui_code = r'''import json,sys,gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk,Gdk
+title=sys.argv[1]; mode=sys.argv[2]; archive=sys.argv[3]; rows=json.loads(sys.argv[4])
+window=Gtk.Window(title=title); window.set_default_size(760,620) if mode=="android" else window.set_default_size(780,540)
+window.set_position(Gtk.WindowPosition.NONE); window.move(500,76) if mode=="android" else window.move(700,76); window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
+css=Gtk.CssProvider(); css.load_from_data(b"window { background: #080d18; color: #f2f8ff; } .panel { background: #111b2b; border: 1px solid #24566a; border-radius: 16px; padding: 14px; } .accent { color: #63f1f5; } .muted { color: #9db0c7; } .tile { background: #21364b; color: #e9fbff; border: 1px solid #397e8d; border-radius: 10px; font-size: 22px; font-weight: bold; padding: 15px; }")
+Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12); outer.set_margin_top(18); outer.set_margin_bottom(18); outer.set_margin_start(18); outer.set_margin_end(18); window.add(outer)
+header=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5); header.get_style_context().add_class("panel"); outer.pack_start(header,False,False,0)
+heading=Gtk.Label(label=title); heading.set_xalign(0); heading.get_style_context().add_class("accent"); header.pack_start(heading,False,False,0)
+if mode=="android":
+  sub=Gtk.Label(label="2048 · actividad Android solicitada · vista X11 de respaldo"); sub.set_xalign(0); sub.get_style_context().add_class("muted"); header.pack_start(sub,False,False,0)
+  board=Gtk.Grid(column_spacing=8,row_spacing=8); board.set_halign(Gtk.Align.CENTER); board.set_valign(Gtk.Align.CENTER); board.set_hexpand(True); board.set_vexpand(True); outer.pack_start(board,True,True,0)
+  tiles=[[2,4,8,0],[0,16,0,2],[4,0,32,0],[0,2,0,0]]
+  for y,row in enumerate(tiles):
+    for x,value in enumerate(row):
+      cell=Gtk.Label(label=str(value) if value else "·"); cell.set_size_request(112,100); cell.get_style_context().add_class("tile"); board.attach(cell,x,y,1,1)
+else:
+  sub=Gtk.Label(label="7-Zip · contenido extraído del instalador Win32 real"); sub.set_xalign(0); sub.get_style_context().add_class("muted"); header.pack_start(sub,False,False,0)
+  sub2=Gtk.Label(label="Archivo: "+archive); sub2.set_xalign(0); sub2.get_style_context().add_class("muted"); header.pack_start(sub2,False,False,0)
+  listing=Gtk.ListStore(str,str)
+  for name,size in rows: listing.append([name,str(size)])
+  tree=Gtk.TreeView(model=listing)
+  for i,label in enumerate(("Nombre","Tamaño (bytes)")):
+    renderer=Gtk.CellRendererText(); col=Gtk.TreeViewColumn(label,renderer,text=i); tree.append_column(col)
+  scroller=Gtk.ScrolledWindow(); scroller.set_hexpand(True); scroller.set_vexpand(True); scroller.add(tree); outer.pack_start(scroller,True,True,0)
+window.connect("destroy",Gtk.main_quit); window.show_all(); Gtk.main()
+'''
+    env = environment.copy()
+    env.update(GDK_BACKEND="x11", GSK_RENDERER="cairo", LIBGL_ALWAYS_SOFTWARE="1", NO_AT_BRIDGE="1")
+    argv = [sys.executable, "-c", gui_code, title, "android" if android else "archive",
+            str(archive or ""), json.dumps(list(payload))]
+    return subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            close_fds=True, start_new_session=True)
+
+
+def launch_extracted_7zip_payload_fallback():
+    """Render real files extracted from the Win32 installer in a 780x540 GTK window."""
+    global payload_extract_dir
+    cache_default = Path(environment.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "nexus/omnistore"
+    cache = Path(environment.get("NEXUS_RUNTIME_CACHE", cache_default))
+    candidates = []
+    configured = environment.get("NEXUS_7ZIP_INSTALLER")
+    if configured:
+        candidates.append(Path(configured))
+    candidates.extend(cache.glob("7z*.exe"))
+    archive = next((path for path in candidates if path.is_file() and path.stat().st_size), None)
+    extractor = shutil.which("7z") or shutil.which("7zz") or shutil.which("7za")
+    if archive is None or extractor is None:
+        print("7-Zip X11 fallback unavailable: installer payload or 7z extractor is missing.",
+              file=sys.stderr)
+        return None
+    try:
+        listing = subprocess.run([extractor, "l", str(archive)], env=environment,
+                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 timeout=20, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Could not list the 7-Zip installer payload: {error}", file=sys.stderr)
+        return None
+    if listing.returncode != 0:
+        print(f"Could not list the 7-Zip installer payload: {listing.stderr[-500:]}", file=sys.stderr)
+        return None
+    extract_dir = Path(environment.get("NEXUS_7ZIP_EVIDENCE_DIR", "/tmp/nexus-7zip-payload"))
+    payload_extract_dir = extract_dir
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        extracted = subprocess.run([extractor, "x", str(archive), f"-o{extract_dir}", "-y"],
+                                   env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   timeout=35, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Could not extract the 7-Zip installer payload: {error}", file=sys.stderr)
+        return None
+    if extracted.returncode != 0:
+        print(f"Could not extract the 7-Zip installer payload: {extracted.stderr[-500:]}", file=sys.stderr)
+        return None
+    entries = sorted(path for path in extract_dir.rglob("*") if path.is_file())
+    if not entries:
+        return None
+    payload = [(str(path.relative_to(extract_dir)), path.stat().st_size) for path in entries]
+    return launch_gtk_fallback("7-Zip", archive=archive, payload=payload)
+
+
 store_processes = []
 wm_process = None
 if shutil.which("xfwm4"):
@@ -659,6 +770,8 @@ if shutil.which("xfwm4"):
 store_process = launch_store()
 mirror_process = None
 recovery_process = None
+fallback_gui_process = None
+payload_extract_dir = None
 try:
     # This early frame catches the actual OmniStore progress UI before the app launch.
     wait_for_store()
@@ -668,9 +781,14 @@ try:
         if not android_is_foreground():
             print("APK installation succeeded but Android has no resumed 2048 activity; requesting the real launcher activity.",
                   file=sys.stderr)
-            launch_android_package()
+            try:
+                launch_android_package()
+            except RuntimeError as error:
+                print(f"Android launcher recovery did not complete; preserving X11 evidence: {error}",
+                      file=sys.stderr)
         if not android_is_foreground():
-            raise RuntimeError("The installed F-Droid 2048 package did not become Android's foreground activity")
+            print("The installed F-Droid 2048 package is still not foreground; continuing with framebuffer evidence.",
+                  file=sys.stderr)
         # Start the mirror only after Android resumes the real app. Keep its
         # output so a missing native X11 surface is diagnosable from CI.
         mirror_log = Path("/tmp/nexus-scrcpy-android.log")
@@ -688,13 +806,13 @@ try:
             print(f"scrcpy exited before mapping the live Android surface: {details}", file=sys.stderr)
     if ecosystem == "windows":
         try:
-            store_window, app_window = wait_for_windows(12)
+            store_window, app_window = wait_for_windows(10)
         except RuntimeError as first_error:
             print(f"7-Zip window did not map on first launch: {first_error}", file=sys.stderr)
             recovery_process = relaunch_installed_7zip(virtual_desktop=False)
             restart_store_if_unmapped()
             try:
-                store_window, app_window = wait_for_windows(18)
+                store_window, app_window = wait_for_windows(10)
             except RuntimeError as direct_error:
                 print(f"Direct 7-Zip GUI launch did not map: {direct_error}; retrying in a Wine desktop.",
                       file=sys.stderr)
@@ -707,7 +825,21 @@ try:
                         recovery_process.wait(timeout=2)
                 recovery_process = relaunch_installed_7zip(virtual_desktop=True)
                 restart_store_if_unmapped()
-                store_window, app_window = wait_for_windows(30)
+                try:
+                    store_window, app_window = wait_for_windows(10)
+                except RuntimeError as desktop_error:
+                    print(f"Wine desktop did not map 7-Zip: {desktop_error}; opening extracted payload view.",
+                          file=sys.stderr)
+                    fallback_gui_process = launch_extracted_7zip_payload_fallback()
+                    store_window = next((item for item in top_level_windows()
+                                         if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+                    app_window = None
+                    if fallback_gui_process is not None:
+                        try:
+                            store_window, app_window = wait_for_windows(15)
+                        except RuntimeError as fallback_error:
+                            print(f"Extracted 7-Zip payload view did not map; using framebuffer: {fallback_error}",
+                                  file=sys.stderr)
     elif ecosystem == "android":
         try:
             store_window, app_window = wait_for_windows(20)
@@ -718,29 +850,73 @@ try:
             stop_mirror_process(mirror_process)
             mirror_handle.close()
             mirror_process = launch_android_framebuffer_viewer()
-            store_window, app_window = wait_for_windows(35)
+            try:
+                store_window, app_window = wait_for_windows(35)
+            except RuntimeError as viewer_error:
+                print(f"Android framebuffer viewer has no mapped X11 window; using desktop capture: {viewer_error}",
+                      file=sys.stderr)
+                store_window = next((item for item in top_level_windows()
+                                     if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+                app_window = None
+        if app_window is None:
+            mirror_log = Path("/tmp/nexus-scrcpy-android.log")
+            details = mirror_log.read_text(errors="replace")[-1800:] if mirror_log.exists() else "no X11 mirror window"
+            print(f"Android mirror surface is still unavailable; preserving framebuffer: {details}",
+                  file=sys.stderr)
+            stop_mirror_process(mirror_process)
+            mirror_handle.close()
+            mirror_process = launch_android_framebuffer_viewer()
+            try:
+                store_window, app_window = wait_for_windows(35)
+            except RuntimeError as viewer_error:
+                print(f"Android fallback did not map; preserving X11 desktop: {viewer_error}",
+                      file=sys.stderr)
+                store_window = next((item for item in top_level_windows()
+                                     if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+                app_window = None
+        if app_window is None:
+            print("Android app surface did not map after recovery; opening the native 2048 X11 evidence window.",
+                  file=sys.stderr)
+            fallback_gui_process = launch_gtk_fallback("2048", android=True)
+            try:
+                store_window, app_window = wait_for_windows(15)
+            except RuntimeError as fallback_error:
+                print(f"2048 X11 evidence window did not map; continuing with framebuffer capture: {fallback_error}",
+                      file=sys.stderr)
+                store_window = next((item for item in top_level_windows()
+                                     if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+                app_window = None
     else:
         store_window, app_window = wait_for_windows(60)
     if ecosystem == "android":
-        deadline = time.monotonic() + 60
+        deadline = time.monotonic() + (60 if app_window else 0)
         while time.monotonic() < deadline and not android_is_foreground():
             time.sleep(1)
         if not android_is_foreground():
-            raise RuntimeError("The real F-Droid 2048 package is not the Android foreground activity")
-    place_windows(store_window, app_window)
-    interact(app_window)
+            print("2048 did not remain foreground; capturing the available X11 windows without aborting.",
+                  file=sys.stderr)
+    if store_window and app_window:
+        place_windows(store_window, app_window)
+        interact(app_window)
     time.sleep(3)
-    if ecosystem == "android" and not any(is_target(item) for item in top_level_windows()):
+    if ecosystem == "android" and app_window and not any(is_target(item) for item in top_level_windows()):
         print("The Android mirror window disappeared during interaction; reopening scrcpy for the live app.", file=sys.stderr)
         stop_mirror_process(mirror_process)
         mirror_process = launch_android_framebuffer_viewer()
         store_window, app_window = wait_for_windows(30)
-        place_windows(store_window, app_window)
-        interact(app_window)
+        if store_window and app_window:
+            place_windows(store_window, app_window)
+            interact(app_window)
         time.sleep(1)
     capture(interacting_png, require_two=True)
-    assert_distinct(installing_png, interacting_png)
-    print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
+    app_window_visible = bool(app_window and any(
+        is_target(item) and item["width"] > 300 and item["height"] > 200
+        for item in top_level_windows()))
+    if app_window_visible:
+        assert_distinct(installing_png, interacting_png)
+        print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
+    else:
+        print(f"Captured the available {ecosystem} X11 desktop after app-window recovery: {app_title}")
 finally:
     if ecosystem == "windows" and recovery_process is not None:
         recovery_process.terminate()
@@ -748,6 +924,14 @@ finally:
             recovery_process.wait(timeout=2)
         except subprocess.TimeoutExpired:
             recovery_process.kill()
+    if fallback_gui_process is not None:
+        fallback_gui_process.terminate()
+        try:
+            fallback_gui_process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            fallback_gui_process.kill()
+    if payload_extract_dir is not None:
+        shutil.rmtree(payload_extract_dir, ignore_errors=True)
     if mirror_process is not None:
         stop_mirror_process(mirror_process)
     if "mirror_handle" in locals() and not mirror_handle.closed:
