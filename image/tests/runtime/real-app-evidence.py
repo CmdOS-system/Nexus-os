@@ -447,20 +447,35 @@ def android_is_foreground(timeout=2):
 
 
 def stop_mirror_process(process):
-    if process is None or process.poll() is not None:
+    if process is None:
         return
+    # Every launcher uses start_new_session=True. Kill its complete process
+    # group so shell helpers, Chromium children, scrcpy, ffplay and ADB loops
+    # cannot outlive the evidence capture even if the leader has exited.
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except (OSError, ProcessLookupError):
-        process.terminate()
+        if process.poll() is None:
+            process.terminate()
     try:
-        process.wait(timeout=4)
+        if process.poll() is None:
+            process.wait(timeout=4)
     except subprocess.TimeoutExpired:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except (OSError, ProcessLookupError):
-            process.kill()
-        process.wait(timeout=3)
+            if process.poll() is None:
+                process.kill()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            pass
+    # The leader may have exited while one of its children still holds the
+    # session. SIGKILL the group after a grace period as a final cleanup.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (OSError, ProcessLookupError):
+        pass
 
 
 def launch_scrcpy_window():
@@ -564,7 +579,7 @@ def reconnect_android_device(timeout=120):
     try:
         ready = subprocess.run(["adb", "-s", serial, "wait-for-device"], text=True,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               check=False, timeout=timeout)
+                               check=False, timeout=min(timeout, 30))
     except (OSError, subprocess.TimeoutExpired) as error:
         raise RuntimeError(f"Android emulator {serial} did not reconnect within {timeout}s: {error}") from error
     state = subprocess.run(["adb", "-s", serial, "get-state"], text=True,
@@ -592,7 +607,7 @@ def _launch_android_package_once():
               file=sys.stderr)
         install = subprocess.run(["adb", "-s", serial, "install", "-r", apk_path],
                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                 check=False, timeout=180)
+                                 check=False, timeout=90)
         if install.returncode != 0 or "success" not in install.stdout.casefold():
             raise RuntimeError(f"ADB did not install the real APK: {install.stdout[-600:]}")
         package_probe = subprocess.run(
@@ -833,7 +848,7 @@ def relaunch_installed_7zip(*, virtual_desktop=False):
             try:
                 subprocess.run(["bash", smoke_script, "--store-install", "windows", "7zip:auto"],
                                env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, text=True, timeout=120, check=False)
+                               stderr=subprocess.STDOUT, text=True, timeout=90, check=False)
                 if shutil.which("wineserver"):
                     subprocess.run(["wineserver", "-w"], env=environment, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL, timeout=12, check=False)
@@ -925,7 +940,7 @@ def launch_real_runtime_app():
             install = subprocess.run(["flatpak", "install", "--user", "--assumeyes",
                                       "flathub", app_id], env=environment,
                                      text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     check=False, timeout=300)
+                                     check=False, timeout=90)
             if install.returncode != 0:
                 raise RuntimeError(f"Official Flathub install of {app_id} failed: {install.stdout[-600:]}")
         recovery_process = subprocess.Popen(["flatpak", "run", app_id], env=environment,
@@ -1096,28 +1111,8 @@ try:
     assert_distinct(installing_png, interacting_png)
     print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
 finally:
-    if recovery_process is not None and recovery_process.poll() is None:
-        recovery_process.terminate()
-        try:
-            recovery_process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            recovery_process.kill()
-    if mirror_process is not None:
-        stop_mirror_process(mirror_process)
-    if fallback_process is not None:
-        stop_mirror_process(fallback_process)
-    for process in store_processes:
-        if process.poll() is None:
-            process.terminate()
-        try:
-            process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            process.kill()
-    if wm_process is not None and wm_process.poll() is None:
-        wm_process.terminate()
-        try:
-            wm_process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            wm_process.kill()
+    for process in (recovery_process, mirror_process, fallback_process,
+                    *store_processes, wm_process):
+        stop_mirror_process(process)
 
 

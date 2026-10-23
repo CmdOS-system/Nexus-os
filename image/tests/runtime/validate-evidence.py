@@ -107,6 +107,9 @@ def native_x11_window(window_id):
         wm_class = " ".join(part for part in class_parts if part).casefold()
         pid_property = window.get_full_property(connection.intern_atom("_NET_WM_PID"), X.AnyPropertyType)
         pid = int(pid_property.value[0]) if pid_property and len(pid_property.value) else 0
+        name_property = window.get_full_property(connection.intern_atom("WM_NAME"), X.AnyPropertyType)
+        wm_name = name_property.value.decode(errors="replace").casefold() if name_property else ""
+        pid = _window_owner_pid(window_id, wm_class, wm_name, pid)
         return int(geometry.width), int(geometry.height), pid, wm_class
     finally:
         connection.close()
@@ -127,6 +130,49 @@ def xwininfo_has_window(window_id):
     ) is not None
 
 
+def _window_owner_pid(window_id, wm_class, wm_name, pid=0):
+    """Resolve the mapped window's process even when the WM omits _NET_WM_PID."""
+    if pid > 1 and Path(f"/proc/{pid}").exists():
+        return pid
+    if shutil.which("xdotool"):
+        try:
+            result = subprocess.run(["xdotool", "getwindowpid", window_id], check=False,
+                                    text=True, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, timeout=5)
+            candidate = int(result.stdout.strip()) if result.returncode == 0 else 0
+            if candidate > 1 and Path(f"/proc/{candidate}").exists():
+                return candidate
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+
+    hinted = f"{wm_class} {wm_name}".casefold()
+    executables = ("gnome-mines", "galculator", "7zfm.exe", "7zfm", "explorer.exe",
+                   "chromium", "chromium-browser", "google-chrome", "scrcpy", "ffplay", "vlc")
+    ranked = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            process_id = int(entry.name)
+            cmdline = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").casefold()
+            comm = (entry / "comm").read_text(errors="replace").strip().casefold()
+        except (OSError, ValueError):
+            continue
+        if not cmdline and not comm:
+            continue
+        identity = f"{comm} {cmdline}"
+        matched = [name for name in executables if name in identity]
+        if not matched:
+            continue
+        score = 4 if any(name in hinted for name in matched) else 1
+        if comm in matched:
+            score += 3
+        if "--type=" in cmdline:
+            score -= 1
+        ranked.append((score, process_id))
+    return max(ranked, default=(0, 0))[1]
+
+
 def x11_window_fallback(window_id):
     """Get dimensions, PID, and class from X11 tools when EWMH is unavailable."""
     if xwininfo_has_window(window_id):
@@ -138,17 +184,22 @@ def x11_window_fallback(window_id):
             height_match = re.search(r"Height:\s*(\d+)", info.stdout)
             if info.returncode == 0 and width_match and height_match:
                 width, height = int(width_match.group(1)), int(height_match.group(1))
-                pid, wm_class = 0, ""
+                pid, wm_class, wm_name = 0, "", ""
                 if shutil.which("xprop"):
-                    props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS", "_NET_WM_PID"],
+                    props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS", "WM_NAME",
+                                            "_NET_WM_PID"],
                                            check=False, text=True, stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE, timeout=5).stdout
                     match = re.search(r'WM_CLASS\(.*?\)\s*=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
                     if match:
                         wm_class = " ".join(match.groups()).casefold()
+                    name_match = re.search(r'WM_NAME\(.*?\)\s*=\s*"([^"]*)"', props)
+                    if name_match:
+                        wm_name = name_match.group(1).casefold()
                     pid_match = re.search(r"_NET_WM_PID\(.*?\)\s*=\s*(\d+)", props)
                     if pid_match:
                         pid = int(pid_match.group(1))
+                pid = _window_owner_pid(window_id, wm_class, wm_name, pid)
                 return width, height, pid, wm_class
         except (OSError, subprocess.TimeoutExpired):
             pass
@@ -240,16 +291,24 @@ def validate_live_window(ecosystem, window_id):
         try:
             pid = int(wmctrl_row[2])
             width, height = int(wmctrl_row[5]), int(wmctrl_row[6])
-            props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS"], check=True,
+            props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS", "WM_NAME",
+                                    "_NET_WM_PID"], check=True,
                                    text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    timeout=5).stdout if shutil.which("xprop") else ""
             match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
             wm_class = " ".join(match.groups()).casefold() if match else ""
+            name_match = re.search(r'WM_NAME\(.*?\)\s*=\s*"([^"]*)"', props)
+            pid_match = re.search(r"_NET_WM_PID\(.*?\)\s*=\s*(\d+)", props)
+            if pid <= 1 and pid_match:
+                pid = int(pid_match.group(1))
+            if pid <= 1:
+                pid = _window_owner_pid(window_id, wm_class,
+                                        name_match.group(1).casefold() if name_match else "", pid)
         except (ValueError, subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired):
             wmctrl_row = None
     if not wmctrl_row or len(wmctrl_row) < 7:
         width, height, pid, wm_class = x11_window_fallback(window_id)
-    if width < 300 or height < 200 or pid <= 1:
+    if width < 500 or height < 360 or pid <= 1:
         raise ValueError(f"runtime window is tiny or has no process owner: {width}x{height}, pid={pid}")
     cmdline_path = Path(f"/proc/{pid}/cmdline")
     cmdline = cmdline_path.read_bytes().replace(b"\0", b" ").decode(errors="replace").casefold() if cmdline_path.exists() else ""

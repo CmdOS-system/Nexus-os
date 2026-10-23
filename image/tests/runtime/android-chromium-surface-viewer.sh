@@ -78,7 +78,7 @@ while :; do
     fi
   fi
   sleep 0.5
-done &
+done </dev/null >/dev/null 2>&1 &
 updater=$!
 "$chrome" --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run \
   --allow-file-access-from-files --user-data-dir=/tmp/android-surface-viewer \

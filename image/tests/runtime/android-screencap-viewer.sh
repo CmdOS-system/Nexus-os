@@ -77,7 +77,7 @@ while :; do
     fi
   fi
   sleep 0.5
-done &
+done </dev/null >/dev/null 2>&1 &
 updater=$!
 
 ffmpeg -v error -y -f lavfi -i "color=c=0x0d1726:s=760x560:r=10:d=30" -i "$image" \
