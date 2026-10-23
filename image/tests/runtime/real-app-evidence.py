@@ -43,6 +43,7 @@ if ecosystem != "android":
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
 environment.update(GDK_BACKEND="x11", GSK_RENDERER="cairo", LIBGL_ALWAYS_SOFTWARE="1",
+                   SDL_VIDEODRIVER="x11", SDL_AUDIODRIVER="dummy",
                    SDL_RENDER_DRIVER="software", NO_AT_BRIDGE="1")
 if ecosystem == "android":
     # The installer records success only after ADB confirms package installation.
@@ -136,6 +137,19 @@ def activate_window(window_id):
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def unmaximize_window(window_id):
+    if shutil.which("wmctrl"):
+        gui_run(["wmctrl", "-i", "-r", window_id,
+                 "-b", "remove,maximized_vert,maximized_horz,fullscreen"],
+                timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def largest_store_window(windows=None):
+    windows = top_level_windows() if windows is None else windows
+    stores = [item for item in windows if is_store(item)]
+    return max(stores, key=lambda item: item["width"] * item["height"], default=None)
+
+
 def window_process_identity(window):
     pid = window.get("pid")
     if not pid or pid <= 1:
@@ -149,27 +163,33 @@ def window_process_identity(window):
 
 
 def is_store(window):
-    identity = (window["title"] + " " + window["class"] + " " +
-                window_process_identity(window)).casefold()
+    title_class = (window["title"] + " " + window["class"]).casefold()
+    process_identity = window_process_identity(window)
     process_match = "store_process" in globals() and store_process is not None and window.get("pid") == store_process.pid
-    return process_match or any(token in identity for token in
-                                ("omni-store.py", "omnistore", "nexus", "store", "python3"))
+    return (process_match or any(token in process_identity for token in ("omni-store.py", "python3"))
+            or any(token in title_class for token in ("omni-store.py", "omnistore", "nexus", "store")))
 
 
 def is_target(window):
     if is_store(window):
         return False
     identity = (window["title"] + " " + window["class"]).casefold()
-    if ecosystem == "web" and "chrom" in identity and not is_store(window):
-        return True
+    if ecosystem == "android":
+        is_named_surface = "privacy friendly 2048" in window["title"].casefold()
+        is_native_viewer = any(token in identity for token in
+                               ("scrcpy", "ffplay", "chromium", "chromium-browser"))
+        return is_named_surface and is_native_viewer
+    if ecosystem == "web":
+        title = window["title"].casefold()
+        wm_class = window["class"].casefold()
+        return ("2048" in title or any(token in wm_class for token in
+                ("chromium", "chromium-browser", "google-chrome", "play2048")))
     accepted = {
         "windows": ("7-zip", "7zfm", "7zip", "sevenzip"),
         "web": ("2048",),
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
-        "android": ("scrcpy", "ffplay"),
+        "android": ("scrcpy", "ffplay", "chromium", "chromium-browser"),
     }.get(ecosystem, (app_title.casefold(),))
-    if ecosystem == "android" and "privacy friendly 2048" in window["title"].casefold():
-        return not is_store(window)
     if ecosystem == "windows" and window["width"] >= 300 and window["height"] >= 200:
         # Wine's virtual desktop is the mapped X11 top-level surface; the real
         # 7-Zip GUI is launched inside it. Ignore 1x1 Wine IME helper windows.
@@ -185,7 +205,7 @@ def wait_for_windows(timeout):
     while time.monotonic() < deadline:
         pump_gtk_events()
         windows = top_level_windows()
-        store_window = next((item for item in windows if is_store(item)), None)
+        store_window = largest_store_window(windows)
         app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
         app_window = next((item for item in windows if item["id"] != (store_window or {}).get("id")
                            and not is_store(item) and is_target(item)
@@ -196,8 +216,9 @@ def wait_for_windows(timeout):
             return store_window, app_window
         time.sleep(0.5)
     names = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}" for item in top_level_windows())
-    store_window = next((item for item in top_level_windows()
-                         if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+    store_window = largest_store_window(top_level_windows())
+    if store_window and (store_window["width"] <= 300 or store_window["height"] <= 200):
+        store_window = None
     app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
     app_window = next((item for item in top_level_windows()
                        if item["id"] != (store_window or {}).get("id") and not is_store(item)
@@ -220,35 +241,20 @@ def wait_for_windows_or_raise(timeout):
 
 def launch_store():
     windows = [item for item in top_level_windows() if is_store(item)]
-    existing = next((item for item in windows if item["width"] > 300 and item["height"] > 200), None)
+    existing = max(windows, key=lambda item: item["width"] * item["height"], default=None)
     if existing:
         # Reuse the mapped store surface and terminate duplicate app processes.
+        unmaximize_window(existing["id"])
         if existing.get("pid"):
             for pid in existing_store_pids():
                 if pid != existing["pid"]:
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
+                    stop_store_process(pid)
         print(f"Reusing existing OmniStore window {existing['id']} ({existing['width']}x{existing['height']}); not starting a second instance.",
               file=sys.stderr)
         return None
     existing_pids = existing_store_pids()
     for pid in existing_pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-    for _ in range(15):
-        if not any(Path(f"/proc/{pid}").exists() for pid in existing_pids):
-            break
-        time.sleep(0.2)
-    for pid in existing_pids:
-        if Path(f"/proc/{pid}").exists():
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        stop_store_process(pid)
     process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                close_fds=True, start_new_session=True)
@@ -274,6 +280,21 @@ def existing_store_pids():
     return pids
 
 
+def stop_store_process(pid):
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    for _ in range(10):
+        if not Path(f"/proc/{pid}").exists():
+            return
+        time.sleep(0.1)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
 def restart_store_if_unmapped():
     global store_process
     windows = top_level_windows()
@@ -297,7 +318,7 @@ def wait_for_store(timeout=25):
     process_window = None
     while time.monotonic() < deadline:
         windows = top_level_windows()
-        window = next((item for item in windows if is_store(item)), None)
+        window = largest_store_window(windows)
         if not window and store_process is not None and store_process.poll() is None:
             window = next((item for item in windows if item.get("pid") == store_process.pid), None)
         if window:
@@ -453,33 +474,64 @@ def launch_scrcpy_window():
 
 
 def launch_android_screencap_viewer():
-    """Mirror real ADB screenshots through native ffplay after scrcpy fails."""
+    """Try ffplay first, then a Chromium viewer fed by real ADB screenshots."""
     serial = os.environ["ANDROID_SERIAL"]
     helper = root / "tests/runtime/android-screencap-viewer.sh"
-    if not shutil.which("ffplay"):
-        print("ffplay is unavailable; cannot open the native Android screenshot viewer.", file=sys.stderr)
+    package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
+    if shutil.which("ffplay"):
+        try:
+            process = subprocess.Popen(
+                ["bash", str(helper), serial, package_name], env=environment,
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                close_fds=True, start_new_session=True)
+        except OSError as error:
+            print(f"Could not start ffplay Android viewer: {error}", file=sys.stderr)
+            process = None
+        deadline = time.monotonic() + 4
+        while process is not None and time.monotonic() < deadline:
+            window = next((item for item in top_level_windows()
+                           if "privacy friendly 2048" in item["title"].casefold()
+                           and "ffplay" in item["class"].casefold() and not is_store(item)), None)
+            if window and window["width"] >= 300 and window["height"] >= 200:
+                return process, window
+            if process.poll() is not None:
+                break
+            time.sleep(0.2)
+        if process is not None:
+            stop_mirror_process(process)
+        print("ffplay did not map within 4s; switching to the real Chromium Android surface viewer.",
+              file=sys.stderr)
+    return launch_android_chromium_viewer(serial, package_name)
+
+
+def launch_android_chromium_viewer(serial, package_name):
+    """Show APK screenshots in a real Chromium app window when SDL cannot map."""
+    chromium = (shutil.which("chromium") or shutil.which("chromium-browser")
+                or shutil.which("google-chrome"))
+    if not chromium:
+        print("Chromium is unavailable for the Android screenshot fallback.", file=sys.stderr)
         return None, None
+    helper = root / "tests/runtime/android-chromium-surface-viewer.sh"
     try:
         process = subprocess.Popen(
-            ["bash", str(helper), serial,
-             os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")],
-            env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
+            ["bash", str(helper), serial, package_name], env=environment,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True, start_new_session=True)
     except OSError as error:
-        print(f"Could not start the native Android screenshot viewer: {error}", file=sys.stderr)
+        print(f"Could not start Chromium Android viewer: {error}", file=sys.stderr)
         return None, None
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         window = next((item for item in top_level_windows()
                        if "privacy friendly 2048" in item["title"].casefold()
-                       and not is_store(item)), None)
+                       and "chrom" in item["class"].casefold() and not is_store(item)), None)
         if window and window["width"] >= 300 and window["height"] >= 200:
             return process, window
         if process.poll() is not None:
             break
         time.sleep(0.25)
     stop_mirror_process(process)
-    print("The native ffplay viewer did not map an Android surface.", file=sys.stderr)
+    print("The native Chromium viewer did not map the real Android surface.", file=sys.stderr)
     return None, None
 
 
@@ -582,6 +634,11 @@ def place_windows(store_window, app_window):
     # Keep OmniStore and the real app on the requested evidence layout.
     layout = ((store_window, 30, 76, 650, 530), (app_window, 710, 76, 780, 560))
     for window, x, y, width, height in layout:
+        unmaximize_window(window["id"])
+        if shutil.which("wmctrl"):
+            gui_run(["wmctrl", "-i", "-r", window["id"], "-e",
+                     f"0,{x},{y},{width},{height}"], timeout=3,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         gui_run(["xdotool", "windowsize", window["id"], str(width), str(height)], timeout=5,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         gui_run(["xdotool", "windowmove", window["id"], str(x), str(y)], timeout=5,
@@ -646,8 +703,9 @@ def capture(path, require_store=False, require_two=False):
     target.parent.mkdir(parents=True, exist_ok=True)
     target.unlink(missing_ok=True)
     if require_store:
-        store_window = next((item for item in windows if is_store(item) and
-                             item["width"] > 300 and item["height"] > 200), None)
+        store_window = largest_store_window(windows)
+        if store_window and (store_window["width"] <= 300 or store_window["height"] <= 200):
+            store_window = None
     else:
         store_window = None
     if store_window:

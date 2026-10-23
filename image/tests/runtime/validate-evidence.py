@@ -133,29 +133,41 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     if not any(package.casefold() in line.casefold() for line in focus_lines):
         raise ValueError(f"Android package {package} is not the focused activity")
 
-    if "ffplay" not in identity:
-        print(f"live Android package verified as foreground: {package} on {serial}")
-        return
     title = subprocess.run(["xdotool", "getwindowname", window_id], text=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            timeout=3, check=False).stdout.strip()
     if title != "Privacy Friendly 2048":
-        raise ValueError(f"native Android viewer has unexpected title: {title!r}")
-    lowered = cmdline.casefold()
-    if "-loop 0" not in lowered or "/tmp/android-live.mp4" not in lowered:
-        raise ValueError("ffplay is not looping the Android framebuffer video")
+        raise ValueError(f"Android viewer has unexpected title: {title!r}")
     image = Path("/tmp/android-live.png")
     if not image.is_file() or image.stat().st_size <= 4096 or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("the live Android framebuffer image is missing or incomplete")
-    video = Path("/tmp/android-live.mp4")
-    if not video.is_file() or video.stat().st_size < 4096:
-        raise ValueError("the looping Android framebuffer video is missing or incomplete")
     process_table = subprocess.run(["ps", "-eo", "args="], text=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    timeout=5, check=False).stdout
-    if "android-screencap-viewer.sh" not in process_table:
-        raise ValueError("native viewer is not owned by the active Android screenshot stream helper")
-    print(f"live Android APK and looping ffplay framebuffer verified: {package} on {serial}")
+    if "ffplay" in identity:
+        lowered = cmdline.casefold()
+        if "-loop 0" not in lowered or "/tmp/android-live.mp4" not in lowered:
+            raise ValueError("ffplay is not looping the Android framebuffer video")
+        video = Path("/tmp/android-live.mp4")
+        if not video.is_file() or video.stat().st_size < 4096:
+            raise ValueError("the looping Android framebuffer video is missing or incomplete")
+        if "android-screencap-viewer.sh" not in process_table:
+            raise ValueError("ffplay is not owned by the active Android screenshot stream helper")
+        viewer = "ffplay"
+    elif any(token in identity for token in ("chromium", "chromium-browser", "google-chrome")):
+        html = Path("/tmp/android-surface-live.html")
+        if "android-surface-live.html" not in cmdline or not html.is_file():
+            raise ValueError("Chromium is not showing the Android screenshot surface page")
+        if "<title>privacy friendly 2048</title>" not in html.read_text(errors="replace").casefold():
+            raise ValueError("Chromium Android surface page has an unexpected title")
+        if "android-chromium-surface-viewer.sh" not in process_table:
+            raise ValueError("Chromium is not owned by the active Android screenshot viewer helper")
+        viewer = "Chromium"
+    elif "scrcpy" in identity:
+        viewer = "scrcpy"
+    else:
+        raise ValueError(f"unrecognized Android viewer process: {identity!r}")
+    print(f"live Android APK and {viewer} surface verified: {package} on {serial}")
 
 def validate_live_window(ecosystem, window_id):
     """Inspect the mapped X11 window and its owner while the runtime is live."""
@@ -190,7 +202,7 @@ def validate_live_window(ecosystem, window_id):
         "linux": ("gnome-mines", "org.gnome.mines", "galculator", "vlc"),
         "windows": ("7zfm.exe", "7zfm", "explorer.exe"),
         "web": ("chromium", "chromium-browser", "chrome"),
-        "android": ("scrcpy", "ffplay"),
+        "android": ("scrcpy", "ffplay", "chromium", "chromium-browser", "google-chrome"),
         # No Linux-hosted third-party IPA runtime/desktop bridge is configured.
         "ios": (),
     }[ecosystem]

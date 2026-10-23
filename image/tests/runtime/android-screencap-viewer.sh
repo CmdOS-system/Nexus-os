@@ -2,7 +2,7 @@
 set -euo pipefail
 serial="${1:?Android serial required}"
 package="${2:?Android package required}"
-export SDL_VIDEODRIVER=x11 SDL_RENDER_DRIVER=software LIBGL_ALWAYS_SOFTWARE=1
+export SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy SDL_RENDER_DRIVER=software LIBGL_ALWAYS_SOFTWARE=1
 
 image=/tmp/android-live.png
 video=/tmp/android-live.mp4
@@ -13,6 +13,7 @@ cleanup() {
   rm -f "$temporary" "$asset"
 }
 trap cleanup EXIT INT TERM
+rm -f "$image" "$video"
 
 valid_png() {
   [[ -s "$1" ]] && (( $(stat -c %s "$1") > 4096 )) && file "$1" | grep -q 'PNG image'
@@ -83,6 +84,7 @@ ffmpeg -v error -y -f lavfi -i "color=c=0x0d1726:s=760x560:r=10:d=30" -i "$image
   -filter_complex "[1:v]loop=loop=-1:size=1:start=0,scale=760:560[frame];[0:v][frame]overlay=0:0:shortest=1" \
   -t 30 -r 10 -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$video"
 test -s "$video"
-env SDL_VIDEODRIVER=x11 SDL_RENDER_DRIVER=software DISPLAY="${DISPLAY:?DISPLAY is required}" \
-  ffplay -nostats -loglevel error -window_title "Privacy Friendly 2048" \
+env DISPLAY="${DISPLAY:?DISPLAY is required}" SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
+  SDL_RENDER_DRIVER=software ffplay -an -sn -nostats -loglevel error \
+  -window_title "Privacy Friendly 2048" \
   -x 760 -y 560 -loop 0 "$video"
