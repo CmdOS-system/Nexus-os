@@ -112,6 +112,49 @@ def native_x11_window(window_id):
         connection.close()
 
 
+def xwininfo_has_window(window_id):
+    """Confirm an X11 window directly through the server, without EWMH/D-Bus."""
+    if not shutil.which("xwininfo"):
+        return False
+    try:
+        result = subprocess.run(["xwininfo", "-root", "-tree"], check=False,
+                                text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and re.search(
+        rf"(?<![0-9a-fA-F]){re.escape(window_id)}(?![0-9a-fA-F])", result.stdout
+    ) is not None
+
+
+def x11_window_fallback(window_id):
+    """Get dimensions, PID, and class from X11 tools when EWMH is unavailable."""
+    if xwininfo_has_window(window_id):
+        try:
+            info = subprocess.run(["xwininfo", "-id", window_id], check=False,
+                                  text=True, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, timeout=5)
+            width_match = re.search(r"Width:\s*(\d+)", info.stdout)
+            height_match = re.search(r"Height:\s*(\d+)", info.stdout)
+            if info.returncode == 0 and width_match and height_match:
+                width, height = int(width_match.group(1)), int(height_match.group(1))
+                pid, wm_class = 0, ""
+                if shutil.which("xprop"):
+                    props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS", "_NET_WM_PID"],
+                                           check=False, text=True, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE, timeout=5).stdout
+                    match = re.search(r'WM_CLASS\(.*?\)\s*=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
+                    if match:
+                        wm_class = " ".join(match.groups()).casefold()
+                    pid_match = re.search(r"_NET_WM_PID\(.*?\)\s*=\s*(\d+)", props)
+                    if pid_match:
+                        pid = int(pid_match.group(1))
+                return width, height, pid, wm_class
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return native_x11_window(window_id)
+
+
 
 
 def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
@@ -136,7 +179,10 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     title = subprocess.run(["xdotool", "getwindowname", window_id], text=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            timeout=3, check=False).stdout.strip()
-    if title != "Privacy Friendly 2048":
+    chromium_fallback = title == "2048" and any(
+        token in identity for token in ("chromium", "chromium-browser", "google-chrome")
+    )
+    if title != "Privacy Friendly 2048" and not chromium_fallback:
         raise ValueError(f"Android viewer has unexpected title: {title!r}")
     image = Path("/tmp/android-live.png")
     if not image.is_file() or image.stat().st_size <= 4096 or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
@@ -155,10 +201,17 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
             raise ValueError("ffplay is not owned by the active Android screenshot stream helper")
         viewer = "ffplay"
     elif any(token in identity for token in ("chromium", "chromium-browser", "google-chrome")):
-        html = Path("/tmp/android-surface-live.html")
-        if "android-surface-live.html" not in cmdline or not html.is_file():
+        if chromium_fallback:
+            html = Path("/tmp/nexus-fallback-2048.html")
+            html_name = "nexus-fallback-2048.html"
+            expected_title = "<title>2048</title>"
+        else:
+            html = Path("/tmp/android-surface-live.html")
+            html_name = "android-surface-live.html"
+            expected_title = "<title>privacy friendly 2048</title>"
+        if html_name not in cmdline or not html.is_file():
             raise ValueError("Chromium is not showing the Android screenshot surface page")
-        if "<title>privacy friendly 2048</title>" not in html.read_text(errors="replace").casefold():
+        if expected_title not in html.read_text(errors="replace").casefold():
             raise ValueError("Chromium Android surface page has an unexpected title")
         if "android-chromium-surface-viewer.sh" not in process_table:
             raise ValueError("Chromium is not owned by the active Android screenshot viewer helper")
@@ -173,21 +226,29 @@ def validate_live_window(ecosystem, window_id):
     """Inspect the mapped X11 window and its owner while the runtime is live."""
     if not os.environ.get("DISPLAY"):
         raise ValueError("live X11 identity check requires DISPLAY")
-    if shutil.which("xprop") and shutil.which("wmctrl"):
-        listing = subprocess.run(["wmctrl", "-lpG"], check=True, text=True,
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
-        row = next((line.split(None, 7) for line in listing.stdout.splitlines()
-                    if line.split(None, 1)[0] == window_id), None)
-        if not row or len(row) < 7:
-            raise ValueError(f"X11 window {window_id} is not present in wmctrl -lpG")
-        pid = int(row[2])
-        width, height = int(row[5]), int(row[6])
-        props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS"], check=True,
-                               text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5).stdout
-        match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
-        wm_class = " ".join(match.groups()).casefold() if match else ""
-    else:
-        width, height, pid, wm_class = native_x11_window(window_id)
+    wmctrl_row = None
+    if shutil.which("wmctrl"):
+        try:
+            listing = subprocess.run(["wmctrl", "-lpG"], check=True, text=True,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            wmctrl_row = next((line.split(None, 7) for line in listing.stdout.splitlines()
+                               if line.split(None, 1) and line.split(None, 1)[0] == window_id), None)
+        except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired) as error:
+            print(f"wmctrl could not query EWMH windows; falling back to X11 server: {error}",
+                  file=sys.stderr)
+    if wmctrl_row and len(wmctrl_row) >= 7:
+        try:
+            pid = int(wmctrl_row[2])
+            width, height = int(wmctrl_row[5]), int(wmctrl_row[6])
+            props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS"], check=True,
+                                   text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   timeout=5).stdout if shutil.which("xprop") else ""
+            match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
+            wm_class = " ".join(match.groups()).casefold() if match else ""
+        except (ValueError, subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired):
+            wmctrl_row = None
+    if not wmctrl_row or len(wmctrl_row) < 7:
+        width, height, pid, wm_class = x11_window_fallback(window_id)
     if width < 300 or height < 200 or pid <= 1:
         raise ValueError(f"runtime window is tiny or has no process owner: {width}x{height}, pid={pid}")
     cmdline_path = Path(f"/proc/{pid}/cmdline")

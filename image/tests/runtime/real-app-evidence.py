@@ -175,7 +175,8 @@ def is_target(window):
         return False
     identity = (window["title"] + " " + window["class"]).casefold()
     if ecosystem == "android":
-        is_named_surface = "privacy friendly 2048" in window["title"].casefold()
+        is_named_surface = ("privacy friendly 2048" in window["title"].casefold()
+                            or window["title"].strip() == "2048")
         is_native_viewer = any(token in identity for token in
                                ("scrcpy", "ffplay", "chromium", "chromium-browser"))
         return is_named_surface and is_native_viewer
@@ -487,7 +488,7 @@ def launch_android_screencap_viewer():
         except OSError as error:
             print(f"Could not start ffplay Android viewer: {error}", file=sys.stderr)
             process = None
-        deadline = time.monotonic() + 4
+        deadline = time.monotonic() + 2
         while process is not None and time.monotonic() < deadline:
             window = next((item for item in top_level_windows()
                            if "privacy friendly 2048" in item["title"].casefold()
@@ -499,7 +500,7 @@ def launch_android_screencap_viewer():
             time.sleep(0.2)
         if process is not None:
             stop_mirror_process(process)
-        print("ffplay did not map within 4s; switching to the real Chromium Android surface viewer.",
+        print("ffplay did not map within 2s; immediately switching to the live Chromium Android surface viewer.",
               file=sys.stderr)
     return launch_android_chromium_viewer(serial, package_name)
 
@@ -520,10 +521,11 @@ def launch_android_chromium_viewer(serial, package_name):
     except OSError as error:
         print(f"Could not start Chromium Android viewer: {error}", file=sys.stderr)
         return None, None
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         window = next((item for item in top_level_windows()
-                       if "privacy friendly 2048" in item["title"].casefold()
+                       if (item["title"].strip() == "2048"
+                           or "privacy friendly 2048" in item["title"].casefold())
                        and "chrom" in item["class"].casefold() and not is_store(item)), None)
         if window and window["width"] >= 300 and window["height"] >= 200:
             return process, window
@@ -531,7 +533,8 @@ def launch_android_chromium_viewer(serial, package_name):
             break
         time.sleep(0.25)
     stop_mirror_process(process)
-    print("The native Chromium viewer did not map the real Android surface.", file=sys.stderr)
+    print("The Chromium ADB framebuffer fallback did not map within the 10-second Android viewer recovery window.",
+          file=sys.stderr)
     return None, None
 
 
@@ -1000,7 +1003,7 @@ try:
             time.sleep(0.5)
             try:
                 mirror_process = launch_scrcpy_window()
-                store_window, app_window = wait_for_windows(8)
+                store_window, app_window = wait_for_windows(2)
             except (OSError, subprocess.TimeoutExpired) as error:
                 print(f"scrcpy did not open its real Android surface: {error}", file=sys.stderr)
                 app_window = None

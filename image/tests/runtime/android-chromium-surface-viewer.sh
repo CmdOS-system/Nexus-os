@@ -6,7 +6,7 @@ export SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy SDL_RENDER_DRIVER=software LIBG
 image=/tmp/android-live.png
 temporary="/tmp/android-live-chromium.$$.tmp.png"
 asset="/tmp/android-apk-chromium.$$.png"
-html=/tmp/android-surface-live.html
+html=/tmp/nexus-fallback-2048.html
 cleanup() {
   if [[ -n "${updater:-}" ]]; then kill "$updater" >/dev/null 2>&1 || true; wait "$updater" 2>/dev/null || true; fi
   rm -f "$temporary" "$asset"
@@ -45,7 +45,7 @@ chrome="$(command -v chromium || command -v chromium-browser || command -v googl
 command -v file >/dev/null
 rm -f "$image"
 frame_ready=0
-for attempt in {1..20}; do
+for attempt in {1..4}; do
   if adb -s "$serial" exec-out screencap -p > "$temporary" 2>/dev/null && valid_png "$temporary"; then
     mv -f "$temporary" "$image"
     frame_ready=1
@@ -64,7 +64,7 @@ if [[ "$frame_ready" != "1" ]]; then
   valid_png "$image" || { echo "APK-derived Android frame is not a valid PNG." >&2; exit 1; }
 fi
 cat > "$html" <<'HTML'
-<!doctype html><html><head><meta charset="utf-8"><title>Privacy Friendly 2048</title>
+<!doctype html><html><head><meta charset="utf-8"><title>2048</title>
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1726}img{width:100%;height:100%;object-fit:contain}</style></head>
 <body><img id="screen" src="file:///tmp/android-live.png"><script>
 const screen=document.getElementById('screen');setInterval(()=>{screen.src='file:///tmp/android-live.png?frame='+Date.now()},400);
@@ -82,4 +82,4 @@ done &
 updater=$!
 "$chrome" --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run \
   --allow-file-access-from-files --user-data-dir=/tmp/android-surface-viewer \
-  --window-size=760,560 --window-position=710,76 --app="file://$html"
+  --window-size=780,560 --window-position=710,76 --app="file://$html"
