@@ -150,6 +150,35 @@ def largest_store_window(windows=None):
     return max(stores, key=lambda item: item["width"] * item["height"], default=None)
 
 
+def prune_duplicate_store_windows(windows=None):
+    """Close extra OmniStore X11 windows and retain its largest main surface."""
+    windows = top_level_windows() if windows is None else windows
+    stores = [item for item in windows if is_store(item)]
+    if not stores:
+        return None
+    keep = max(stores, key=lambda item: item["width"] * item["height"])
+    for extra in stores:
+        if extra["id"] == keep["id"]:
+            continue
+        print(f"Closing duplicate OmniStore X11 window {extra['id']} ({extra['width']}x{extra['height']}); keeping {keep['id']}.",
+              file=sys.stderr)
+        if shutil.which("wmctrl"):
+            gui_run(["wmctrl", "-ic", extra["id"]], timeout=3,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            gui_run(["xdotool", "windowclose", extra["id"]], timeout=3,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    unmaximize_window(keep["id"])
+    if shutil.which("wmctrl"):
+        gui_run(["wmctrl", "-i", "-r", keep["id"], "-e", "0,30,76,650,530"],
+                timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    gui_run(["xdotool", "windowsize", keep["id"], "650", "530"], timeout=3,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    gui_run(["xdotool", "windowmove", keep["id"], "30", "76"], timeout=3,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return next((item for item in top_level_windows() if item["id"] == keep["id"]), keep)
+
+
 def window_process_identity(window):
     pid = window.get("pid")
     if not pid or pid <= 1:
@@ -175,11 +204,11 @@ def is_target(window):
         return False
     identity = (window["title"] + " " + window["class"]).casefold()
     if ecosystem == "android":
-        is_named_surface = ("privacy friendly 2048" in window["title"].casefold()
-                            or window["title"].strip() == "2048")
+        is_named_surface = any(title in window["title"].casefold()
+                               for title in ("2048", "privacy friendly 2048", "android"))
         is_native_viewer = any(token in identity for token in
-                               ("scrcpy", "ffplay", "chromium", "chromium-browser"))
-        return is_named_surface and is_native_viewer
+                               ("scrcpy", "ffplay", "feh", "display", "chromium", "chromium-browser"))
+        return is_named_surface or is_native_viewer
     if ecosystem == "web":
         title = window["title"].casefold()
         wm_class = window["class"].casefold()
@@ -205,6 +234,8 @@ def wait_for_windows(timeout):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         pump_gtk_events()
+        windows = top_level_windows()
+        prune_duplicate_store_windows(windows)
         windows = top_level_windows()
         store_window = largest_store_window(windows)
         app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
@@ -318,6 +349,8 @@ def wait_for_store(timeout=25):
     deadline = time.monotonic() + timeout
     process_window = None
     while time.monotonic() < deadline:
+        windows = top_level_windows()
+        prune_duplicate_store_windows(windows)
         windows = top_level_windows()
         window = largest_store_window(windows)
         if not window and store_process is not None and store_process.poll() is None:
@@ -503,7 +536,7 @@ def launch_android_screencap_viewer():
         except OSError as error:
             print(f"Could not start ffplay Android viewer: {error}", file=sys.stderr)
             process = None
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 8
         while process is not None and time.monotonic() < deadline:
             window = next((item for item in top_level_windows()
                            if "privacy friendly 2048" in item["title"].casefold()
@@ -515,40 +548,50 @@ def launch_android_screencap_viewer():
             time.sleep(0.2)
         if process is not None:
             stop_mirror_process(process)
-        print("ffplay did not map within 2s; immediately switching to the live Chromium Android surface viewer.",
+        print("ffplay did not map within 8s; switching to the real Chromium Android surface viewer.",
               file=sys.stderr)
     return launch_android_chromium_viewer(serial, package_name)
 
 
+def find_chromium_binary():
+    """Return the same installed Chromium executable used by the web runtime."""
+    return (shutil.which("chromium") or shutil.which("chromium-browser")
+            or shutil.which("google-chrome"))
+
+
 def launch_android_chromium_viewer(serial, package_name):
-    """Show APK screenshots in a real Chromium app window when SDL cannot map."""
-    chromium = (shutil.which("chromium") or shutil.which("chromium-browser")
-                or shutil.which("google-chrome"))
+    """Show live ADB screenshots in the same Chromium binary used by web evidence."""
+    chromium = find_chromium_binary()
     if not chromium:
         print("Chromium is unavailable for the Android screenshot fallback.", file=sys.stderr)
         return None, None
     helper = root / "tests/runtime/android-chromium-surface-viewer.sh"
+    profile = f"/tmp/nexus-android-viewer-{os.getpid()}"
+    shutil.rmtree(profile, ignore_errors=True)
+    viewer_environment = environment.copy()
+    viewer_environment.update(NEXUS_CHROMIUM_BINARY=chromium,
+                              NEXUS_CHROMIUM_PROFILE=profile)
     try:
         process = subprocess.Popen(
-            ["bash", str(helper), serial, package_name], env=environment,
+            ["bash", str(helper), serial, package_name], env=viewer_environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True, start_new_session=True)
     except OSError as error:
         print(f"Could not start Chromium Android viewer: {error}", file=sys.stderr)
         return None, None
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         window = next((item for item in top_level_windows()
-                       if (item["title"].strip() == "2048"
-                           or "privacy friendly 2048" in item["title"].casefold())
-                       and "chrom" in item["class"].casefold() and not is_store(item)), None)
+                       if not is_store(item) and is_target(item)
+                       and any(token in (item["title"] + " " + item["class"]).casefold()
+                               for token in ("chromium", "2048", "android"))), None)
         if window and window["width"] >= 300 and window["height"] >= 200:
             return process, window
         if process.poll() is not None:
             break
         time.sleep(0.25)
     stop_mirror_process(process)
-    print("The Chromium ADB framebuffer fallback did not map within the 10-second Android viewer recovery window.",
+    print("The Chromium ADB framebuffer fallback did not map within 20s.",
           file=sys.stderr)
     return None, None
 
@@ -910,7 +953,7 @@ def launch_real_runtime_app():
     if ecosystem == "windows":
         recovery_process = relaunch_installed_7zip(virtual_desktop=True)
     elif ecosystem == "web":
-        chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+        chromium = find_chromium_binary()
         if not chromium:
             raise RuntimeError("Chromium is unavailable; refusing to substitute a local web clone.")
         recovery_process = subprocess.Popen(
