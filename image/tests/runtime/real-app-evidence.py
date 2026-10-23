@@ -8,7 +8,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -44,7 +43,7 @@ if ecosystem != "android":
 environment = os.environ.copy()
 environment["NEXUS_RUNTIME_SMOKE"] = str(root / "runtime-smoke.sh")
 environment.update(GDK_BACKEND="x11", GSK_RENDERER="cairo", LIBGL_ALWAYS_SOFTWARE="1",
-                   NO_AT_BRIDGE="1")
+                   SDL_RENDER_DRIVER="software", NO_AT_BRIDGE="1")
 if ecosystem == "android":
     # The installer records success only after ADB confirms package installation.
     # Launch is a separate step so an activity-start error cannot masquerade as
@@ -56,14 +55,28 @@ if ecosystem == "linux":
     environment["GTK_USE_PORTAL"] = "0"
 
 
+def xwininfo_candidates():
+    """Read mapped top-level windows directly from the X server."""
+    if not shutil.which("xwininfo"):
+        return []
+    result = gui_run(["xwininfo", "-root", "-tree"], text=True,
+                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+    pattern = re.compile(r'^(\s+)(0x[0-9a-fA-F]+)\s+"(.*?)".*?\s(\d+)x(\d+)\+(-?\d+)\+(-?\d+)')
+    parsed = [(len(match.group(1)), match.group(2), int(match.group(6)), int(match.group(7)),
+               int(match.group(4)), int(match.group(5)), match.group(3))
+              for line in result.stdout.splitlines() if (match := pattern.search(line))]
+    min_indent = min((row[0] for row in parsed), default=-1)
+    return [(wid, x, y, width, height, title)
+            for indent, wid, x, y, width, height, title in parsed if indent == min_indent]
+
+
 def top_level_windows():
-    """List real X11 windows, preferring wmctrl and falling back to xwininfo/xdotool."""
+    """List mapped X11 windows; consult X11 directly if the WM list is empty."""
     rows = []
+    candidates = []
     if shutil.which("wmctrl"):
         result = gui_run(["wmctrl", "-l", "-G"], text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                timeout=5)
-        candidates = []
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
         for line in result.stdout.splitlines():
             fields = line.split(None, 7)
             if len(fields) < 8:
@@ -73,31 +86,19 @@ def top_level_windows():
                                    int(fields[4]), int(fields[5]), fields[7]))
             except ValueError:
                 continue
+        if not candidates:
+            candidates = xwininfo_candidates()
     elif shutil.which("xwininfo"):
-        result = gui_run(["xwininfo", "-root", "-tree"], text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                timeout=5)
-        pattern = re.compile(r'^(\s+)(0x[0-9a-fA-F]+)\s+"(.*?)".*?\s(\d+)x(\d+)\+(-?\d+)\+(-?\d+)')
-        parsed = [(len(m.group(1)), m.group(2), int(m.group(6)), int(m.group(7)),
-                   int(m.group(4)), int(m.group(5)), m.group(3))
-                  for line in result.stdout.splitlines() if (m := pattern.search(line))]
-        min_indent = min((row[0] for row in parsed), default=-1)
-        candidates = [(wid, x, y, width, height, title)
-                      for indent, wid, x, y, width, height, title in parsed
-                      if indent == min_indent]
+        candidates = xwininfo_candidates()
     else:
         result = gui_run(["xdotool", "search", "--onlyvisible", "--name", ".*"], text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                timeout=5)
-        candidates = []
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
         for wid in result.stdout.splitlines():
             geometry = gui_run(["xdotool", "getwindowgeometry", "--shell", wid], text=True,
-                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                      timeout=3).stdout
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3).stdout
             values = dict(re.findall(r"^(X|Y|WIDTH|HEIGHT)=(\d+)$", geometry, re.MULTILINE))
             title = gui_run(["xdotool", "getwindowname", wid], text=True,
-                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                   timeout=3).stdout.strip()
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3).stdout.strip()
             try:
                 candidates.append((wid, int(values["X"]), int(values["Y"]),
                                    int(values["WIDTH"]), int(values["HEIGHT"]), title))
@@ -106,13 +107,13 @@ def top_level_windows():
     for wid, x, y, width, height, title in candidates:
         try:
             wm_class = gui_run(["xprop", "-id", wid, "WM_CLASS"], text=True,
-                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                      timeout=3).stdout if shutil.which("xprop") else ""
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                               timeout=3).stdout if shutil.which("xprop") else ""
             class_match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', wm_class)
             class_name = " ".join(class_match.groups()) if class_match else ""
             pid_output = gui_run(["xprop", "-id", wid, "_NET_WM_PID"], text=True,
-                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                        timeout=3).stdout if shutil.which("xprop") else ""
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 timeout=3).stdout if shutil.which("xprop") else ""
             pid_match = re.search(r'=\s*(\d+)', pid_output)
             rows.append({"id": wid, "x": x, "y": y, "width": width, "height": height,
                          "class": class_name, "title": title,
@@ -145,8 +146,10 @@ def is_target(window):
         "windows": ("7-zip", "7zfm", "7zip", "sevenzip"),
         "web": ("2048",),
         "linux": ("mines", "gnome-mines", "org.gnome.mines"),
-        "android": ("scrcpy", "2048"),
+        "android": ("scrcpy", "ffplay"),
     }.get(ecosystem, (app_title.casefold(),))
+    if ecosystem == "android" and "privacy friendly 2048" in window["title"].casefold():
+        return not is_store(window)
     if ecosystem == "windows" and window["width"] >= 300 and window["height"] >= 200:
         # Wine's virtual desktop is the mapped X11 top-level surface; the real
         # 7-Zip GUI is launched inside it. Ignore 1x1 Wine IME helper windows.
@@ -163,7 +166,8 @@ def wait_for_windows(timeout):
         pump_gtk_events()
         windows = top_level_windows()
         store_window = next((item for item in windows if is_store(item)), None)
-        app_window = next((item for item in windows if is_target(item)
+        app_window = next((item for item in windows if item["id"] != (store_window or {}).get("id")
+                           and not is_store(item) and is_target(item)
                            and item["width"] > 300 and item["height"] > 200), None)
         if (store_window and store_window["width"] > 300 and store_window["height"] > 200
                 and app_window):
@@ -173,7 +177,8 @@ def wait_for_windows(timeout):
     store_window = next((item for item in top_level_windows()
                          if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
     app_window = next((item for item in top_level_windows()
-                       if is_target(item) and item["width"] > 300 and item["height"] > 200), None)
+                       if item["id"] != (store_window or {}).get("id") and not is_store(item)
+                       and is_target(item) and item["width"] > 300 and item["height"] > 200), None)
     print(f"{ecosystem} runtime windows did not finish mapping before timeout: {names or '<none>'}",
           file=sys.stderr)
     return store_window, app_window
@@ -297,6 +302,21 @@ def wait_for_android_device(timeout=120):
     return False
 
 
+def android_window_focused(timeout=5):
+    serial = os.environ["ANDROID_SERIAL"]
+    package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
+    try:
+        result = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "window", "windows"],
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                check=False, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Android window-focus query failed: {error}", file=sys.stderr)
+        return False
+    focus_lines = [line for line in result.stdout.splitlines()
+                   if re.search(r"mCurrentFocus|mFocusedApp", line, re.IGNORECASE)]
+    return any(package_name.casefold() in line.casefold() for line in focus_lines)
+
+
 def android_is_foreground(timeout=2):
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
@@ -336,40 +356,44 @@ def stop_mirror_process(process):
 
 
 def launch_scrcpy_window():
-    """Launch the real Android mirror; its X11 surface is polled for up to 120s."""
+    """Launch scrcpy with software rendering for CPU-only Xvfb runners."""
     serial = os.environ["ANDROID_SERIAL"]
     print("Starting scrcpy for the live Android app.", file=sys.stderr)
     return subprocess.Popen(
-        ["scrcpy", "--serial", serial, "--window-title", "2048 - Android",
-         "--window-width", "920", "--window-height", "640"], env=environment,
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        close_fds=True, start_new_session=True)
+        ["scrcpy", "--serial", serial, "--max-size", "720", "--max-fps", "15",
+         "--window-title", "Privacy Friendly 2048", "--window-width", "760", "--window-height", "560"],
+        env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
 
 
-def launch_android_resource_fallback():
-    """Open an explicitly labeled evidence window from graphics in the real APK."""
-    global fallback_temp
-    fallback_temp = tempfile.TemporaryDirectory(prefix="nexus-2048-apk-resources-")
-    helper = root / "tests/runtime/android-resource-fallback.py"
-    process = subprocess.Popen(
-        [sys.executable, str(helper), package_path, fallback_temp.name], env=environment,
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        close_fds=True, start_new_session=True)
+def launch_android_screencap_viewer():
+    """Mirror real ADB screenshots through native ffplay after scrcpy fails."""
+    serial = os.environ["ANDROID_SERIAL"]
+    helper = root / "tests/runtime/android-screencap-viewer.sh"
+    if not shutil.which("ffplay"):
+        print("ffplay is unavailable; cannot open the native Android screenshot viewer.", file=sys.stderr)
+        return None, None
+    try:
+        process = subprocess.Popen(
+            ["bash", str(helper), serial,
+             os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")],
+            env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
+    except OSError as error:
+        print(f"Could not start the native Android screenshot viewer: {error}", file=sys.stderr)
+        return None, None
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         window = next((item for item in top_level_windows()
-                       if item["title"] == "2048" and
-                       "nexus-apk-resource-fallback" in item["class"].casefold()), None)
-        if window and window["width"] >= 700 and window["height"] >= 500:
-            print("Android ADB/scrcpy surface unavailable; showing verified APK graphics in the 2048 Cyber-Glass evidence window.",
-                  file=sys.stderr)
+                       if "privacy friendly 2048" in item["title"].casefold()
+                       and not is_store(item)), None)
+        if window and window["width"] >= 300 and window["height"] >= 200:
             return process, window
         if process.poll() is not None:
             break
         time.sleep(0.25)
     stop_mirror_process(process)
-    print("Unable to map the APK-resource evidence window; no ADB/scrcpy RuntimeError was raised.",
-          file=sys.stderr)
+    print("The native ffplay viewer did not map an Android surface.", file=sys.stderr)
     return None, None
 
 
@@ -481,12 +505,10 @@ def place_windows(store_window, app_window):
         print("Skipping window placement because X11 exposed only a tiny or missing app window.",
               file=sys.stderr)
         return False
-    # Keep the desktop visible around two moderate floating windows. The Android
-    # app keeps its portrait aspect ratio in scrcpy; it is still a desktop window.
-    if ecosystem == "android" and "nexus-apk-resource-fallback" in app_window["class"].casefold():
-        layout = ((store_window, 24, 58, 420, 500), (app_window, 470, 58, 780, 560))
-    elif (app_window["title"].casefold().startswith("2048") and
-            not (ecosystem == "android" and "android" in app_window["title"].casefold())):
+    # Keep the real Android mirror and OmniStore visible as moderate floating windows.
+    if ecosystem == "android":
+        layout = ((store_window, 24, 58, 420, 500), (app_window, 470, 58, 760, 560))
+    elif app_window["title"].casefold().startswith("2048"):
         layout = ((store_window, 24, 58, 560, 500), (app_window, 600, 58, 640, 500))
     elif ecosystem == "android":
         layout = ((store_window, 24, 58, 560, 520), (app_window, 610, 58, 430, 590))
@@ -818,7 +840,8 @@ store_process = launch_store()
 mirror_process = None
 recovery_process = None
 fallback_process = None
-fallback_temp = None
+store_window = None
+app_window = None
 try:
     # This early frame catches the actual OmniStore progress UI before the app launch.
     wait_for_store()
@@ -827,24 +850,25 @@ try:
     if ecosystem == "android":
         device_ready = wait_for_android_device(120)
         if device_ready and not android_is_foreground():
-            print("APK installation succeeded but Android has no resumed 2048 activity; requesting the real launcher activity.",
+            print("The real 2048 activity is not foreground; requesting its actual Android launcher activity.",
                   file=sys.stderr)
             try:
                 launch_android_package()
             except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-                print(f"Real Android activity launch did not complete: {error}; continuing to bounded visual fallback.",
-                      file=sys.stderr)
-        if device_ready and android_is_foreground():
+                print(f"Real Android app launch was not confirmed: {error}", file=sys.stderr)
+        if device_ready and android_is_foreground() and android_window_focused():
+            subprocess.run(["adb", "-s", os.environ["ANDROID_SERIAL"], "shell", "input", "swipe",
+                            "300", "500", "600", "500", "150"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           check=False, timeout=8)
+            time.sleep(0.5)
             try:
                 mirror_process = launch_scrcpy_window()
                 store_window, app_window = wait_for_windows(120)
             except (OSError, subprocess.TimeoutExpired) as error:
-                print(f"scrcpy could not open a host window: {error}; continuing to the APK-resource fallback.",
-                      file=sys.stderr)
+                print(f"scrcpy did not open its real Android surface: {error}", file=sys.stderr)
                 app_window = None
             if app_window is None:
-                print("scrcpy did not map the Android surface within 120s; switching to extracted APK graphics.",
-                      file=sys.stderr)
                 stop_mirror_process(mirror_process)
                 mirror_process = None
     if ecosystem == "windows":
@@ -893,19 +917,16 @@ try:
             raise RuntimeError("Nexus OmniStore did not remap after its bounded recovery attempt.")
     if app_window is None:
         if ecosystem == "android":
-            # ADB/scrcpy timeouts are recoverable. The explicit fallback uses
-            # verifiable image members extracted from the downloaded third-party APK.
-            fallback_process, app_window = launch_android_resource_fallback()
+            # ADB/scrcpy mapping failures recover through a native viewer fed
+            # continuously by screenshots from the real foreground Android app.
+            fallback_process, app_window = launch_android_screencap_viewer()
         else:
             launch_real_runtime_app()
             store_window, app_window = wait_for_windows(20)
-        if not app_window:
-            if ecosystem == "android":
-                print("Android mirror window is unavailable; retaining APK-derived evidence fallback.", file=sys.stderr)
-            else:
-                raise RuntimeError(f"The real {app_title} window did not map after its direct runtime launch.")
+        if not app_window and ecosystem != "android":
+            raise RuntimeError(f"The real {app_title} window did not map after its direct runtime launch.")
     if ecosystem == "android":
-        is_device_mirror = bool(app_window and "android" in app_window["title"].casefold())
+        is_device_mirror = bool(app_window and "scrcpy" in app_window["class"].casefold())
         deadline = time.monotonic() + (60 if is_device_mirror else 0)
         while time.monotonic() < deadline and not android_is_foreground():
             time.sleep(1)
@@ -916,11 +937,12 @@ try:
         place_windows(store_window, app_window)
         interact(app_window)
     time.sleep(3)
-    if ecosystem == "android" and app_window and not any(is_target(item) for item in top_level_windows()):
-        print("The Android surface disappeared during interaction; switching to APK-derived visual evidence.", file=sys.stderr)
+    if ecosystem == "android" and app_window and not any(is_target(item) and not is_store(item)
+                                                         for item in top_level_windows()):
+        print("The Android surface disappeared during interaction; switching to the native ADB screenshot viewer.", file=sys.stderr)
         stop_mirror_process(mirror_process)
         mirror_process = None
-        fallback_process, app_window = launch_android_resource_fallback()
+        fallback_process, app_window = launch_android_screencap_viewer()
         if app_window:
             place_windows(store_window, app_window)
             interact(app_window)
@@ -944,10 +966,6 @@ finally:
         stop_mirror_process(mirror_process)
     if fallback_process is not None:
         stop_mirror_process(fallback_process)
-    if fallback_temp is not None:
-        fallback_temp.cleanup()
-    if "mirror_handle" in locals() and not mirror_handle.closed:
-        mirror_handle.close()
     for process in store_processes:
         if process.poll() is None:
             process.terminate()

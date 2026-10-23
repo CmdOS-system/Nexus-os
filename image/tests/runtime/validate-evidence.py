@@ -6,10 +6,7 @@ import math
 import os
 import re
 import shutil
-import shlex
 import subprocess
-import zipfile
-import json
 import struct
 import sys
 import zlib
@@ -116,42 +113,48 @@ def native_x11_window(window_id):
 
 
 
-def validate_android_resource_fallback(pid, cmdline, window_id):
-    """Permit only the explicit window backed by verified graphics from the real APK."""
+
+def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
+    """Require a real foreground APK and an ADB-fed native mirror window."""
+    serial = os.environ.get("ANDROID_SERIAL", "")
+    package = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
+    if not serial:
+        raise ValueError("ANDROID_SERIAL is required to validate the live Android package")
+    package_path = subprocess.run(["adb", "-s", serial, "shell", "pm", "path", package],
+                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  timeout=8, check=False)
+    focus = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "window", "windows"],
+                           text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           timeout=8, check=False)
+    focus_lines = [line for line in focus.stdout.splitlines()
+                   if re.search(r"mCurrentFocus|mFocusedApp", line, re.IGNORECASE)]
+    if package_path.returncode or "package:" not in package_path.stdout:
+        raise ValueError(f"Android PackageManager does not show installed package {package}")
+    if not any(package.casefold() in line.casefold() for line in focus_lines):
+        raise ValueError(f"Android package {package} is not the focused activity")
+
+    if "ffplay" not in identity:
+        print(f"live Android package verified as foreground: {package} on {serial}")
+        return
+    title = subprocess.run(["xdotool", "getwindowname", window_id], text=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           timeout=3, check=False).stdout.strip()
+    if title != "Privacy Friendly 2048":
+        raise ValueError(f"native Android viewer has unexpected title: {title!r}")
+    lowered = cmdline.casefold()
+    if "image2pipe" not in lowered or "pipe:0" not in lowered:
+        raise ValueError("ffplay is not consuming the live Android screenshot pipe")
     try:
-        argv = shlex.split(cmdline)
-        script_index = next(i for i, arg in enumerate(argv)
-                            if arg.endswith("android-resource-fallback.py"))
-        apk_path = Path(argv[script_index + 1]).resolve()
-        output_dir = Path(argv[script_index + 2]).resolve()
-        if not apk_path.is_file() or not output_dir.is_dir():
-            return False
-        title = subprocess.run(["xdotool", "getwindowname", str(window_id)],
-                               text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                               timeout=3, check=False).stdout.strip()
-        if title != "2048":
-            return False
-        manifest = json.loads((output_dir / "apk-resource-manifest.json").read_text())
-        apk_bytes = apk_path.read_bytes()
-        if manifest.get("apk") != str(apk_path) or hashlib.sha256(apk_bytes).hexdigest() != manifest.get("apk_sha256"):
-            return False
-        resources = manifest.get("resources", [])
-        if not resources:
-            return False
-        with zipfile.ZipFile(apk_path) as apk:
-            for resource in resources:
-                original = apk.read(resource["member"])
-                output = (output_dir / resource["output"]).resolve()
-                if output.parent != output_dir or not output.is_file():
-                    return False
-                if hashlib.sha256(original).hexdigest() != resource["source_sha256"]:
-                    return False
-                if hashlib.sha256(output.read_bytes()).hexdigest() != resource["output_sha256"]:
-                    return False
-        return True
-    except (OSError, ValueError, KeyError, StopIteration, IndexError,
-            subprocess.TimeoutExpired, zipfile.BadZipFile, json.JSONDecodeError):
-        return False
+        if not Path(f"/proc/{pid}/fd/0").resolve().name.startswith("pipe:"):
+            raise ValueError("ffplay input is not connected to a live pipe")
+    except OSError as error:
+        raise ValueError(f"cannot verify ffplay screenshot pipe: {error}") from error
+    process_table = subprocess.run(["ps", "-eo", "args="], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   timeout=5, check=False).stdout
+    if "android-screencap-viewer.sh" not in process_table:
+        raise ValueError("native viewer is not owned by the active Android screenshot stream helper")
+    print(f"live Android APK and adb-fed ffplay viewer verified: {package} on {serial}")
 
 def validate_live_window(ecosystem, window_id):
     """Inspect the mapped X11 window and its owner while the runtime is live."""
@@ -179,25 +182,21 @@ def validate_live_window(ecosystem, window_id):
     comm_path = Path(f"/proc/{pid}/comm")
     comm = comm_path.read_text(errors="replace").strip().casefold() if comm_path.exists() else ""
     identity = f"{wm_class} {cmdline} {comm}"
-    apk_resource_fallback = (ecosystem == "android" and "python" in identity and
-                             validate_android_resource_fallback(pid, cmdline, window_id))
-    if (("python" in identity and not apk_resource_fallback) or
-            "omni-store.py" in identity or "omni-store" in identity):
+    if "python" in identity or "omni-store.py" in identity or "omni-store" in identity:
         raise ValueError(f"synthetic/store-owned app window rejected: WM_CLASS={wm_class!r}, pid={pid}, process={comm!r}")
 
     allowed = {
         "linux": ("gnome-mines", "org.gnome.mines", "galculator", "vlc"),
         "windows": ("7zfm.exe", "7zfm", "explorer.exe"),
         "web": ("chromium", "chromium-browser", "chrome"),
-        "android": ("scrcpy",),
+        "android": ("scrcpy", "ffplay"),
         # No Linux-hosted third-party IPA runtime/desktop bridge is configured.
         "ios": (),
     }[ecosystem]
-    if not apk_resource_fallback and (not allowed or not any(token in identity for token in allowed)):
+    if not allowed or not any(token in identity for token in allowed):
         raise ValueError(f"unverified real-app owner: ecosystem={ecosystem}, WM_CLASS={wm_class!r}, pid={pid}, process={comm!r}")
-    if apk_resource_fallback:
-        print("live X11 owner verified: Android visual evidence uses hash-verified resources from the real APK")
-        return
+    if ecosystem == "android":
+        _validate_android_app_and_viewer(identity, cmdline, pid, window_id)
     if ecosystem == "windows":
         # Wine often assigns the visible X11 surface to explorer.exe. Also
         # require the official installed GUI process to be live in that prefix.
