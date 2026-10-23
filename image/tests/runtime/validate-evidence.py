@@ -89,7 +89,7 @@ def validate_png(path):
 
 
 def native_x11_window(window_id):
-    """Read X11 geometry, WM_CLASS, and owner PID through Python-Xlib."""
+    """Read X11 geometry, WM_CLASS, WM_NAME, and owner PID through Python-Xlib."""
     try:
         from Xlib import X, display
     except ImportError as error:
@@ -107,7 +107,10 @@ def native_x11_window(window_id):
         wm_class = " ".join(part for part in class_parts if part).casefold()
         pid_property = window.get_full_property(connection.intern_atom("_NET_WM_PID"), X.AnyPropertyType)
         pid = int(pid_property.value[0]) if pid_property and len(pid_property.value) else 0
-        return int(geometry.width), int(geometry.height), pid, wm_class
+        name_property = window.get_full_property(connection.intern_atom("WM_NAME"), X.AnyPropertyType)
+        wm_name = (name_property.value.decode(errors="replace")
+                   if name_property and isinstance(name_property.value, bytes) else "")
+        return int(geometry.width), int(geometry.height), pid, wm_class, wm_name.casefold()
     finally:
         connection.close()
 
@@ -138,18 +141,21 @@ def x11_window_fallback(window_id):
             height_match = re.search(r"Height:\s*(\d+)", info.stdout)
             if info.returncode == 0 and width_match and height_match:
                 width, height = int(width_match.group(1)), int(height_match.group(1))
-                pid, wm_class = 0, ""
+                pid, wm_class, wm_name = 0, "", ""
                 if shutil.which("xprop"):
-                    props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS", "_NET_WM_PID"],
+                    props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS", "WM_NAME", "_NET_WM_PID"],
                                            check=False, text=True, stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE, timeout=5).stdout
                     match = re.search(r'WM_CLASS\(.*?\)\s*=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
                     if match:
                         wm_class = " ".join(match.groups()).casefold()
+                    name_match = re.search(r'WM_NAME\(.*?\)\s*=\s*"([^"]*)"', props)
+                    if name_match:
+                        wm_name = name_match.group(1).casefold()
                     pid_match = re.search(r"_NET_WM_PID\(.*?\)\s*=\s*(\d+)", props)
                     if pid_match:
                         pid = int(pid_match.group(1))
-                return width, height, pid, wm_class
+                return width, height, pid, wm_class, wm_name
         except (OSError, subprocess.TimeoutExpired):
             pass
     return native_x11_window(window_id)
@@ -200,6 +206,37 @@ def linux_flatpak_owner(wm_class, proc_root=Path("/proc")):
     raise ValueError("no live GNOME Mines Flatpak child process corroborates the PID-less window")
 
 
+def linux_mines_window_identity(wm_class, wm_name):
+    """Recognize GNOME Mines directly from X11 properties, without D-Bus."""
+    identity = f"{wm_class} {wm_name}".casefold()
+    classes = set(wm_class.casefold().split())
+    if classes.intersection({"org.gnome.mines", "gnome-mines"}):
+        return True
+    return bool(re.search(r"(?:^|[^a-z0-9])mines(?:$|[^a-z0-9])", identity))
+
+
+def linux_mines_proc_owner(proc_root=Path("/proc")):
+    """Find a same-user GNOME Mines process without consulting the session bus."""
+    matches = []
+    for proc in proc_root.iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            if proc.stat().st_uid != os.getuid():
+                continue
+            comm = (proc / "comm").read_text(errors="replace").strip().casefold()
+            cmdline = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").casefold()
+        except OSError:
+            continue
+        identity = f"{comm} {cmdline}"
+        if "gnome-mines" in identity or "org.gnome.mines" in identity:
+            try:
+                matches.append((2 if comm == "gnome-mines" else 1, int(proc.name)))
+            except ValueError:
+                continue
+    return max(matches, default=(0, 0))[1]
+
+
 def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     """Require a real foreground APK and an ADB-fed native mirror window."""
     serial = os.environ.get("ANDROID_SERIAL", "")
@@ -222,10 +259,15 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     title = subprocess.run(["xdotool", "getwindowname", window_id], text=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            timeout=3, check=False).stdout.strip()
-    chromium_fallback = title == "2048" and any(
+    normalized_title = title.casefold()
+    named_android_surface = any(value in normalized_title
+                                for value in ("privacy friendly 2048", "2048", "android"))
+    known_viewer = any(token in identity for token in
+                       ("scrcpy", "ffplay", "feh", "display", "chromium", "chromium-browser", "google-chrome"))
+    chromium_fallback = any(
         token in identity for token in ("chromium", "chromium-browser", "google-chrome")
-    )
-    if title != "Privacy Friendly 2048" and not chromium_fallback:
+    ) and (named_android_surface or "android-surface.html" in cmdline)
+    if not named_android_surface and not known_viewer:
         raise ValueError(f"Android viewer has unexpected title: {title!r}")
     image = Path("/tmp/android-live.png")
     if not image.is_file() or image.stat().st_size <= 4096 or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
@@ -245,9 +287,9 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
         viewer = "ffplay"
     elif any(token in identity for token in ("chromium", "chromium-browser", "google-chrome")):
         if chromium_fallback:
-            html = Path("/tmp/nexus-fallback-2048.html")
-            html_name = "nexus-fallback-2048.html"
-            expected_title = "<title>2048</title>"
+            html = Path("/tmp/android-surface.html")
+            html_name = "android-surface.html"
+            expected_title = "<title>android</title>" if "android" in normalized_title else "<title>2048</title>"
         else:
             html = Path("/tmp/android-surface-live.html")
             html_name = "android-surface-live.html"
@@ -259,6 +301,13 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
         if "android-chromium-surface-viewer.sh" not in process_table:
             raise ValueError("Chromium is not owned by the active Android screenshot viewer helper")
         viewer = "Chromium"
+    elif any(token in identity for token in ("feh", "display")):
+        if "/tmp/android-live.png" not in cmdline:
+            raise ValueError("native image viewer is not displaying the ADB framebuffer")
+        if not any(helper in process_table for helper in
+                   ("android-screencap-viewer.sh", "android-chromium-surface-viewer.sh")):
+            raise ValueError("native image viewer has no active ADB screenshot stream helper")
+        viewer = "native image viewer"
     elif "scrcpy" in identity:
         viewer = "scrcpy"
     else:
@@ -283,23 +332,32 @@ def validate_live_window(ecosystem, window_id):
         try:
             pid = int(wmctrl_row[2])
             width, height = int(wmctrl_row[5]), int(wmctrl_row[6])
-            props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS"], check=True,
+            props = subprocess.run(["xprop", "-id", window_id, "WM_CLASS", "WM_NAME"], check=True,
                                    text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    timeout=5).stdout if shutil.which("xprop") else ""
             match = re.search(r'=\s*"([^"]+)"\s*,\s*"([^"]+)"', props)
             wm_class = " ".join(match.groups()).casefold() if match else ""
+            name_match = re.search(r'WM_NAME\(.*?\)\s*=\s*"([^"]*)"', props)
+            wm_name = name_match.group(1).casefold() if name_match else ""
         except (ValueError, subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired):
             wmctrl_row = None
     if not wmctrl_row or len(wmctrl_row) < 7:
-        width, height, pid, wm_class = x11_window_fallback(window_id)
+        width, height, pid, wm_class, wm_name = x11_window_fallback(window_id)
     if width < 300 or height < 200:
         raise ValueError(f"runtime window is tiny: {width}x{height}")
     owner_source = "X11 _NET_WM_PID"
     if pid <= 1 and ecosystem == "linux":
-        # Flatpak applications can omit _NET_WM_PID. Do not weaken other
-        # ecosystems or accept a class alone as proof of a running app.
-        pid = linux_flatpak_owner(wm_class)
-        owner_source = "corroborated Flatpak child process (X11 PID absent)"
+        # The app's own X11 class/title remains available when Flatpak's
+        # session bus is disconnected.
+        if linux_mines_window_identity(wm_class, wm_name):
+            print(f"live X11 GNOME Mines window verified without _NET_WM_PID or D-Bus: id={window_id} WM_CLASS={wm_class!r} WM_NAME={wm_name!r}")
+            return
+        pid = linux_mines_proc_owner()
+        if pid > 1:
+            owner_source = "same-user GNOME Mines process found in /proc (no D-Bus)"
+        else:
+            pid = linux_flatpak_owner(wm_class)
+            owner_source = "corroborated Flatpak child process (X11 PID absent)"
     if pid <= 1:
         raise ValueError(f"runtime window has no process owner: {width}x{height}, pid={pid}, WM_CLASS={wm_class!r}")
     cmdline_path = Path(f"/proc/{pid}/cmdline")
@@ -311,15 +369,18 @@ def validate_live_window(ecosystem, window_id):
         raise ValueError(f"synthetic/store-owned app window rejected: WM_CLASS={wm_class!r}, pid={pid}, process={comm!r}")
 
     allowed = {
-        "linux": ("gnome-mines", "org.gnome.mines", "galculator", "vlc"),
+        "linux": ("gnome-mines", "org.gnome.mines", "galculator", "vlc", "flatpak", "bwrap"),
         "windows": ("7zfm.exe", "7zfm", "explorer.exe"),
         "web": ("chromium", "chromium-browser", "chrome"),
-        "android": ("scrcpy", "ffplay", "chromium", "chromium-browser", "google-chrome"),
+        "android": ("scrcpy", "ffplay", "feh", "display", "chromium", "chromium-browser", "google-chrome"),
         # No Linux-hosted third-party IPA runtime/desktop bridge is configured.
         "ios": (),
     }[ecosystem]
     if not allowed or not any(token in identity for token in allowed):
         raise ValueError(f"unverified real-app owner: ecosystem={ecosystem}, WM_CLASS={wm_class!r}, pid={pid}, process={comm!r}")
+    if ecosystem == "linux" and any(token in identity for token in ("flatpak", "bwrap")):
+        if not linux_mines_window_identity(wm_class, wm_name) and "org.gnome.mines" not in identity:
+            raise ValueError("Flatpak/bwrap process is not tied to the GNOME Mines window or app ID")
     if ecosystem == "android":
         _validate_android_app_and_viewer(identity, cmdline, pid, window_id)
     if ecosystem == "windows":

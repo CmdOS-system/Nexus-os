@@ -6,7 +6,7 @@ export SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy SDL_RENDER_DRIVER=software LIBG
 image=/tmp/android-live.png
 temporary="/tmp/android-live-chromium.$$.tmp.png"
 asset="/tmp/android-apk-chromium.$$.png"
-html=/tmp/nexus-fallback-2048.html
+html=/tmp/android-surface.html
 cleanup() {
   if [[ -n "${updater:-}" ]]; then kill "$updater" >/dev/null 2>&1 || true; wait "$updater" 2>/dev/null || true; fi
   rm -f "$temporary" "$asset"
@@ -40,7 +40,7 @@ grep -E 'mCurrentFocus|mFocusedApp' <<<"$focus" | grep -Fq "$package" || {
   echo "The real Android package is not in foreground: $package" >&2
   exit 1
 }
-chrome="$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)"
+chrome="${NEXUS_CHROMIUM_BINARY:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
 [[ -n "$chrome" ]] || { echo "A Chromium browser is required for Android screenshot fallback" >&2; exit 1; }
 command -v file >/dev/null
 rm -f "$image"
@@ -64,7 +64,7 @@ if [[ "$frame_ready" != "1" ]]; then
   valid_png "$image" || { echo "APK-derived Android frame is not a valid PNG." >&2; exit 1; }
 fi
 cat > "$html" <<'HTML'
-<!doctype html><html><head><meta charset="utf-8"><title>2048</title>
+<!doctype html><html><head><meta charset="utf-8"><title>Android</title>
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1726}img{width:100%;height:100%;object-fit:contain}</style></head>
 <body><img id="screen" src="file:///tmp/android-live.png"><script>
 const screen=document.getElementById('screen');setInterval(()=>{screen.src='file:///tmp/android-live.png?frame='+Date.now()},400);
@@ -80,6 +80,7 @@ while :; do
   sleep 0.5
 done &
 updater=$!
-"$chrome" --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run \
-  --allow-file-access-from-files --user-data-dir=/tmp/android-surface-viewer \
-  --window-size=780,560 --window-position=710,76 --app="file://$html"
+"$chrome" --user-data-dir="${NEXUS_CHROMIUM_PROFILE:-/tmp/nexus-android-viewer}" \
+  --no-sandbox --disable-gpu --no-first-run --disable-dev-shm-usage \
+  --allow-file-access-from-files --window-size=780,560 --window-position=710,76 \
+  --app="file:///tmp/android-surface.html"
