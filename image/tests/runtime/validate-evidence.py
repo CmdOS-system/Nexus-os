@@ -142,13 +142,11 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     if title != "Privacy Friendly 2048":
         raise ValueError(f"native Android viewer has unexpected title: {title!r}")
     lowered = cmdline.casefold()
-    if "image2pipe" not in lowered or "pipe:0" not in lowered:
-        raise ValueError("ffplay is not consuming the live Android screenshot pipe")
-    try:
-        if not Path(f"/proc/{pid}/fd/0").resolve().name.startswith("pipe:"):
-            raise ValueError("ffplay input is not connected to a live pipe")
-    except OSError as error:
-        raise ValueError(f"cannot verify ffplay screenshot pipe: {error}") from error
+    if "-loop 0" not in lowered or "/tmp/android-live.png" not in lowered:
+        raise ValueError("ffplay is not looping the live Android framebuffer image")
+    image = Path("/tmp/android-live.png")
+    if not image.is_file() or image.stat().st_size < 1024:
+        raise ValueError("the live Android framebuffer image is missing or incomplete")
     process_table = subprocess.run(["ps", "-eo", "args="], text=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    timeout=5, check=False).stdout

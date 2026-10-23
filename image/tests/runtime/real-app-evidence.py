@@ -132,13 +132,29 @@ def activate_window(window_id):
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def window_process_identity(window):
+    pid = window.get("pid")
+    if not pid or pid <= 1:
+        return ""
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+        comm = Path(f"/proc/{pid}/comm").read_text(errors="replace")
+    except OSError:
+        return ""
+    return f"{cmdline} {comm}".casefold()
+
+
 def is_store(window):
-    identity = (window["title"] + " " + window["class"]).casefold()
+    identity = (window["title"] + " " + window["class"] + " " +
+                window_process_identity(window)).casefold()
     process_match = "store_process" in globals() and store_process is not None and window.get("pid") == store_process.pid
-    return process_match or any(token in identity for token in ("omnistore", "nexus", "store", "python3"))
+    return process_match or any(token in identity for token in
+                                ("omni-store.py", "omnistore", "nexus", "store", "python3"))
 
 
 def is_target(window):
+    if is_store(window):
+        return False
     identity = (window["title"] + " " + window["class"]).casefold()
     if ecosystem == "web" and "chrom" in identity and not is_store(window):
         return True
@@ -166,9 +182,11 @@ def wait_for_windows(timeout):
         pump_gtk_events()
         windows = top_level_windows()
         store_window = next((item for item in windows if is_store(item)), None)
+        app_minimum = (800, 500) if ecosystem == "windows" else (300, 200)
         app_window = next((item for item in windows if item["id"] != (store_window or {}).get("id")
                            and not is_store(item) and is_target(item)
-                           and item["width"] > 300 and item["height"] > 200), None)
+                           and item["width"] >= app_minimum[0]
+                           and item["height"] >= app_minimum[1]), None)
         if (store_window and store_window["width"] > 300 and store_window["height"] > 200
                 and app_window):
             return store_window, app_window
@@ -176,9 +194,11 @@ def wait_for_windows(timeout):
     names = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}" for item in top_level_windows())
     store_window = next((item for item in top_level_windows()
                          if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+    app_minimum = (800, 500) if ecosystem == "windows" else (300, 200)
     app_window = next((item for item in top_level_windows()
                        if item["id"] != (store_window or {}).get("id") and not is_store(item)
-                       and is_target(item) and item["width"] > 300 and item["height"] > 200), None)
+                       and is_target(item) and item["width"] >= app_minimum[0]
+                       and item["height"] >= app_minimum[1]), None)
     print(f"{ecosystem} runtime windows did not finish mapping before timeout: {names or '<none>'}",
           file=sys.stderr)
     return store_window, app_window
@@ -195,17 +215,59 @@ def wait_for_windows_or_raise(timeout):
 
 
 def launch_store():
-    existing = next((item for item in top_level_windows()
-                     if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
+    windows = [item for item in top_level_windows() if is_store(item)]
+    existing = next((item for item in windows if item["width"] > 300 and item["height"] > 200), None)
     if existing:
+        # Reuse the mapped store surface and terminate duplicate app processes.
+        if existing.get("pid"):
+            for pid in existing_store_pids():
+                if pid != existing["pid"]:
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
         print(f"Reusing existing OmniStore window {existing['id']} ({existing['width']}x{existing['height']}); not starting a second instance.",
               file=sys.stderr)
         return None
+    existing_pids = existing_store_pids()
+    for pid in existing_pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for _ in range(15):
+        if not any(Path(f"/proc/{pid}").exists() for pid in existing_pids):
+            break
+        time.sleep(0.2)
+    for pid in existing_pids:
+        if Path(f"/proc/{pid}").exists():
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
     process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                close_fds=True, start_new_session=True)
     store_processes.append(process)
     return process
+
+
+def existing_store_pids():
+    """Find live processes that actually run the OmniStore Python app."""
+    if not shutil.which("pgrep"):
+        return []
+    result = gui_run(["pgrep", "-f", "omni-store[.]py"], text=True,
+                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3)
+    pids = []
+    for value in result.stdout.splitlines():
+        try:
+            pid = int(value)
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
+            if "omni-store.py" in cmdline and pid != os.getpid():
+                pids.append(pid)
+        except (OSError, ValueError):
+            continue
+    return pids
 
 
 def restart_store_if_unmapped():
@@ -297,8 +359,28 @@ def wait_for_android_device(timeout=120):
         except (OSError, subprocess.TimeoutExpired) as error:
             print(f"ADB device list is not ready yet: {error}", file=sys.stderr)
         time.sleep(2)
-    print(f"ADB device {serial} did not appear within {timeout}s; using APK-resource visual evidence.",
+    print(f"ADB device {serial} did not appear within {timeout}s; real Android UI capture cannot start.",
           file=sys.stderr)
+    return False
+
+
+def wait_for_android_package_manager(timeout=120):
+    """Wait for Android boot and PackageManager before installing the APK."""
+    serial = os.environ["ANDROID_SERIAL"]
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            boot = subprocess.run(["adb", "-s", serial, "shell", "getprop", "sys.boot_completed"],
+                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  check=False, timeout=8)
+            package = subprocess.run(["adb", "-s", serial, "shell", "pm", "path", "android"],
+                                     text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                     check=False, timeout=8)
+            if boot.stdout.strip() == "1" and package.returncode == 0 and "package:" in package.stdout:
+                return True
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"Android PackageManager is not ready yet: {error}", file=sys.stderr)
+        time.sleep(2)
     return False
 
 
@@ -440,6 +522,8 @@ def _launch_android_package_once():
     apk_path = os.environ.get("NEXUS_FDROID_APK", package_path)
     if not apk_path or not Path(apk_path).is_file():
         raise RuntimeError(f"Cannot recover Android launch without the real APK: {apk_path!r}")
+    if not wait_for_android_package_manager(timeout=120):
+        raise RuntimeError("Android boot or PackageManager did not become ready within 120s")
 
     package_probe = subprocess.run(
         ["adb", "-s", serial, "shell", "pm", "path", package_name],
@@ -458,23 +542,8 @@ def _launch_android_package_once():
         if package_probe.returncode != 0 or "package:" not in package_probe.stdout:
             raise RuntimeError(f"Android PackageManager did not register {package_name}: {package_probe.stdout[-400:]}")
 
-    configured = os.environ.get("NEXUS_ANDROID_LAUNCH_ACTIVITY", "").strip()
-    component = configured if "/" in configured else (
-        f"{package_name}/{package_name + configured if configured.startswith('.') else configured}"
-        if configured else "")
-    if not component:
-        try:
-            resolved = subprocess.run(
-                ["adb", "-s", serial, "shell", "cmd", "package", "resolve-activity", "--brief",
-                 "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-p", package_name],
-                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=5)
-            component = next((line.strip() for line in reversed(resolved.stdout.splitlines())
-                              if "/" in line and package_name.casefold() in line.casefold()), "")
-        except (OSError, subprocess.TimeoutExpired) as error:
-            print(f"Android activity resolution timed out; retrying the real launcher request: {error}",
-                  file=sys.stderr)
-    argv = (["adb", "-s", serial, "shell", "am", "start", "-W", "-n", component]
-            if component else ["adb", "-s", serial, "shell", "monkey", "-p", package_name, "1"])
+    argv = ["adb", "-s", serial, "shell", "monkey", "-p", package_name,
+            "-c", "android.intent.category.LAUNCHER", "1"]
     try:
         result = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 check=False, timeout=5)
@@ -482,6 +551,7 @@ def _launch_android_package_once():
         raise RuntimeError(f"Android launcher did not respond within 5s: {error}") from error
     if result.returncode != 0:
         raise RuntimeError(f"Android launcher failed (exit {result.returncode}): {result.stdout[-400:]}")
+    time.sleep(3)
 
 
 def launch_android_package():
@@ -535,6 +605,7 @@ def place_windows(store_window, app_window):
 
 def capture(path, require_store=False, require_two=False):
     windows = top_level_windows()
+    app_minimum = (800, 500) if ecosystem == "windows" else (300, 200)
     if require_store and not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                  for item in windows):
         # Keep the active OmniStore process untouched when its install title
@@ -554,14 +625,17 @@ def capture(path, require_store=False, require_two=False):
                   file=sys.stderr)
     if require_two and (not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                 for item in windows) or
-                        not any(is_target(item) and item["width"] > 300 and item["height"] > 200
+                        not any(not is_store(item) and is_target(item)
+                                and item["width"] >= app_minimum[0]
+                                and item["height"] >= app_minimum[1]
                                 for item in windows)):
         details = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}"
                              for item in windows) or "<none>"
         raise RuntimeError(f"Cannot create real runtime evidence without both mapped application windows: {details}")
     if require_two:
-        live_target = next(item for item in windows if is_target(item)
-                           and item["width"] > 300 and item["height"] > 200)
+        live_target = next(item for item in windows if not is_store(item) and is_target(item)
+                           and item["width"] >= app_minimum[0]
+                           and item["height"] >= app_minimum[1])
         validate_live_runtime_window(live_target)
     image = None
     target = Path(path)
@@ -864,7 +938,7 @@ try:
             time.sleep(0.5)
             try:
                 mirror_process = launch_scrcpy_window()
-                store_window, app_window = wait_for_windows(120)
+                store_window, app_window = wait_for_windows(8)
             except (OSError, subprocess.TimeoutExpired) as error:
                 print(f"scrcpy did not open its real Android surface: {error}", file=sys.stderr)
                 app_window = None

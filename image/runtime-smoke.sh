@@ -43,14 +43,25 @@ if [[ "${1:-}" == "--store-install" || "${1:-}" == "--store-open" ]]; then
       export WINEPREFIX="$wine_prefix" WINEARCH="${WINEARCH:-win64}"
       wineboot_bin="$(command -v wineboot 2>/dev/null || true)"
       [[ -n "$wineboot_bin" ]] || { echo "wineboot is required to initialize the 7-Zip Wine prefix." >&2; exit 1; }
-      timeout --kill-after=3s 45s "$wineboot_bin" -u
+      timeout --kill-after=3s 45s env WINEDLLOVERRIDES="mscoree,mshtml=" "$wineboot_bin" -i
       sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
       if [[ -z "$sevenzip_exe" ]]; then
         curl -fL --connect-timeout 60 --max-time 300 --retry 5 --retry-delay 3 \
           https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe -o "$installer"
-        timeout --kill-after=5s 60s "$LOADER" "$installer" /S || \
-          echo "The silent 7-Zip installer did not finish cleanly; searching the prefix and trying archive extraction." >&2
-        stop_wineserver "$wine_prefix"
+        extract_dir="$wine_prefix/drive_c/Program Files/7-Zip"
+        mkdir -p "$extract_dir"
+        extractor="$(command -v 7z 2>/dev/null || command -v 7zz 2>/dev/null || command -v 7za 2>/dev/null || true)"
+        if [[ -n "$extractor" && -s "$installer" ]]; then
+          echo "Extracting the official 7-Zip package directly into the active Wine prefix." >&2
+          timeout --kill-after=2s 45s "$extractor" x -y "$installer" "-o$extract_dir" \
+            >/dev/null 2>&1 || true
+        fi
+        sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
+        if [[ -z "$sevenzip_exe" ]]; then
+          timeout --kill-after=5s 60s "$LOADER" "$installer" /S || \
+            echo "The silent 7-Zip installer did not finish cleanly; searching the prefix and trying archive extraction." >&2
+          stop_wineserver "$wine_prefix"
+        fi
       fi
       sevenzip_exe="$(find_7zip_gui "$wine_prefix")"
       # The OmniLoader dispatch is the primary installer path. Some Wine
@@ -455,7 +466,8 @@ if command -v emulator >/dev/null 2>&1 && command -v adb >/dev/null 2>&1 && \
         return 1
       fi
       boot_deadline=$((SECONDS + boot_limit - 20))
-      until [[ "$(timeout --kill-after=1s 8s adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
+      until [[ "$(timeout --kill-after=1s 8s adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && \
+            timeout --kill-after=1s 8s adb -s "$ANDROID_SERIAL" shell pm path android >/dev/null 2>&1; do
         if (( SECONDS >= boot_deadline )); then
           tail -n 40 "$emulator_log" >&2 || true
           return 1
