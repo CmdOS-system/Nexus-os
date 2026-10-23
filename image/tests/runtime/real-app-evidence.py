@@ -115,6 +115,10 @@ def top_level_windows():
                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                  timeout=3).stdout if shutil.which("xprop") else ""
             pid_match = re.search(r'=\s*(\d+)', pid_output)
+            ignored_window_tokens = ("xfwm4", "xfdesktop", "xfce4-panel", "picom")
+            if any(token in (title + " " + class_name).casefold()
+                   for token in ignored_window_tokens):
+                continue
             rows.append({"id": wid, "x": x, "y": y, "width": width, "height": height,
                          "class": class_name, "title": title,
                          "pid": int(pid_match.group(1)) if pid_match else None})
@@ -182,7 +186,7 @@ def wait_for_windows(timeout):
         pump_gtk_events()
         windows = top_level_windows()
         store_window = next((item for item in windows if is_store(item)), None)
-        app_minimum = (800, 500) if ecosystem == "windows" else (300, 200)
+        app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
         app_window = next((item for item in windows if item["id"] != (store_window or {}).get("id")
                            and not is_store(item) and is_target(item)
                            and item["width"] >= app_minimum[0]
@@ -194,7 +198,7 @@ def wait_for_windows(timeout):
     names = "; ".join(f"{item['title']} [{item['class']}] {item['width']}x{item['height']}" for item in top_level_windows())
     store_window = next((item for item in top_level_windows()
                          if is_store(item) and item["width"] > 300 and item["height"] > 200), None)
-    app_minimum = (800, 500) if ecosystem == "windows" else (300, 200)
+    app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
     app_window = next((item for item in top_level_windows()
                        if item["id"] != (store_window or {}).get("id") and not is_store(item)
                        and is_target(item) and item["width"] >= app_minimum[0]
@@ -575,17 +579,8 @@ def place_windows(store_window, app_window):
         print("Skipping window placement because X11 exposed only a tiny or missing app window.",
               file=sys.stderr)
         return False
-    # Keep the real Android mirror and OmniStore visible as moderate floating windows.
-    if ecosystem == "android":
-        layout = ((store_window, 24, 58, 420, 500), (app_window, 470, 58, 760, 560))
-    elif app_window["title"].casefold().startswith("2048"):
-        layout = ((store_window, 24, 58, 560, 500), (app_window, 600, 58, 640, 500))
-    elif ecosystem == "android":
-        layout = ((store_window, 24, 58, 560, 520), (app_window, 610, 58, 430, 590))
-    elif ecosystem == "windows" and "7-zip" in app_window["title"].casefold():
-        layout = ((store_window, 24, 58, 540, 500), (app_window, 580, 58, 680, 500))
-    else:
-        layout = ((store_window, 24, 58, 560, 500), (app_window, 600, 82, 640, 460))
+    # Keep OmniStore and the real app on the requested evidence layout.
+    layout = ((store_window, 30, 76, 650, 530), (app_window, 710, 76, 780, 560))
     for window, x, y, width, height in layout:
         gui_run(["xdotool", "windowsize", window["id"], str(width), str(height)], timeout=5,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -603,9 +598,18 @@ def place_windows(store_window, app_window):
     return True
 
 
+def mark_store_installed_title(store_window):
+    if not store_window:
+        return
+    gui_run(["xdotool", "set_window", "--name", "Nexus OmniStore · Instalado",
+             store_window["id"]], timeout=3, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+    store_window["title"] = "Nexus OmniStore · Instalado"
+
+
 def capture(path, require_store=False, require_two=False):
     windows = top_level_windows()
-    app_minimum = (800, 500) if ecosystem == "windows" else (300, 200)
+    app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
     if require_store and not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                  for item in windows):
         # Keep the active OmniStore process untouched when its install title
@@ -1007,6 +1011,7 @@ try:
         if is_device_mirror and not android_is_foreground():
             print("The Android app left the foreground; keeping the mapped scrcpy evidence window.", file=sys.stderr)
     if store_window and app_window:
+        mark_store_installed_title(store_window)
         mark_store_recovery_verified(store_window, app_window)
         place_windows(store_window, app_window)
         interact(app_window)

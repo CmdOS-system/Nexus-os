@@ -142,17 +142,20 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     if title != "Privacy Friendly 2048":
         raise ValueError(f"native Android viewer has unexpected title: {title!r}")
     lowered = cmdline.casefold()
-    if "-loop 0" not in lowered or "/tmp/android-live.png" not in lowered:
-        raise ValueError("ffplay is not looping the live Android framebuffer image")
+    if "-loop 0" not in lowered or "/tmp/android-live.mp4" not in lowered:
+        raise ValueError("ffplay is not looping the Android framebuffer video")
     image = Path("/tmp/android-live.png")
-    if not image.is_file() or image.stat().st_size < 1024:
+    if not image.is_file() or image.stat().st_size <= 4096 or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("the live Android framebuffer image is missing or incomplete")
+    video = Path("/tmp/android-live.mp4")
+    if not video.is_file() or video.stat().st_size < 4096:
+        raise ValueError("the looping Android framebuffer video is missing or incomplete")
     process_table = subprocess.run(["ps", "-eo", "args="], text=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    timeout=5, check=False).stdout
     if "android-screencap-viewer.sh" not in process_table:
         raise ValueError("native viewer is not owned by the active Android screenshot stream helper")
-    print(f"live Android APK and adb-fed ffplay viewer verified: {package} on {serial}")
+    print(f"live Android APK and looping ffplay framebuffer verified: {package} on {serial}")
 
 def validate_live_window(ecosystem, window_id):
     """Inspect the mapped X11 window and its owner while the runtime is live."""

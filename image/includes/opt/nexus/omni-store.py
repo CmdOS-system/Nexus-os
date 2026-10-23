@@ -504,7 +504,7 @@ class OmniStore:
             else:
                 detail = output[-240:] if output else f"OmniLoader terminó con código {code}."
                 self.status.set_text(f"Instalación no completada: {detail}")
-                self.window.set_title("Nexus OmniStore · Instalación no completada")
+                self.window.set_title("Nexus OmniStore")
             return False
 
         def poll():
@@ -639,7 +639,7 @@ class OmniStore:
             else:
                 detail = output[-180:] if output else f"OmniLoader terminó con código {code}."
                 self.status.set_text(f"Instalación no completada: {detail}")
-                self.window.set_title("Nexus OmniStore · Instalación no completada")
+                self.window.set_title("Nexus OmniStore")
             return False
 
         def poll():
