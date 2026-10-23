@@ -157,6 +157,49 @@ def x11_window_fallback(window_id):
 
 
 
+
+def linux_flatpak_owner(wm_class, proc_root=Path("/proc")):
+    """Corroborate a PID-less GNOME Mines X11 window with a live Flatpak app.
+
+    The Flatpak child PID is not necessarily the X11 owner. Require an exact
+    WM_CLASS plus an independent running-instance and process identity check;
+    never accept arbitrary/store-owned windows on this fallback.
+    """
+    if not set(wm_class.casefold().split()).intersection({"org.gnome.mines", "gnome-mines"}):
+        raise ValueError(f"Linux window lacks the GNOME Mines WM_CLASS: {wm_class!r}")
+    if not shutil.which("flatpak"):
+        raise ValueError("cannot corroborate GNOME Mines: flatpak is unavailable")
+    try:
+        result = subprocess.run(["flatpak", "ps", "--columns=application,child-pid"],
+                                check=False, text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError(f"cannot inspect running Flatpak instances: {error}") from error
+    if result.returncode:
+        raise ValueError(f"flatpak ps failed (exit {result.returncode})")
+    for line in result.stdout.splitlines():
+        columns = line.split()
+        if len(columns) != 2 or columns[0].casefold() != "org.gnome.mines":
+            continue
+        try:
+            pid = int(columns[1])
+        except ValueError:
+            continue
+        if pid <= 1:
+            continue
+        proc = proc_root / str(pid)
+        try:
+            if proc.stat().st_uid != os.getuid():
+                continue
+            comm = (proc / "comm").read_text().strip().casefold()
+            argv0 = (proc / "cmdline").read_bytes().split(b"\0", 1)[0].decode(errors="replace")
+        except OSError:
+            continue
+        if comm == "gnome-mines" or Path(argv0).name.casefold() == "gnome-mines":
+            return pid
+    raise ValueError("no live GNOME Mines Flatpak child process corroborates the PID-less window")
+
+
 def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     """Require a real foreground APK and an ADB-fed native mirror window."""
     serial = os.environ.get("ANDROID_SERIAL", "")
@@ -249,8 +292,16 @@ def validate_live_window(ecosystem, window_id):
             wmctrl_row = None
     if not wmctrl_row or len(wmctrl_row) < 7:
         width, height, pid, wm_class = x11_window_fallback(window_id)
-    if width < 300 or height < 200 or pid <= 1:
-        raise ValueError(f"runtime window is tiny or has no process owner: {width}x{height}, pid={pid}")
+    if width < 300 or height < 200:
+        raise ValueError(f"runtime window is tiny: {width}x{height}")
+    owner_source = "X11 _NET_WM_PID"
+    if pid <= 1 and ecosystem == "linux":
+        # Flatpak applications can omit _NET_WM_PID. Do not weaken other
+        # ecosystems or accept a class alone as proof of a running app.
+        pid = linux_flatpak_owner(wm_class)
+        owner_source = "corroborated Flatpak child process (X11 PID absent)"
+    if pid <= 1:
+        raise ValueError(f"runtime window has no process owner: {width}x{height}, pid={pid}, WM_CLASS={wm_class!r}")
     cmdline_path = Path(f"/proc/{pid}/cmdline")
     cmdline = cmdline_path.read_bytes().replace(b"\0", b" ").decode(errors="replace").casefold() if cmdline_path.exists() else ""
     comm_path = Path(f"/proc/{pid}/comm")
@@ -278,7 +329,7 @@ def validate_live_window(ecosystem, window_id):
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5).stdout.casefold()
         if "7zfm.exe" not in process_table:
             raise ValueError("the Wine window is mapped but the real 7zFM.exe process is not running")
-    print(f"live X11 owner verified: ecosystem={ecosystem} id={window_id} pid={pid} WM_CLASS={wm_class}")
+    print(f"live X11 app identity verified: ecosystem={ecosystem} id={window_id} pid={pid} WM_CLASS={wm_class} source={owner_source}")
 
 
 def main():
