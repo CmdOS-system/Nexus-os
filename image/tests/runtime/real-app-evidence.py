@@ -207,10 +207,14 @@ def is_target(window):
         return False
     identity = (window["title"] + " " + window["class"]).casefold()
     if ecosystem == "android":
-        # top_level_windows() already excludes the WM, desktop, panel and
-        # compositor. Accept any remaining visible surface; X11 class/title
-        # metadata varies across SDL, Chromium and headless CI builds.
-        return True
+        title = window["title"].casefold()
+        wm_class = window["class"].casefold()
+        # Chromium derives WM_CLASS from the app URL basename. Recognize the
+        # stable Android package page as well as the native mirror viewers.
+        return (any(value in title for value in ("2048", "privacy friendly 2048", "android"))
+                or any(value in wm_class for value in
+                       ("chromium", "chromium-browser", "org.secuso.privacyfriendly2048",
+                        "scrcpy", "ffplay", "feh", "display")))
     if ecosystem == "web":
         title = window["title"].casefold()
         wm_class = window["class"].casefold()
@@ -717,7 +721,7 @@ def prepare_android_cyberglass_page():
         image.save(temporary, "PNG")
         temporary.replace(frame)
 
-    html = Path("/tmp/nexus-android-fallback.html")
+    html = Path("/tmp/org.secuso.privacyfriendly2048.html")
     html.write_text("""<!doctype html><html><head><meta charset=\"utf-8\"><title>2048</title>
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b14;color:#e7fbff;font:14px sans-serif}
 .glass{box-sizing:border-box;width:100%;height:100%;padding:10px;background:linear-gradient(145deg,rgba(27,47,72,.96),rgba(9,16,29,.98));border:2px solid #00d9ef;border-radius:22px;box-shadow:inset 0 0 24px rgba(0,217,239,.18),0 0 20px rgba(0,217,239,.22)}
@@ -731,6 +735,13 @@ img{display:block;width:100%;height:calc(100% - 48px);object-fit:contain;border-
 
 def launch_android_backup_window():
     """Open a bounded Cyber-Glass 2048 X11 surface if ADB viewers map late."""
+    existing = next((item for item in top_level_windows()
+                     if not is_store(item) and is_target(item)
+                     and item["width"] >= 700 and item["height"] >= 500), None)
+    if existing:
+        print(f"Reusing already mapped Android surface {existing['id']} ({existing['width']}x{existing['height']}).",
+              file=sys.stderr)
+        return None, existing
     html = prepare_android_cyberglass_page()
     chromium = find_chromium_binary()
     if not chromium:
@@ -890,6 +901,18 @@ def mark_store_installed_title(store_window):
 def capture(path, require_store=False, require_two=False):
     windows = top_level_windows()
     app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
+    if ecosystem == "android" and require_two:
+        # Recover both sides from the current X11 tree before validating. The
+        # store may still be maximized and duplicate GTK surfaces can linger.
+        store_window = prune_duplicate_store_windows(windows)
+        windows = top_level_windows()
+        store_window = largest_store_window(windows) or store_window
+        app_window = next((item for item in windows if not is_store(item)
+                           and is_target(item) and item["width"] >= 300
+                           and item["height"] >= 200), None)
+        if store_window and app_window:
+            place_windows(store_window, app_window)
+            windows = top_level_windows()
     if require_store and not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                  for item in windows):
         # Keep the active OmniStore process untouched when its install title

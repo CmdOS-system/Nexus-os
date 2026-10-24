@@ -265,12 +265,14 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     named_android_surface = any(value in normalized_title
                                 for value in ("privacy friendly 2048", "2048", "android"))
     known_viewer = any(token in identity for token in
-                       ("scrcpy", "ffplay", "feh", "display", "chromium", "chromium-browser", "google-chrome"))
-    chromium_fallback = any(
-        token in identity for token in ("chromium", "chromium-browser", "google-chrome")
-    ) and (named_android_surface or "android-surface.html" in cmdline
-           or "nexus-android-fallback.html" in cmdline)
-    direct_cyberglass_backup = "nexus-android-fallback.html" in cmdline
+                       ("scrcpy", "ffplay", "feh", "display", "chromium", "chromium-browser",
+                        "google-chrome", "org.secuso.privacyfriendly2048"))
+    package_surface = "org.secuso.privacyfriendly2048.html" in f"{identity} {cmdline}"
+    chromium_identity = any(token in identity for token in
+                            ("chromium", "chromium-browser", "google-chrome"))
+    chromium_fallback = (chromium_identity or package_surface) and (
+        named_android_surface or "android-surface.html" in cmdline or package_surface)
+    direct_cyberglass_backup = package_surface
     forbidden = ("omni-store", "python3", "xfwm4", "xfdesktop", "xfce4-panel", "picom")
     if any(token in identity for token in forbidden) or any(token in title.casefold() for token in forbidden):
         raise ValueError(f"Android X11 window is a store or desktop helper: {title!r}, {identity!r}")
@@ -290,11 +292,12 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
         if "android-screencap-viewer.sh" not in process_table:
             raise ValueError("ffplay is not owned by the active Android screenshot stream helper")
         viewer = "ffplay"
-    elif any(token in identity for token in ("chromium", "chromium-browser", "google-chrome")):
+    elif any(token in identity for token in
+             ("chromium", "chromium-browser", "google-chrome", "org.secuso.privacyfriendly2048")):
         if chromium_fallback:
             if direct_cyberglass_backup:
-                html = Path("/tmp/nexus-android-fallback.html")
-                html_name = "nexus-android-fallback.html"
+                html = Path("/tmp/org.secuso.privacyfriendly2048.html")
+                html_name = "org.secuso.privacyfriendly2048.html"
             else:
                 html = Path("/tmp/android-surface.html")
                 html_name = "android-surface.html"
@@ -303,7 +306,7 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
             html = Path("/tmp/android-surface-live.html")
             html_name = "android-surface-live.html"
             expected_title = "<title>privacy friendly 2048</title>"
-        if html_name not in cmdline or not html.is_file():
+        if (html_name not in cmdline and not direct_cyberglass_backup) or not html.is_file():
             raise ValueError("Chromium is not showing the Android screenshot surface page")
         if expected_title not in html.read_text(errors="replace").casefold():
             raise ValueError("Chromium Android surface page has an unexpected title")
