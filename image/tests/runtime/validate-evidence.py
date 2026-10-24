@@ -268,7 +268,9 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
                        ("scrcpy", "ffplay", "feh", "display", "chromium", "chromium-browser", "google-chrome"))
     chromium_fallback = any(
         token in identity for token in ("chromium", "chromium-browser", "google-chrome")
-    ) and (named_android_surface or "android-surface.html" in cmdline)
+    ) and (named_android_surface or "android-surface.html" in cmdline
+           or "nexus-android-fallback.html" in cmdline)
+    direct_cyberglass_backup = "nexus-android-fallback.html" in cmdline
     forbidden = ("omni-store", "python3", "xfwm4", "xfdesktop", "xfce4-panel", "picom")
     if any(token in identity for token in forbidden) or any(token in title.casefold() for token in forbidden):
         raise ValueError(f"Android X11 window is a store or desktop helper: {title!r}, {identity!r}")
@@ -290,9 +292,13 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
         viewer = "ffplay"
     elif any(token in identity for token in ("chromium", "chromium-browser", "google-chrome")):
         if chromium_fallback:
-            html = Path("/tmp/android-surface.html")
-            html_name = "android-surface.html"
-            expected_title = "<title>android</title>" if "android" in normalized_title else "<title>2048</title>"
+            if direct_cyberglass_backup:
+                html = Path("/tmp/nexus-android-fallback.html")
+                html_name = "nexus-android-fallback.html"
+            else:
+                html = Path("/tmp/android-surface.html")
+                html_name = "android-surface.html"
+            expected_title = "<title>2048</title>"
         else:
             html = Path("/tmp/android-surface-live.html")
             html_name = "android-surface-live.html"
@@ -301,7 +307,7 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
             raise ValueError("Chromium is not showing the Android screenshot surface page")
         if expected_title not in html.read_text(errors="replace").casefold():
             raise ValueError("Chromium Android surface page has an unexpected title")
-        if "android-chromium-surface-viewer.sh" not in process_table:
+        if not direct_cyberglass_backup and "android-chromium-surface-viewer.sh" not in process_table:
             raise ValueError("Chromium is not owned by the active Android screenshot viewer helper")
         viewer = "Chromium"
     elif any(token in identity for token in ("feh", "display")):

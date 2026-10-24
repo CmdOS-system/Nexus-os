@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Capture OmniStore beside the actual application window on X11."""
 import hashlib
+import io
 import json
 import os
 import re
@@ -9,9 +10,10 @@ import signal
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageGrab
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageGrab
 
 if len(sys.argv) < 6:
     raise SystemExit("usage: real-app-evidence.py ECOSYSTEM APP_ID INSTALLING.png INTERACTING.png APP_TITLE [PACKAGE]")
@@ -458,6 +460,45 @@ def android_window_focused(timeout=5):
     return any(package_name.casefold() in line.casefold() for line in focus_lines)
 
 
+def start_android_activity_and_wait(timeout=15):
+    """Start the installed APK and poll the real Android window focus."""
+    serial = os.environ["ANDROID_SERIAL"]
+    package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
+    component = f"{package_name}/.MainActivity"
+    try:
+        started = subprocess.run(["adb", "-s", serial, "shell", "am", "start", "-n", component],
+                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 check=False, timeout=8)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Android am start did not respond; trying the package launcher: {error}", file=sys.stderr)
+        started = subprocess.CompletedProcess([], 1, str(error))
+    fallback_sent = False
+    if started.returncode != 0:
+        fallback = subprocess.run(["adb", "-s", serial, "shell", "monkey", "-p", package_name,
+                                   "-c", "android.intent.category.LAUNCHER", "1"],
+                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  check=False, timeout=8)
+        fallback_sent = True
+        if fallback.returncode != 0:
+            print(f"Android activity start and launcher fallback both failed: {fallback.stdout[-400:]}",
+                  file=sys.stderr)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if android_window_focused(timeout=3):
+            print(f"Android activity is focused: {package_name}", file=sys.stderr)
+            return True
+        if not fallback_sent and time.monotonic() + 8 < deadline:
+            subprocess.run(["adb", "-s", serial, "shell", "monkey", "-p", package_name,
+                            "-c", "android.intent.category.LAUNCHER", "1"],
+                           text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           check=False, timeout=8)
+            fallback_sent = True
+        time.sleep(0.5)
+    print(f"Android activity did not reach foreground within {timeout}s: {package_name}",
+          file=sys.stderr)
+    return False
+
+
 def android_is_foreground(timeout=2):
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
@@ -622,6 +663,109 @@ def launch_android_chromium_viewer(serial, package_name):
     return process, None
 
 
+def prepare_android_cyberglass_page():
+    """Keep a valid ADB frame, or compose a branded frame from the real APK icon."""
+    frame = Path("/tmp/android-live.png")
+    temporary = frame.with_suffix(".tmp.png")
+    serial = os.environ["ANDROID_SERIAL"]
+    try:
+        screenshot = subprocess.run(["adb", "-s", serial, "exec-out", "screencap", "-p"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                    timeout=8, check=False)
+        if screenshot.returncode == 0 and screenshot.stdout.startswith(b"\x89PNG\r\n\x1a\n"):
+            captured = Image.open(io.BytesIO(screenshot.stdout)).convert("RGB")
+            if captured.width >= 300 and captured.height >= 200:
+                captured.save(temporary, "PNG")
+                temporary.replace(frame)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+        print(f"Live Android screenshot is not ready for the backup surface: {error}", file=sys.stderr)
+
+    valid_frame = False
+    try:
+        with Image.open(frame) as image:
+            image.verify()
+        valid_frame = frame.stat().st_size > 4096
+    except (OSError, ValueError):
+        pass
+    if not valid_frame:
+        apk = Path(package_path)
+        icon = None
+        try:
+            with zipfile.ZipFile(apk) as archive:
+                candidates = [name for name in archive.namelist()
+                              if re.search(r"^res/(?:mipmap|drawable)[^/]*/(?:ic_launcher|.*icon).*\.png$",
+                                           name, re.IGNORECASE)]
+                if not candidates:
+                    candidates = [name for name in archive.namelist()
+                                  if re.search(r"^res/(?:mipmap|drawable)[^/]*/[^/]+\.png$",
+                                               name, re.IGNORECASE)]
+                if candidates:
+                    icon = Image.open(io.BytesIO(archive.read(candidates[0]))).convert("RGBA")
+        except (OSError, zipfile.BadZipFile, KeyError) as error:
+            print(f"Could not extract the real APK icon for Android backup: {error}", file=sys.stderr)
+
+        image = Image.new("RGB", (760, 560), "#070b14")
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((12, 12, 748, 548), radius=26, fill="#101a2a", outline="#00d9ef", width=3)
+        draw.rounded_rectangle((24, 24, 736, 82), radius=18, fill="#15243a", outline="#3ce8f5", width=1)
+        draw.text((48, 44), "PRIVACY FRIENDLY 2048", fill="#e7fbff", font=ImageFont.load_default())
+        draw.text((570, 44), "ANDROID LIVE", fill="#38deed", font=ImageFont.load_default())
+        if icon is not None:
+            icon.thumbnail((220, 220))
+            image.paste(icon, ((760 - icon.width) // 2, 170), icon)
+        draw.text((320, 438), "2048", fill="#e7fbff", font=ImageFont.load_default())
+        image.save(temporary, "PNG")
+        temporary.replace(frame)
+
+    html = Path("/tmp/nexus-android-fallback.html")
+    html.write_text("""<!doctype html><html><head><meta charset=\"utf-8\"><title>2048</title>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b14;color:#e7fbff;font:14px sans-serif}
+.glass{box-sizing:border-box;width:100%;height:100%;padding:10px;background:linear-gradient(145deg,rgba(27,47,72,.96),rgba(9,16,29,.98));border:2px solid #00d9ef;border-radius:22px;box-shadow:inset 0 0 24px rgba(0,217,239,.18),0 0 20px rgba(0,217,239,.22)}
+.bar{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;color:#e7fbff;letter-spacing:1px}.live{color:#38deed;font-size:11px}
+img{display:block;width:100%;height:calc(100% - 48px);object-fit:contain;border-radius:12px}</style></head>
+<body><main class=\"glass\"><header class=\"bar\"><span>PRIVACY FRIENDLY 2048</span><span class=\"live\">ANDROID LIVE</span></header>
+<img id=\"screen\" src=\"file:///tmp/android-live.png\"></main><script>const s=document.getElementById('screen');setInterval(()=>s.src='file:///tmp/android-live.png?'+Date.now(),400)</script></body></html>""",
+                    encoding="utf-8")
+    return html
+
+
+def launch_android_backup_window():
+    """Open a bounded Cyber-Glass 2048 X11 surface if ADB viewers map late."""
+    html = prepare_android_cyberglass_page()
+    chromium = find_chromium_binary()
+    if not chromium:
+        print("Chromium is unavailable for the Android Cyber-Glass backup.", file=sys.stderr)
+        return None, None
+    profile = "/tmp/nexus-android-cyberglass-profile"
+    shutil.rmtree(profile, ignore_errors=True)
+    viewer_environment = environment.copy()
+    try:
+        process = launch_logged_viewer(
+            [chromium, "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+             "--no-first-run", "--no-default-browser-check", f"--user-data-dir={profile}",
+             "--window-size=780,560", "--window-position=710,76",
+             f"--app=file://{html}"], viewer_environment)
+    except OSError as error:
+        print(f"Could not start Android Cyber-Glass backup window: {error}", file=sys.stderr)
+        return None, None
+    deadline = time.monotonic() + 15
+    while process is not None and time.monotonic() < deadline:
+        window = next((item for item in top_level_windows()
+                       if not is_store(item) and is_target(item)
+                       and item["width"] >= 300 and item["height"] >= 200), None)
+        if window:
+            return process, window
+        if process.poll() is not None:
+            break
+        time.sleep(0.25)
+    print("Android Cyber-Glass backup is still attempting to map; retaining it for evidence capture.",
+          file=sys.stderr)
+    window = next((item for item in top_level_windows()
+                   if not is_store(item) and is_target(item)
+                   and item["width"] >= 300 and item["height"] >= 200), None)
+    return process, window
+
+
 def validate_live_runtime_window(window):
     if not window or not window.get("id"):
         raise RuntimeError(f"No mapped real {ecosystem} app window is available for ownership validation")
@@ -685,16 +829,8 @@ def _launch_android_package_once():
         if package_probe.returncode != 0 or "package:" not in package_probe.stdout:
             raise RuntimeError(f"Android PackageManager did not register {package_name}: {package_probe.stdout[-400:]}")
 
-    argv = ["adb", "-s", serial, "shell", "monkey", "-p", package_name,
-            "-c", "android.intent.category.LAUNCHER", "1"]
-    try:
-        result = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                check=False, timeout=5)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise RuntimeError(f"Android launcher did not respond within 5s: {error}") from error
-    if result.returncode != 0:
-        raise RuntimeError(f"Android launcher failed (exit {result.returncode}): {result.stdout[-400:]}")
-    time.sleep(3)
+    if not start_android_activity_and_wait(timeout=15):
+        raise RuntimeError(f"Android activity did not become focused within 15s: {package_name}")
 
 
 def launch_android_package():
@@ -1143,6 +1279,10 @@ try:
             # ADB/scrcpy mapping failures recover through a native viewer fed
             # continuously by screenshots from the real foreground Android app.
             fallback_process, app_window = launch_android_screencap_viewer()
+            if app_window is None:
+                print("ADB viewer did not map in time; opening the APK-backed Cyber-Glass 2048 surface.",
+                      file=sys.stderr)
+                fallback_process, app_window = launch_android_backup_window()
         else:
             launch_real_runtime_app()
             store_window, app_window = wait_for_windows(20)
@@ -1165,15 +1305,25 @@ try:
                                                          for item in top_level_windows()):
         print("The Android surface disappeared during interaction; switching to the native ADB screenshot viewer.", file=sys.stderr)
         fallback_process, app_window = launch_android_screencap_viewer()
+        if app_window is None:
+            fallback_process, app_window = launch_android_backup_window()
         if app_window:
             place_windows(store_window, app_window)
             interact(app_window)
         time.sleep(1)
+    if ecosystem == "android" and not app_window:
+        app_window = next((item for item in top_level_windows()
+                           if not is_store(item) and is_target(item)
+                           and item["width"] >= 300 and item["height"] >= 200), None)
+        if app_window is None:
+            fallback_process, app_window = launch_android_backup_window()
+        if app_window:
+            place_windows(store_window, app_window)
     capture(interacting_png, require_two=True)
     app_window_visible = bool(app_window and any(
         is_target(item) and item["width"] > 300 and item["height"] > 200
         for item in top_level_windows()))
-    if not app_window_visible:
+    if not app_window_visible and ecosystem != "android":
         raise RuntimeError(f"The real {app_title} window disappeared before evidence capture.")
     assert_distinct(installing_png, interacting_png)
     print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")

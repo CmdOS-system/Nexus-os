@@ -64,9 +64,12 @@ if [[ "$frame_ready" != "1" ]]; then
   valid_png "$image" || { echo "APK-derived Android frame is not a valid PNG." >&2; exit 1; }
 fi
 cat > "$html" <<'HTML'
-<!doctype html><html><head><meta charset="utf-8"><title>Android</title>
-<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1726}img{width:100%;height:100%;object-fit:contain}</style></head>
-<body><img id="screen" src="file:///tmp/android-live.png"><script>
+<!doctype html><html><head><meta charset="utf-8"><title>2048</title>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b14;color:#e7fbff;font:14px sans-serif}
+.glass{box-sizing:border-box;width:100%;height:100%;padding:10px;background:linear-gradient(145deg,rgba(27,47,72,.96),rgba(9,16,29,.98));border:2px solid #00d9ef;border-radius:22px;box-shadow:inset 0 0 24px rgba(0,217,239,.18),0 0 20px rgba(0,217,239,.22)}
+.bar{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;color:#e7fbff;letter-spacing:1px}.live{color:#38deed;font-size:11px}
+img{display:block;width:100%;height:calc(100% - 48px);object-fit:contain;border-radius:12px}</style></head>
+<body><main class="glass"><header class="bar"><span>PRIVACY FRIENDLY 2048</span><span class="live">ANDROID LIVE</span></header><img id="screen" src="file:///tmp/android-live.png"></main><script>
 const screen=document.getElementById('screen');setInterval(()=>{screen.src='file:///tmp/android-live.png?frame='+Date.now()},400);
 </script></body></html>
 HTML
