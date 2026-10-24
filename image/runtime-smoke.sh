@@ -348,8 +348,12 @@ run_store_evidence() {
       python3 "$ROOT/tests/runtime/real-app-evidence.py" "$ecosystem" "$app_id" \
       "$PROJECT_ROOT/evidence/$evidence_ecosystem/$evidence_ecosystem-installing.png" \
       "$PROJECT_ROOT/evidence/$evidence_ecosystem/$evidence_ecosystem-interacting.png" "$title" "$package"
-  cp "$PROJECT_ROOT/evidence/$evidence_ecosystem/$evidence_ecosystem-interacting.png" \
-    "$PROJECT_ROOT/evidence/$evidence_ecosystem/$primary"
+  # real-app-evidence.py records a separate post-interaction running frame.
+  # Retain the old copy fallback only when a runtime does not provide it.
+  if [[ ! -s "$PROJECT_ROOT/evidence/$evidence_ecosystem/$primary" ]]; then
+    cp "$PROJECT_ROOT/evidence/$evidence_ecosystem/$evidence_ecosystem-interacting.png" \
+      "$PROJECT_ROOT/evidence/$evidence_ecosystem/$primary"
+  fi
 }
 # wmctrl is intentionally optional; the evidence helper falls back to xwininfo/xdotool.
 for tool in python3 unzip zip gcc x86_64-w64-mingw32-gcc xvfb-run node xfwm4 xdotool curl; do

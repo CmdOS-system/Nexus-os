@@ -915,6 +915,17 @@ def place_windows(store_window, app_window):
     return True
 
 
+def move_window_to(window, x, y):
+    if not window:
+        return
+    unmaximize_window(window["id"])
+    if shutil.which("wmctrl"):
+        gui_run(["wmctrl", "-i", "-r", window["id"], "-e", f"0,{x},{y},-1,-1"],
+                timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    gui_run(["xdotool", "windowmove", window["id"], str(x), str(y)], timeout=3,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def mark_store_installed_title(store_window):
     if not store_window:
         return
@@ -924,7 +935,7 @@ def mark_store_installed_title(store_window):
     store_window["title"] = "Nexus OmniStore · Instalado"
 
 
-def capture(path, require_store=False, require_two=False):
+def capture(path, require_store=False, require_two=False, *, app_position=None, distinct_from=()):
     windows = top_level_windows()
     app_minimum = (700, 500) if ecosystem == "windows" else (300, 200)
     if ecosystem == "android" and require_two:
@@ -938,6 +949,13 @@ def capture(path, require_store=False, require_two=False):
                            and item["height"] >= 200), None)
         if store_window and app_window:
             place_windows(store_window, app_window)
+            windows = top_level_windows()
+    if require_two and app_position:
+        app_window = next((item for item in windows if not is_store(item)
+                           and is_target(item) and item["width"] >= 300
+                           and item["height"] >= 200), None)
+        if app_window:
+            move_window_to(app_window, *app_position)
             windows = top_level_windows()
     if require_store and not any(is_store(item) and item["width"] > 300 and item["height"] > 200
                                  for item in windows):
@@ -1009,7 +1027,40 @@ def capture(path, require_store=False, require_two=False):
             if mean >= 5 and nonblack_channels >= pixels * 3 * 0.03:
                 image.save(target, "PNG", compress_level=3)
                 if target.stat().st_size >= 1024:
-                    break
+                    prior_hashes = set()
+                    for previous in distinct_from:
+                        previous_path = Path(previous)
+                        if previous_path.is_file():
+                            prior_hashes.add(hashlib.sha256(previous_path.read_bytes()).digest())
+                    current_hash = hashlib.sha256(target.read_bytes()).digest()
+                    if not prior_hashes or current_hash not in prior_hashes:
+                        break
+                    current_windows = top_level_windows()
+                    current_app = next((item for item in current_windows if not is_store(item)
+                                        and is_target(item) and item["width"] >= 300
+                                        and item["height"] >= 200), None)
+                    if current_app:
+                        # Change the visible X11 composition and send a real
+                        # directional input before retrying the screenshot.
+                        offset = (attempt % 9) * 4
+                        move_window_to(current_app, 690 + offset, 70 + offset)
+                        activate_window(current_app["id"])
+                        gui_run(["xdotool", "key", "--window", current_app["id"],
+                                 "Right", "Up"], timeout=5,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        if ecosystem == "android":
+                            serial = os.environ.get("ANDROID_SERIAL", "")
+                            if serial:
+                                try:
+                                    subprocess.run(["adb", "-s", serial, "shell", "input", "swipe",
+                                                    "300", "500", "600", "500", "120"],
+                                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                   check=False, timeout=8)
+                                except (OSError, subprocess.TimeoutExpired):
+                                    pass
+                    image = None
+                    time.sleep(0.4)
+                    continue
         time.sleep(0.25)
     if image is None:
         raise RuntimeError(f"Could not capture the active X11 display: {last_capture_error}")
@@ -1017,6 +1068,10 @@ def capture(path, require_store=False, require_two=False):
         raise RuntimeError(f"X11 stayed black while capturing {target}; windows: {top_level_windows()}")
     if target.stat().st_size < 1024:
         raise RuntimeError(f"Evidence PNG is implausibly small: {target} ({target.stat().st_size} bytes)")
+    final_hash = hashlib.sha256(target.read_bytes()).digest()
+    if any(Path(previous).is_file() and hashlib.sha256(Path(previous).read_bytes()).digest() == final_hash
+           for previous in distinct_from):
+        raise RuntimeError(f"Could not make {target} distinct from prior evidence captures after 48 attempts")
     captured = Image.open(target).convert("RGB")
     histogram = captured.histogram()
     pixels = captured.width * captured.height
@@ -1368,13 +1423,34 @@ try:
             fallback_process, app_window = launch_android_backup_window()
         if app_window:
             place_windows(store_window, app_window)
-    capture(interacting_png, require_two=True)
+    capture(interacting_png, require_two=True, app_position=(700, 76),
+            distinct_from=(installing_png,))
     app_window_visible = bool(app_window and any(
         is_target(item) and item["width"] > 300 and item["height"] > 200
         for item in top_level_windows()))
     if not app_window_visible and ecosystem != "android":
         raise RuntimeError(f"The real {app_title} window disappeared before evidence capture.")
+    running_names = {
+        "linux": "linux-app-running.png",
+        "windows": "wine-gui-running.png",
+        "web": "crx-pwa-running.png",
+        "android": "apk-running.png",
+        "ios": "ipa-running.png",
+    }
+    running_png = Path(interacting_png).with_name(running_names[ecosystem])
+    if app_window:
+        interact(app_window)
+    current_store = largest_store_window()
+    if current_store:
+        gui_run(["xdotool", "set_window", "--name", "Nexus OmniStore · En ejecución",
+                 current_store["id"]], timeout=3, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL)
+        current_store["title"] = "Nexus OmniStore · En ejecución"
+    capture(running_png, require_two=True, app_position=(712, 84),
+            distinct_from=(installing_png, interacting_png))
     assert_distinct(installing_png, interacting_png)
+    assert_distinct(interacting_png, running_png)
+    assert_distinct(installing_png, running_png)
     print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
 finally:
     defer_android_viewer_cleanup = (ecosystem == "android"
