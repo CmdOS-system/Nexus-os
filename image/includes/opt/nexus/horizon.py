@@ -5,8 +5,8 @@ import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
 
-BG, SURFACE, RAISED, EDGE = '#0b1220', '#151f31', '#202f46', '#2b3c55'
-TEXT, MUTED, ACCENT = '#f4f7fc', '#b9c5d8', '#70dcf5'
+BG, SURFACE, RAISED, EDGE = '#05070D', '#0B111D', '#111D2C', '#27394C'
+TEXT, MUTED, ACCENT = '#F4F8FF', '#9EACC0', '#00F2FF'
 APPLICATIONS = (
     ('Files', 'Browse your documents', ('thunar',)),
     ('Web', 'Open your browser', ('xdg-open', 'https://www.debian.org/')),
@@ -24,6 +24,14 @@ def matching_apps(query):
 
 def launch(command):
     return subprocess.Popen(command, stdin=subprocess.DEVNULL, close_fds=True)
+
+def play_nexus_sound(event):
+    helper = '/usr/lib/nexus/nexus-system-sound.py'
+    try:
+        subprocess.Popen(['/usr/bin/python3', helper, event], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+    except OSError:
+        pass
 
 def draw_icon(canvas, index):
     color = ICON_COLORS[index]
@@ -60,9 +68,15 @@ class Horizon(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Nexus Horizon')
-        self.geometry(f'{min(880, self.winfo_screenwidth()-48)}x{min(720, self.winfo_screenheight()-80)}')
+        self.geometry(f'{min(860, self.winfo_screenwidth()-96)}x{min(660, self.winfo_screenheight()-120)}')
         self.minsize(540, 440)
         self.configure(bg=BG)
+        try:
+            self.attributes('-alpha', 0.94)
+            self.tk.call('wm', 'class', self._w, 'NexusHorizon')
+        except tk.TclError:
+            pass
+        play_nexus_sound('launcher')
         self.family = 'Inter' if 'Inter' in tkfont.families(self) else tkfont.nametofont('TkDefaultFont').actual('family')
         self.search = tk.StringVar()
         self.feedback = tk.StringVar(value='Choose an application to get started.')
@@ -86,13 +100,13 @@ class Horizon(tk.Tk):
     def _build(self):
         header = tk.Frame(self, bg=BG)
         header.pack(fill='x', padx=30, pady=(24, 16))
-        self._label(header, '◈  Nexus', 13, ACCENT, True).pack(side='left')
-        self._label(header, 'Horizon', 11).pack(side='left', padx=12)
+        self._label(header, 'NEXUS', 12, ACCENT, True).pack(side='left')
+        self._label(header, 'HORIZON  /  WORKSPACE', 9).pack(side='left', padx=12)
         tk.Button(header, text='Esc  ×', command=self.destroy, font=(self.family, 10), fg=MUTED, bg=SURFACE,
                   activebackground=RAISED, activeforeground=TEXT, relief='flat', bd=0, padx=12, pady=6,
                   highlightthickness=1, highlightbackground=EDGE, highlightcolor=ACCENT).pack(side='right')
-        self._label(self, 'A little more space to think.', 25, TEXT, True).pack(fill='x', padx=30)
-        self._label(self, 'Your apps and tools, thoughtfully within reach.').pack(fill='x', padx=30, pady=(6, 20))
+        self._label(self, 'A clear space to work.', 25, TEXT, True).pack(fill='x', padx=30)
+        self._label(self, 'Your tools, applications and runtime environment.').pack(fill='x', padx=30, pady=(6, 20))
         search_box = tk.Frame(self, bg=SURFACE, highlightthickness=1, highlightbackground=EDGE)
         search_box.pack(fill='x', padx=30)
         self._label(search_box, '⌕', 22, ACCENT).pack(side='left', padx=(14, 8))

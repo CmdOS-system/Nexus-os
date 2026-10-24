@@ -1,0 +1,52 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  echo "Nexus Android: $*" >&2
+  exit 1
+}
+
+command -v waydroid >/dev/null 2>&1 || fail "Waydroid no está instalado."
+command -v pkexec >/dev/null 2>&1 || fail "pkexec no está disponible para iniciar el contenedor con autorización."
+
+if [ ! -c /dev/binder ] && [ ! -c /dev/binderfs/binder ]; then
+  fail "el kernel no expone Binder (/dev/binder). Reinicia con binder_linux habilitado o usa un kernel compatible."
+fi
+
+if [ ! -s /var/lib/waydroid/images/system.img ] || [ ! -s /var/lib/waydroid/images/vendor.img ]; then
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --question --title="Preparar Android para Nexus" --width=520 \
+      --text="Waydroid necesita descargar su imagen Android oficial antes del primer uso. Se solicitará autorización del sistema. ¿Descargarla ahora?" \
+      || fail "la descarga de la imagen Android fue cancelada."
+  else
+    fail "falta la imagen Android de Waydroid; ejecútalo desde el escritorio para iniciar la configuración."
+  fi
+  pkexec waydroid init || fail "Waydroid no pudo descargar e inicializar la imagen oficial."
+fi
+
+if ! systemctl is-active --quiet waydroid-container.service; then
+  pkexec systemctl start waydroid-container.service || fail "no se pudo iniciar waydroid-container.service."
+fi
+
+status="$(waydroid status 2>&1)" || fail "waydroid status no pudo consultar el contenedor: $status"
+printf '%s\n' "$status" | grep -qi 'Container:[[:space:]]*RUNNING' \
+  || fail "el contenedor no está activo. Estado informado: $status"
+
+if ! printf '%s\n' "$status" | grep -qi 'Session:[[:space:]]*RUNNING'; then
+  command -v systemd-run >/dev/null 2>&1 || fail "systemd-run --user no está disponible para iniciar la sesión Android."
+  systemd-run --user --unit=nexus-waydroid-session --collect waydroid session start \
+    >/dev/null || fail "no se pudo iniciar la sesión de usuario Waydroid."
+  attempt=0
+  while [ "$attempt" -lt 15 ]; do
+    status="$(waydroid status 2>&1)" || true
+    if printf '%s\n' "$status" | grep -qi 'Session:[[:space:]]*RUNNING'; then
+      break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  printf '%s\n' "$status" | grep -qi 'Session:[[:space:]]*RUNNING' \
+    || fail "la sesión Waydroid no quedó activa. Estado informado: $status"
+fi
+
+echo "Nexus Android: Binder, contenedor y sesión Waydroid activos."

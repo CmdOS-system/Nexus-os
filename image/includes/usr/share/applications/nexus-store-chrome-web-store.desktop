@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Chrome Web Store
+Comment=Browse Chrome extensions and web apps
+Exec=xdg-open https://chromewebstore.google.com/
+Icon=applications-internet
+Terminal=false
+Categories=Network;WebBrowser;

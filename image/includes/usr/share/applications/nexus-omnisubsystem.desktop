@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus OmniSubsystem
+Comment=Open Windows, Android, iOS package inspection, macOS, WASI, Chrome extension, and Debian package files using Nexus compatibility routes
+Exec=/usr/bin/nexus-omniloader %f
+Terminal=false
+Categories=System;Utility;
+MimeType=application/vnd.microsoft.portable-executable;application/x-msi;application/vnd.android.package-archive;application/vnd.android.dex;application/x-itunes-ipa;application/x-mach-binary;application/wasm;application/x-chrome-extension;application/vnd.debian.binary-package;
+StartupNotify=true

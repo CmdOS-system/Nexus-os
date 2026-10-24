@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SideStore
+Comment=Visit the SideStore project
+Exec=xdg-open https://sidestore.io/
+Icon=applications-other
+Terminal=false
+Categories=Network;Utility;

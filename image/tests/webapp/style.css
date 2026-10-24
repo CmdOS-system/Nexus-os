@@ -1,0 +1,11 @@
+:root { color-scheme: dark; font-family: Inter, "Noto Sans", sans-serif; background: #0B0F19; color: #edf7ff; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(ellipse at 20% 15%, #15223a, #0B0F19 65%); }
+.shell { width: min(1060px, calc(100vw - 64px)); padding: 30px; border: 1px solid #00F0FF; border-radius: 22px; background: rgba(11,15,25,.94); box-shadow: 0 0 36px rgba(0,240,255,.14); }
+header { display: flex; gap: 18px; align-items: center; color: #00F0FF; font-size: 12px; font-weight: 700; letter-spacing: .12em; }
+.badge { border: 1px solid #00F0FF; border-radius: 12px; padding: 8px 12px; background: rgba(0,240,255,.1); }
+h1 { margin: 24px 0 8px; font-size: 34px; }
+.status { margin: 0 0 16px; color: #70f5ff; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+canvas { display: block; width: 100%; height: auto; border: 1px solid #173950; border-radius: 14px; background: #080d16; }
+#runtime { min-height: 24px; color: #70f5ff; font-variant-numeric: tabular-nums; }
+footer { color: #9fb4c9; font-size: 12px; }

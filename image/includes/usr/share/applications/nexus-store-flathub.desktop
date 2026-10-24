@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Flathub
+Comment=Browse Flatpak applications
+Exec=xdg-open https://flathub.org/
+Icon=system-software-install
+Terminal=false
+Categories=Network;Utility;

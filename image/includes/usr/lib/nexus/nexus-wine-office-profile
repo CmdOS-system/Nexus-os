@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  zenity --error --title="Perfil Windows de Nexus" --text="$*" 2>/dev/null || echo "$*" >&2
+  exit 1
+}
+
+command -v zenity >/dev/null 2>&1 || fail "Este asistente necesita una sesión gráfica."
+for program in wine winetricks nexus-omniloader; do
+  command -v "$program" >/dev/null 2>&1 || fail "Falta el componente requerido: $program."
+done
+
+installer="$(zenity --file-selection --title="Selecciona un instalador Windows con licencia (EXE o MSI)" --file-filter="Windows installers | *.exe *.EXE *.msi *.MSI")" \
+  || exit 0
+[ -f "$installer" ] || exit 0
+
+zenity --question --width=560 --title="Preparar perfil Office" \
+  --text="Nexus creará un prefijo Wine aislado y descargará componentes de Microsoft mediante Winetricks (Core Fonts, MSXML, RichEdit, GDI+ y Visual C++ 2019). Revisa y acepta las licencias que presenten los instaladores. Esto no garantiza que todas las versiones de Office funcionen. ¿Continuar?" \
+  || exit 0
+
+prefix="${XDG_DATA_HOME:-$HOME/.local/share}/nexus/wine/office-x64"
+mkdir -p "$prefix"
+export WINEARCH=win64 WINEPREFIX="$prefix" WINEDEBUG=-all
+
+wineboot --init || fail "Wine no pudo crear el perfil Office aislado."
+winetricks -q corefonts msxml6 riched20 gdiplus vcrun2019 \
+  || fail "Winetricks no pudo preparar alguno de los componentes; revisa sus licencias y vuelve a intentarlo."
+
+# Keep the overrides scoped to this dedicated profile; do not alter general
+# Windows applications or Nexus installer prefixes.
+for dll in gdiplus msxml6 riched20 riched32; do
+  wine reg add 'HKCU\Software\Wine\DllOverrides' /v "$dll" /d 'native,builtin' /f >/dev/null \
+    || fail "No se pudo guardar el override por perfil para $dll."
+done
+
+exec nexus-omniloader "$installer"

@@ -1,0 +1,62 @@
+name: OmniOS build and UEFI boot smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "omnios/kernel/**"
+      - "omnios/build.rs"
+      - ".github/workflows/build-os.yml"
+  pull_request:
+    paths:
+      - "omnios/kernel/**"
+      - "omnios/build.rs"
+      - ".github/workflows/build-os.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: omnios-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-boot:
+    name: Build and boot OmniOS UEFI x86_64 in QEMU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU and native/cross tools for kernel work
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu clang llvm nasm
+      - name: Install Rust nightly and x86_64 freestanding target
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-none
+          components: rustfmt, clippy, llvm-tools, rust-src
+      - name: Test loader signatures and workspace
+        working-directory: omnios
+        run: cargo +nightly -Z bindeps test --workspace
+      - name: Build BIOS and UEFI boot images
+        working-directory: omnios
+        run: cargo +nightly -Z bindeps build --release
+      - name: Boot UEFI image and require serial success marker
+        working-directory: omnios
+        run: timeout 60s cargo +nightly -Z bindeps run --release -- uefi-smoke
+      - name: Stage generated boot images
+        working-directory: omnios
+        run: |
+          mkdir -p artifacts
+          find target -type f -path '*/out/omnios-*.img' -exec cp -v {} artifacts/ \;
+          test -s artifacts/omnios-uefi.img
+          test -s artifacts/omnios-bios.img
+      - name: Upload bootable disk images
+        uses: actions/upload-artifact@v4
+        with:
+          name: omnios-boot-images-x86_64
+          path: omnios/artifacts/omnios-*.img
+          if-no-files-found: error
+          retention-days: 14

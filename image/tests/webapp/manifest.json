@@ -1,0 +1,8 @@
+{
+  "name": "Nexus Live Runtime",
+  "short_name": "Nexus Live",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0F19",
+  "theme_color": "#0B0F19"
+}

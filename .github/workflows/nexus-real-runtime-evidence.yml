@@ -1,0 +1,119 @@
+name: Nexus Real Runtime Evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/nexus-real-runtime-evidence.yml"
+      - "image/**"
+      - "omnios/loader/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/nexus-real-runtime-evidence.yml"
+      - "image/**"
+      - "omnios/loader/**"
+
+permissions:
+  contents: read
+
+jobs:
+  linux-real-runtimes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install native, Wine and Android user-space runtime tools
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 wine wine64 wine32:i386 fonts-wine \
+            xvfb xauth x11-utils xdotool wmctrl dbus-x11 xfwm4 xfconf ffmpeg p7zip-full \
+            python3-pil python3-gi python3-xlib gir1.2-gtk-3.0 unzip zip file curl \
+            gcc-aarch64-linux-gnu qemu-user-static clang lld llvm flatpak scrcpy picom
+          sudo install -Dm644 image/includes/usr/share/backgrounds/nexus/horizon-aurora.svg \
+            /usr/share/backgrounds/nexus/horizon-aurora.svg
+      - name: Install Android SDK and user-space emulator for real APK execution
+        run: |
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod 666 /dev/kvm
+            ls -l /dev/kvm
+          else
+            echo "No /dev/kvm on this runner; runtime-smoke will use its bounded software path."
+          fi
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -perm /111 | sort -V | tail -n 1)"
+          test -n "$sdkmanager_path"
+          echo "$(dirname "$sdkmanager_path")" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" "platforms;android-35" "build-tools;35.0.0" "platform-tools" \
+            "emulator" "system-images;android-35;default;x86_64"
+          avdmanager_path="$(dirname "$sdkmanager_path")/avdmanager"
+          test -x "$avdmanager_path"
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          rm -rf "$ANDROID_AVD_HOME/nexus-evidence.avd" "$ANDROID_AVD_HOME/nexus-evidence.ini"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          printf 'no\n' | "$avdmanager_path" create avd --force -n nexus-evidence \
+            -k "system-images;android-35;default;x86_64" --device pixel_2 \
+            -p "$ANDROID_AVD_HOME/nexus-evidence.avd"
+          test -s "$ANDROID_AVD_HOME/nexus-evidence.avd/config.ini"
+          grep -q '^image\.sysdir\.1=' "$ANDROID_AVD_HOME/nexus-evidence.avd/config.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fxq nexus-evidence
+      - name: Install real Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/nexus-playwright" playwright
+          "$RUNNER_TEMP/nexus-playwright/node_modules/.bin/playwright" install --with-deps chromium
+          chrome="$(find "$HOME/.cache/ms-playwright" -type f -name chrome -perm /111 -print -quit)"
+          test -n "$chrome"
+          sudo ln -sfn "$chrome" /usr/local/bin/chromium
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - name: Test and stage Nexus loader and Wasmtime
+        run: |
+          cargo +nightly -Z bindeps test --manifest-path omnios/Cargo.toml -p omni-loader
+          bash image/stage-omni-subsystem.sh
+      - name: Run real Linux, Wine, Chromium and F-Droid app evidence
+        env:
+          NODE_PATH: ${{ runner.temp }}/nexus-playwright/node_modules
+          NEXUS_REQUIRE_VIDEO: "1"
+          NEXUS_REQUIRE_REAL_EVIDENCE: "1"
+        run: bash image/runtime-smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nexus-real-runtime-evidence
+          if-no-files-found: warn
+          path: |
+            evidence/boot/desktop-boot.png
+            evidence/linux/linux-installing.png
+            evidence/linux/linux-interacting.png
+            evidence/linux/linux-app-running.png
+            evidence/linux/linux-app-running.mp4
+            evidence/windows/windows-installing.png
+            evidence/windows/windows-interacting.png
+            evidence/windows/wine-gui-running.png
+            evidence/windows/wine-gui-running.mp4
+            evidence/android/android-installing.png
+            evidence/android/android-interacting.png
+            evidence/android/apk-running.png
+            evidence/android/apk-running.mp4
+            evidence/web/web-installing.png
+            evidence/web/web-interacting.png
+            evidence/web/crx-pwa-running.png
+            evidence/web/crx-pwa-running.mp4
+

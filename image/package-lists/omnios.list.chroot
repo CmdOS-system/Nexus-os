@@ -1,0 +1,17 @@
+# Native runtimes bridged by Nexus OmniLoader.
+chromium
+unzip
+zenity
+pkexec
+
+# Android APK inspection and app launch after Waydroid installation.
+aapt
+waydroid
+weston
+
+# Wine support for PE installers and 64-bit Windows dispatch.
+winbind
+cabextract
+winetricks
+fonts-liberation
+alsa-utils

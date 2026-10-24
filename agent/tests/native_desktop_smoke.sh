@@ -11,7 +11,14 @@ cp -a image/includes/etc/skel/.config/. "$XDG_CONFIG_HOME/"
 dbus-update-activation-environment XDG_CONFIG_HOME XDG_CACHE_HOME
 xfce4-session > native-desktop-evidence/session.log 2>&1 &
 session_pid=$!
-trap 'kill "$session_pid" 2>/dev/null || true; wait "$session_pid" 2>/dev/null || true; rm -rf "$session_root"' EXIT
+cleanup() {
+  kill "$session_pid" 2>/dev/null || true
+  wait "$session_pid" 2>/dev/null || true
+  pkill -9 -x xfconfd 2>/dev/null || true
+  pkill -9 -x tumblerd 2>/dev/null || true
+  rm -rf "$session_root" 2>/dev/null || rm -rf "$session_root" 2>/dev/null || true
+}
+trap cleanup EXIT
 for attempt in $(seq 1 60); do
   if xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -q '/last-image$'; then break; fi
   sleep 1

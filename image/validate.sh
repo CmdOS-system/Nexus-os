@@ -21,6 +21,20 @@ HORIZON_SHORTCUTS="$ROOT/includes/etc/skel/.config/xfce4/xfconf/xfce-perchannel-
 CONTROL_DESKTOP="$ROOT/includes/usr/share/applications/nexus-control-center.desktop"
 INSTALLER_PREVIEW="$ROOT/includes/opt/nexus/installer-preview.py"
 INSTALLER_DESKTOP="$ROOT/includes/usr/share/applications/nexus-installer-preview.desktop"
+OMNI_PACKAGES="$ROOT/package-lists/omnios.list.chroot"
+OMNI_ARCHIVE="$ROOT/archives/trixie-backports.list.chroot"
+OMNI_HOOK="$ROOT/hooks/050-enable-nexus-omnios-binfmt.hook.chroot"
+OMNI_UNIT="$ROOT/includes/etc/systemd/system/nexus-omnios-binfmt.service"
+OMNI_DESKTOP="$ROOT/includes/usr/share/applications/nexus-omnisubsystem.desktop"
+OMNI_STAGE="$ROOT/stage-omni-subsystem.sh"
+OMNI_ISO_VERIFY="$ROOT/verify-omni-image.sh"
+OMNI_RUNTIME_SMOKE="$ROOT/runtime-smoke.sh"
+WAYDROID_PREFLIGHT="$ROOT/includes/usr/lib/nexus/nexus-waydroid-preflight"
+WAYDROID_HOOK="$ROOT/hooks/040-waydroid-binder.hook.chroot"
+WINE_OFFICE_PROFILE="$ROOT/includes/usr/lib/nexus/nexus-wine-office-profile"
+OMNI_UI="$ROOT/includes/usr/lib/nexus/nexus-omniloader-ui.py"
+OMNI_SOUND="$ROOT/includes/usr/lib/nexus/nexus-system-sound.py"
+SOUND_AUTOSTART="$ROOT/includes/etc/xdg/autostart/nexus-system-sound.desktop"
 
 bash -n "$ROOT/validate.sh"
 bash -n "$BUILD"
@@ -28,9 +42,18 @@ bash -n "$LAUNCHER"
 bash -n "$HORIZON_LAUNCHER"
 bash -n "$BOOT_HOOK"
 sh -n "$GRUB_HOOK"
+sh -n "$ROOT/auto/config"
+sh -n "$OMNI_HOOK"
+bash -n "$OMNI_STAGE"
+bash -n "$OMNI_ISO_VERIFY"
+bash -n "$OMNI_RUNTIME_SMOKE"
+python3 -m unittest discover -s "$ROOT/tests/runtime" -p "test_*.py"
+sh -n "$WAYDROID_PREFLIGHT"
+sh -n "$WAYDROID_HOOK"
+sh -n "$WINE_OFFICE_PROFILE"
 bash -n "$BOOT_MARKER"
 
-for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP"; do
+for file in "$PACKAGES" "$IDENTITY" "$LAUNCHER" "$DESKTOP" "$BOOT_UNIT" "$BOOT_HOOK" "$GRUB_HOOK" "$BOOT_MARKER" "$CONTROL_CENTER" "$CONTROL_DESKTOP" "$HORIZON" "$HORIZON_DESKTOP" "$HORIZON_LAUNCHER" "$HORIZON_SHORTCUTS" "$HORIZON_PANEL" "$HORIZON_PANEL_DESKTOP" "$INSTALLER_PREVIEW" "$INSTALLER_DESKTOP" "$OMNI_PACKAGES" "$OMNI_ARCHIVE" "$OMNI_HOOK" "$WAYDROID_HOOK" "$WAYDROID_PREFLIGHT" "$WINE_OFFICE_PROFILE" "$OMNI_UI" "$OMNI_SOUND" "$SOUND_AUTOSTART" "$OMNI_UNIT" "$OMNI_DESKTOP" "$OMNI_STAGE" "$OMNI_ISO_VERIFY" "$OMNI_RUNTIME_SMOKE" "$ROOT/auto/config"; do
   test -s "$file" || { echo "Missing required image source: $file" >&2; exit 1; }
 done
 
@@ -65,7 +88,7 @@ fi
 grep -q 'set timeout=3' "$BUILD"
 grep -q 'config/bootloaders/grub-pc/grub.cfg' "$BUILD"
 grep -q 'GRUB_TEMPLATE=' "$BUILD"
-python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW" "$HORIZON" "$HORIZON_PANEL"
+python3 -m py_compile "$CONTROL_CENTER" "$INSTALLER_PREVIEW" "$HORIZON" "$HORIZON_PANEL" "$OMNI_UI" "$OMNI_SOUND"
 grep -q "^Name=Nexus Horizon Panel Preview$" "$HORIZON_PANEL_DESKTOP"
 grep -q "^Name=Nexus Horizon$" "$HORIZON_DESKTOP"
 grep -q "^Exec=/usr/local/bin/nexus-horizon$" "$HORIZON_DESKTOP"
@@ -83,8 +106,28 @@ grep -q "Installation is DISABLED in this preview" "$INSTALLER_PREVIEW"
 grep -q "installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py" "$BUILD"
 
 for flag in '--distribution trixie' '--architectures amd64' '--binary-images iso-hybrid' '--debian-installer none' '--bootloader grub-efi' 'console=ttyS0,115200n8'; do
-  grep -q -- "$flag" "$BUILD"
+  grep -q -- "$flag" "$ROOT/auto/config"
 done
+for package in chromium unzip zenity pkexec aapt waydroid weston winbind cabextract winetricks fonts-liberation alsa-utils; do grep -qx "$package" "$OMNI_PACKAGES"; done
+grep -q '^deb http://deb.debian.org/debian trixie-backports main contrib$' "$OMNI_ARCHIVE"
+grep -q '050-enable-nexus-omnios-binfmt.hook.chroot' "$BUILD"
+grep -q 'nexus-omniloader --register-binfmt' "$OMNI_UNIT"
+grep -q 'nexus-omniloader %f' "$OMNI_DESKTOP"
+grep -q 'trixie-backports.list.chroot' "$BUILD"
+grep -q 'omnios.list.chroot' "$BUILD"
+grep -q 'nexus-omniloader' "$BUILD"
+grep -q 'wasmtime' "$BUILD"
+grep -q 'nexus-omniloader' "$OMNI_STAGE"
+grep -q 'cargo +nightly -Z bindeps build' "$OMNI_STAGE"
+grep -q 'cargo +nightly -Z bindeps test' "$ROOT/../.github/workflows/nexus-iso-gate.yml"
+grep -q 'image/runtime-smoke.sh' "$ROOT/../.github/workflows/nexus-iso-gate.yml"
+grep -q -- '--archive-areas "main contrib non-free-firmware"' "$ROOT/auto/config"
+grep -q 'wine32:i386 winbind cabextract winetricks fonts-liberation' "$ROOT/hooks/030-wine-multiarch.hook.chroot"
+grep -q 'binder_linux' "$WAYDROID_PREFLIGHT"
+grep -q 'systemctl enable waydroid-container.service' "$WAYDROID_HOOK"
+grep -q "DllOverrides" "$WINE_OFFICE_PROFILE"
+grep -q 'Name=Nexus Windows Office Profile' "$ROOT/includes/usr/share/applications/nexus-wine-office-profile.desktop"
+grep -q '040-waydroid-binder.hook.chroot' "$BUILD"
 
 for module in nexus_agent.py provider_client.py conversation.py providers.py provider_catalog.py provider_diagnostics.py session.py capabilities.py router.py config.py secret_store.py linux_secret_store.py cli.py openai_compatible.py settings.py settings_store.py tool_broker.py system_tools.py file_grants.py permissions.py pe_inspector.py installer_plan.py installer_inventory.py installer_preflight.py local_model_diagnostics.py action_preview.py app_installer.py; do
   test -s "$PROJECT_ROOT/agent/$module" || { echo "Missing Nexus Agent runtime module: $module" >&2; exit 1; }
@@ -114,3 +157,7 @@ grep -qx 'application/vnd.microsoft.portable-executable=nexus-app-install.deskto
 test -s "$ROOT/hooks/030-wine-multiarch.hook.chroot"
 sh -n "$ROOT/hooks/030-wine-multiarch.hook.chroot"
 grep -q '030-wine-multiarch.hook.chroot' "$BUILD"
+grep -q 'application/vnd.microsoft.portable-executable=nexus-app-install.desktop;' "$ROOT/includes/etc/skel/.config/mimeapps.list"
+for mime in application/vnd.android.package-archive application/x-msi application/x-mach-binary application/wasm application/x-chrome-extension application/vnd.debian.binary-package; do
+  grep -q "^$mime=nexus-omnisubsystem.desktop;" "$ROOT/includes/etc/skel/.config/mimeapps.list"
+done

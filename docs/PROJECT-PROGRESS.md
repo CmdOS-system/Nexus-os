@@ -1,6 +1,10 @@
 # Nexus OS — avance global estimado
 
-Corte vigente: 2026-10-17. Método de seguimiento solicitado por el usuario. **Estimación de gestión, no porcentaje de código, certificación ni probabilidad de terminar.** Sustituye el formato solo por colores; no convierte el antiguo 70 % en dato válido.
+Corte vigente: 2026-10-18. Método de seguimiento solicitado por el usuario. **Estimación de gestión, no porcentaje de código, certificación ni probabilidad de terminar.** Sustituye el formato solo por colores; no convierte el antiguo 70 % en dato válido.
+
+### Ajuste arquitectónico: Nexus OmniSubsystem — 2026-10-18
+
+Nexus usa Debian y el kernel Linux real. OmniOS se divide en el prototipo de kernel de investigación (`OmniKernel`, estimado 6% en `omnios/ROADMAP.md`) y el nuevo subsistema de usuario `Nexus-OmniSubsystem` (25%: código de dispatch y pruebas escritos, integración CI/ISO todavía pendiente). El global Nexus se conserva en **≈38%**: aún no hay nueva aceptación ISO de aplicaciones; no se eleva Windows o Android por conectar un runtime. La parte de integración se incorpora a la tabla cuando CI compruebe el SHA del PR, y la compatibilidad de cada app solo cuando se instale, abra y pase una tarea útil en la ISO.
 
 ## Cálculo y criterios
 

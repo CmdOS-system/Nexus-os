@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+# Called from image/work by live-build. Keep the build options in a reusable,
+# reviewable live-build auto script instead of hiding them in build.sh.
+lb config \
+  --mode debian \
+  --distribution trixie \
+  --architectures amd64 \
+  --binary-images iso-hybrid \
+  --debian-installer none \
+  --archive-areas "main contrib non-free-firmware" \
+  --bootloader grub-efi \
+  --bootappend-live "boot=live components console=tty0 console=ttyS0,115200n8"
