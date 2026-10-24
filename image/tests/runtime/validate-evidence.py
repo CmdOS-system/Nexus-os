@@ -446,6 +446,22 @@ def validate_live_window(ecosystem, window_id):
     print(f"live X11 app identity verified: ecosystem={ecosystem} id={window_id} pid={pid} WM_CLASS={wm_class} source={owner_source}")
 
 
+def ios_simulator_available():
+    """Return whether this host can provide an iPhone/iPad Simulator runtime."""
+    if sys.platform != "darwin":
+        return False
+    xcrun = shutil.which("xcrun")
+    if not xcrun:
+        return False
+    try:
+        result = subprocess.run([xcrun, "simctl", "list", "devices", "available"],
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=10, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and bool(re.search(r"\biPhone\b|\biPad\b", result.stdout))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-root", type=Path, default=Path("evidence"))
@@ -460,6 +476,9 @@ def main():
         return
     ecosystems = list(PAIRS) if "all" in args.ecosystems else args.ecosystems
     for ecosystem in ecosystems:
+        if ecosystem == "ios" and not ios_simulator_available():
+            print("ios: skipped; this host has no available iOS Simulator runtime")
+            continue
         installing, interacting, primary, video = PAIRS[ecosystem]
         folder = args.evidence_root / ecosystem
         first, second, running, movie = (folder / installing, folder / interacting,
