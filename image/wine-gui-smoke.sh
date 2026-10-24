@@ -27,7 +27,9 @@ cleanup() {
   [[ -z "$RECORDER_PID" ]] || { kill -INT "$RECORDER_PID" 2>/dev/null || true; wait "$RECORDER_PID" 2>/dev/null || true; }
   [[ -z "$WM_PID" ]] || { kill -TERM "$WM_PID" 2>/dev/null || true; wait "$WM_PID" 2>/dev/null || true; }
   if command -v wineserver >/dev/null 2>&1; then WINEPREFIX="${WINEPREFIX:-}" wineserver -k >/dev/null 2>&1 || true; fi
-  rm -rf -- "$SESSION_ROOT"
+  pkill -9 -x xfconfd 2>/dev/null || true
+  pkill -9 -x tumblerd 2>/dev/null || true
+  rm -rf -- "$SESSION_ROOT" 2>/dev/null || rm -rf -- "$SESSION_ROOT" 2>/dev/null || true
 }
 trap cleanup EXIT
 

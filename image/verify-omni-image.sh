@@ -11,7 +11,7 @@ done
 
 ISO="$(realpath "$1")"
 TEMP="$(mktemp -d)"
-trap 'rm -rf "$TEMP"' EXIT
+trap 'pkill -9 -x xfconfd 2>/dev/null || true; pkill -9 -x tumblerd 2>/dev/null || true; rm -rf "$TEMP" 2>/dev/null || rm -rf "$TEMP" 2>/dev/null || true' EXIT
 xorriso -osirrox on -indev "$ISO" -extract /live/filesystem.squashfs "$TEMP/filesystem.squashfs"
 # Extract only the regular files and one symlink verified below. This avoids
 # creating /dev character/block nodes or restoring privileged ownership/xattrs.

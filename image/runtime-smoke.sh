@@ -212,8 +212,10 @@ cleanup() {
   if [[ -n "${WINEPREFIX:-}" ]] && command -v wineserver >/dev/null 2>&1; then
     stop_wineserver "$WINEPREFIX"
   fi
+  pkill -9 -u "$(id -u)" -x xfconfd 2>/dev/null || true
+  pkill -9 -u "$(id -u)" -x tumblerd 2>/dev/null || true
   rm -rf -- "$XDG_RUNTIME_DIR" >/dev/null 2>&1 || true
-  rm -rf "$TMP_DIR" || true
+  rm -rf "$TMP_DIR" 2>/dev/null || rm -rf "$TMP_DIR" 2>/dev/null || true
   exit "$status"
 }
 trap cleanup EXIT
@@ -239,6 +241,8 @@ video_file="$1"; shift
 wm_pid=""
 recorder_pid=""
 compositor_pid=""
+viewer_pid_file="$(mktemp)"
+export NEXUS_ANDROID_VIEWER_PID_FILE="$viewer_pid_file"
 stop_pid() {
   local pid="$1" attempt
   [[ -n "$pid" ]] || return 0
@@ -278,9 +282,20 @@ cleanup_recording() {
   if [[ -n "$recorder_pid" ]]; then
     finish_recorder "$recorder_pid" || true
   fi
+  if [[ -s "$viewer_pid_file" ]]; then
+    while IFS= read -r viewer_pid; do
+      [[ "$viewer_pid" =~ ^[0-9]+$ ]] && kill -TERM -- "-$viewer_pid" 2>/dev/null || true
+    done < "$viewer_pid_file"
+    sleep 0.2
+    while IFS= read -r viewer_pid; do
+      [[ "$viewer_pid" =~ ^[0-9]+$ ]] && kill -KILL -- "-$viewer_pid" 2>/dev/null || true
+    done < "$viewer_pid_file"
+  fi
+  rm -f "$viewer_pid_file" 2>/dev/null || true
   stop_pid "$wm_pid"
   stop_pid "$compositor_pid"
-  pkill -TERM -u "$(id -u)" -x xfconfd 2>/dev/null || true
+  pkill -9 -u "$(id -u)" -x xfconfd 2>/dev/null || true
+  pkill -9 -u "$(id -u)" -x tumblerd 2>/dev/null || true
 }
 trap cleanup_recording EXIT
 trap 'exit 143' TERM

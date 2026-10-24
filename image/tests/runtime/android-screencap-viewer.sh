@@ -10,7 +10,7 @@ temporary="/tmp/android-live.$$.tmp.png"
 asset="/tmp/android-apk-asset.$$.png"
 cleanup() {
   if [[ -n "${updater:-}" ]]; then kill "$updater" >/dev/null 2>&1 || true; wait "$updater" 2>/dev/null || true; fi
-  rm -f "$temporary" "$asset"
+  rm -f "$temporary" "$asset" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 rm -f "$image" "$video"

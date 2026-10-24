@@ -9,7 +9,7 @@ asset="/tmp/android-apk-chromium.$$.png"
 html=/tmp/android-surface.html
 cleanup() {
   if [[ -n "${updater:-}" ]]; then kill "$updater" >/dev/null 2>&1 || true; wait "$updater" 2>/dev/null || true; fi
-  rm -f "$temporary" "$asset"
+  rm -f "$temporary" "$asset" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -81,6 +81,6 @@ while :; do
 done </dev/null >/dev/null 2>&1 &
 updater=$!
 "$chrome" --user-data-dir="${NEXUS_CHROMIUM_PROFILE:-/tmp/nexus-android-viewer}" \
-  --no-sandbox --disable-gpu --no-first-run --disable-dev-shm-usage \
+  --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --no-default-browser-check \
   --allow-file-access-from-files --window-size=780,560 --window-position=710,76 \
   --app="file:///tmp/android-surface.html"

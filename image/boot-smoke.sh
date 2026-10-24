@@ -41,7 +41,9 @@ TMP_DIR="$(mktemp -d)"
 QMP_SOCKET="$TMP_DIR/qmp.sock"
 PPM="$TMP_DIR/desktop.ppm"
 cleanup() {
-  rm -rf "$TMP_DIR"
+  pkill -9 -x xfconfd 2>/dev/null || true
+  pkill -9 -x tumblerd 2>/dev/null || true
+  rm -rf "$TMP_DIR" 2>/dev/null || rm -rf "$TMP_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 

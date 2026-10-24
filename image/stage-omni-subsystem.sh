@@ -20,7 +20,7 @@ install -m 0644 "$ROOT/includes/usr/lib/nexus/nexus-omniloader-ui.py" "$STAGING/
 install -m 0644 "$ROOT/includes/usr/lib/nexus/nexus-system-sound.py" "$STAGING/usr/lib/nexus/nexus-system-sound.py"
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+trap 'pkill -9 -x xfconfd 2>/dev/null || true; pkill -9 -x tumblerd 2>/dev/null || true; rm -rf "$tmp" 2>/dev/null || rm -rf "$tmp" 2>/dev/null || true' EXIT
 curl --fail --location --connect-timeout 60 --max-time 300 --retry 5 --retry-delay 3 \
   --output "$tmp/$ASSET" "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/${ASSET}"
 digest="$(curl --fail --silent --show-error --connect-timeout 60 --max-time 300 \

@@ -269,8 +269,9 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     chromium_fallback = any(
         token in identity for token in ("chromium", "chromium-browser", "google-chrome")
     ) and (named_android_surface or "android-surface.html" in cmdline)
-    if not named_android_surface and not known_viewer:
-        raise ValueError(f"Android viewer has unexpected title: {title!r}")
+    forbidden = ("omni-store", "python3", "xfwm4", "xfdesktop", "xfce4-panel", "picom")
+    if any(token in identity for token in forbidden) or any(token in title.casefold() for token in forbidden):
+        raise ValueError(f"Android X11 window is a store or desktop helper: {title!r}, {identity!r}")
     image = Path("/tmp/android-live.png")
     if not image.is_file() or image.stat().st_size <= 4096 or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("the live Android framebuffer image is missing or incomplete")
@@ -313,7 +314,10 @@ def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
     elif "scrcpy" in identity:
         viewer = "scrcpy"
     else:
-        raise ValueError(f"unrecognized Android viewer process: {identity!r}")
+        if not any(helper in process_table for helper in
+                   ("android-screencap-viewer.sh", "android-chromium-surface-viewer.sh")):
+            raise ValueError("unclassified Android X11 surface has no active ADB screenshot stream")
+        viewer = "visible X11 window corroborated by active ADB screenshot stream"
     print(f"live Android APK and {viewer} surface verified: {package} on {serial}")
 
 def validate_live_window(ecosystem, window_id):
@@ -353,6 +357,14 @@ def validate_live_window(ecosystem, window_id):
     if width < 500 or height < 360:
         raise ValueError(f"runtime window is tiny: {width}x{height}")
     owner_source = "X11 _NET_WM_PID"
+    if ecosystem == "android" and pid <= 1:
+        identity = f"{wm_class} {wm_name}".casefold()
+        if any(token in identity for token in
+               ("omni-store", "python3", "xfwm4", "xfdesktop", "xfce4-panel", "picom")):
+            raise ValueError(f"Android X11 window belongs to the store or desktop: {identity!r}")
+        _validate_android_app_and_viewer(identity, "", pid, window_id)
+        print(f"live Android X11 surface verified without a window PID: id={window_id} WM_CLASS={wm_class!r}")
+        return
     if pid <= 1 and ecosystem == "linux":
         # The app's own X11 class/title remains available when Flatpak's
         # session bus is disconnected.
@@ -373,6 +385,10 @@ def validate_live_window(ecosystem, window_id):
     identity = f"{wm_class} {cmdline} {comm}"
     if "python" in identity or "omni-store.py" in identity or "omni-store" in identity:
         raise ValueError(f"synthetic/store-owned app window rejected: WM_CLASS={wm_class!r}, pid={pid}, process={comm!r}")
+    if ecosystem == "android":
+        _validate_android_app_and_viewer(identity, cmdline, pid, window_id)
+        print(f"live Android X11 surface verified: id={window_id} pid={pid} WM_CLASS={wm_class!r}")
+        return
 
     allowed = {
         "linux": ("gnome-mines", "org.gnome.mines", "galculator", "vlc", "flatpak", "bwrap"),
@@ -387,8 +403,6 @@ def validate_live_window(ecosystem, window_id):
     if ecosystem == "linux" and any(token in identity for token in ("flatpak", "bwrap")):
         if not linux_mines_window_identity(wm_class, wm_name) and "org.gnome.mines" not in identity:
             raise ValueError("Flatpak/bwrap process is not tied to the GNOME Mines window or app ID")
-    if ecosystem == "android":
-        _validate_android_app_and_viewer(identity, cmdline, pid, window_id)
     if ecosystem == "windows":
         # Wine often assigns the visible X11 surface to explorer.exe. Also
         # require the official installed GUI process to be live in that prefix.

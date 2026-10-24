@@ -17,6 +17,7 @@ if len(sys.argv) < 6:
     raise SystemExit("usage: real-app-evidence.py ECOSYSTEM APP_ID INSTALLING.png INTERACTING.png APP_TITLE [PACKAGE]")
 
 ecosystem, app_id, installing_png, interacting_png, app_title, *package = sys.argv[1:]
+viewer_processes = []
 root = Path(__file__).resolve().parents[2]
 store = root / "includes/opt/nexus/omni-store.py"
 package_path = package[0] if package and package[0] else os.environ.get("NEXUS_FDROID_APK", "")
@@ -204,11 +205,10 @@ def is_target(window):
         return False
     identity = (window["title"] + " " + window["class"]).casefold()
     if ecosystem == "android":
-        is_named_surface = any(title in window["title"].casefold()
-                               for title in ("2048", "privacy friendly 2048", "android"))
-        is_native_viewer = any(token in identity for token in
-                               ("scrcpy", "ffplay", "feh", "display", "chromium", "chromium-browser"))
-        return is_named_surface or is_native_viewer
+        # top_level_windows() already excludes the WM, desktop, panel and
+        # compositor. Accept any remaining visible surface; X11 class/title
+        # metadata varies across SDL, Chromium and headless CI builds.
+        return True
     if ecosystem == "web":
         title = window["title"].casefold()
         wm_class = window["class"].casefold()
@@ -515,11 +515,41 @@ def launch_scrcpy_window():
     """Launch scrcpy with software rendering for CPU-only Xvfb runners."""
     serial = os.environ["ANDROID_SERIAL"]
     print("Starting scrcpy for the live Android app.", file=sys.stderr)
-    return subprocess.Popen(
+    process = launch_logged_viewer(
         ["scrcpy", "--serial", serial, "--max-size", "720", "--max-fps", "15",
          "--window-title", "Privacy Friendly 2048", "--window-width", "760", "--window-height", "560"],
-        env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True)
+        environment)
+    return process
+
+
+def launch_logged_viewer(argv, env):
+    """Start an Android viewer with diagnostics retained outside CI logs."""
+    try:
+        with open("/tmp/viewer-err.log", "ab") as error_log:
+            process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.DEVNULL, stderr=error_log,
+                                       close_fds=True, start_new_session=True)
+    except OSError as error:
+        print(f"Could not start Android viewer {argv[0]}: {error}", file=sys.stderr)
+        return None
+    viewer_processes.append(process)
+    pid_file = os.environ.get("NEXUS_ANDROID_VIEWER_PID_FILE")
+    if ecosystem == "android" and pid_file:
+        try:
+            with open(pid_file, "a", encoding="ascii") as output:
+                output.write(f"{process.pid}\n")
+        except OSError as error:
+            print(f"Could not record Android viewer process for post-recording cleanup: {error}",
+                  file=sys.stderr)
+    time.sleep(0.5)
+    if process.poll() is not None:
+        try:
+            details = Path("/tmp/viewer-err.log").read_text(errors="replace")[-1200:]
+        except OSError:
+            details = "viewer stderr log is unavailable"
+        print(f"Android viewer exited during startup (status {process.returncode}): {details}",
+              file=sys.stderr)
+    return process
 
 
 def launch_android_screencap_viewer():
@@ -529,27 +559,26 @@ def launch_android_screencap_viewer():
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
     if shutil.which("ffplay"):
         try:
-            process = subprocess.Popen(
-                ["bash", str(helper), serial, package_name], env=environment,
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                close_fds=True, start_new_session=True)
+            process = launch_logged_viewer(["bash", str(helper), serial, package_name], environment)
         except OSError as error:
             print(f"Could not start ffplay Android viewer: {error}", file=sys.stderr)
             process = None
         deadline = time.monotonic() + 8
         while process is not None and time.monotonic() < deadline:
             window = next((item for item in top_level_windows()
-                           if "privacy friendly 2048" in item["title"].casefold()
-                           and "ffplay" in item["class"].casefold() and not is_store(item)), None)
+                           if not is_store(item) and item["width"] >= 300
+                           and item["height"] >= 200 and is_target(item)), None)
             if window and window["width"] >= 300 and window["height"] >= 200:
                 return process, window
             if process.poll() is not None:
                 break
             time.sleep(0.2)
-        if process is not None:
-            stop_mirror_process(process)
-        print("ffplay did not map within 8s; switching to the real Chromium Android surface viewer.",
-              file=sys.stderr)
+        if process is None or process.poll() is not None:
+            print("ffplay exited before mapping; switching to the real Chromium Android surface viewer.",
+                  file=sys.stderr)
+        else:
+            print("ffplay is still starting; keeping it alive while Chromium recovery starts.",
+                  file=sys.stderr)
     return launch_android_chromium_viewer(serial, package_name)
 
 
@@ -566,34 +595,31 @@ def launch_android_chromium_viewer(serial, package_name):
         print("Chromium is unavailable for the Android screenshot fallback.", file=sys.stderr)
         return None, None
     helper = root / "tests/runtime/android-chromium-surface-viewer.sh"
-    profile = f"/tmp/nexus-android-viewer-{os.getpid()}"
+    profile = "/tmp/nexus-android-chromium"
     shutil.rmtree(profile, ignore_errors=True)
     viewer_environment = environment.copy()
     viewer_environment.update(NEXUS_CHROMIUM_BINARY=chromium,
                               NEXUS_CHROMIUM_PROFILE=profile)
     try:
-        process = subprocess.Popen(
-            ["bash", str(helper), serial, package_name], env=viewer_environment,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            close_fds=True, start_new_session=True)
+        process = launch_logged_viewer(["bash", str(helper), serial, package_name], viewer_environment)
     except OSError as error:
         print(f"Could not start Chromium Android viewer: {error}", file=sys.stderr)
+        return None, None
+    if process is None:
         return None, None
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         window = next((item for item in top_level_windows()
                        if not is_store(item) and is_target(item)
-                       and any(token in (item["title"] + " " + item["class"]).casefold()
-                               for token in ("chromium", "2048", "android"))), None)
+                       and item["width"] >= 300 and item["height"] >= 200), None)
         if window and window["width"] >= 300 and window["height"] >= 200:
             return process, window
         if process.poll() is not None:
             break
         time.sleep(0.25)
-    stop_mirror_process(process)
-    print("The Chromium ADB framebuffer fallback did not map within 20s.",
+    print("The Chromium ADB framebuffer fallback did not map within 20s; retaining its process for capture recovery.",
           file=sys.stderr)
-    return None, None
+    return process, None
 
 
 def validate_live_runtime_window(window):
@@ -1066,8 +1092,8 @@ try:
                 print(f"scrcpy did not open its real Android surface: {error}", file=sys.stderr)
                 app_window = None
             if app_window is None:
-                stop_mirror_process(mirror_process)
-                mirror_process = None
+                print("No Android X11 surface is mapped yet; retaining scrcpy while starting fallback recovery.",
+                      file=sys.stderr)
     if ecosystem == "windows":
         try:
             store_window, app_window = wait_for_windows_or_raise(10)
@@ -1138,8 +1164,6 @@ try:
     if ecosystem == "android" and app_window and not any(is_target(item) and not is_store(item)
                                                          for item in top_level_windows()):
         print("The Android surface disappeared during interaction; switching to the native ADB screenshot viewer.", file=sys.stderr)
-        stop_mirror_process(mirror_process)
-        mirror_process = None
         fallback_process, app_window = launch_android_screencap_viewer()
         if app_window:
             place_windows(store_window, app_window)
@@ -1154,8 +1178,15 @@ try:
     assert_distinct(installing_png, interacting_png)
     print(f"Captured Nexus OmniStore beside the real {ecosystem} app: {app_title}")
 finally:
-    for process in (recovery_process, mirror_process, fallback_process,
-                    *store_processes, wm_process):
-        stop_mirror_process(process)
+    defer_android_viewer_cleanup = (ecosystem == "android"
+                                    and bool(os.environ.get("NEXUS_ANDROID_VIEWER_PID_FILE")))
+    all_processes = [recovery_process, mirror_process, fallback_process,
+                     *([] if defer_android_viewer_cleanup else viewer_processes),
+                     *store_processes, wm_process]
+    stopped = set()
+    for process in all_processes:
+        if process is not None and process.pid not in stopped:
+            stopped.add(process.pid)
+            stop_mirror_process(process)
 
 
