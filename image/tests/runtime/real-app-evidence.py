@@ -465,14 +465,40 @@ def android_window_focused(timeout=5):
 
 
 def start_android_activity_and_wait(timeout=15):
-    """Start the installed APK and poll the real Android window focus."""
+    """Wake the AVD, resolve its actual APK launcher and poll activity focus."""
     serial = os.environ["ANDROID_SERIAL"]
     package_name = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
-    component = f"{package_name}/.MainActivity"
+    for argv in (
+        ["adb", "-s", serial, "shell", "input", "keyevent", "224"],
+        ["adb", "-s", serial, "shell", "wm", "dismiss-keyguard"],
+        ["adb", "-s", serial, "shell", "settings", "put", "global", "window_animation_scale", "0"],
+        ["adb", "-s", serial, "shell", "settings", "put", "global", "transition_animation_scale", "0"],
+        ["adb", "-s", serial, "shell", "am", "broadcast", "-a", "android.intent.action.CLOSE_SYSTEM_DIALOGS"],
+    ):
+        try:
+            subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           check=False, timeout=8)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+    activity = ""
     try:
-        started = subprocess.run(["adb", "-s", serial, "shell", "am", "start", "-n", component],
-                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                 check=False, timeout=8)
+        resolved = subprocess.run(["adb", "-s", serial, "shell", "cmd", "package",
+                                   "resolve-activity", "--brief", package_name],
+                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  check=False, timeout=8)
+        activity = next((line.strip().replace("\r", "")
+                         for line in reversed(resolved.stdout.splitlines())
+                         if line.strip()), "")
+        if not activity.startswith(package_name + "/"):
+            activity = ""
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Could not resolve Android launcher activity: {error}", file=sys.stderr)
+    try:
+        started = (subprocess.run(["adb", "-s", serial, "shell", "am", "start", "-W", "-n", activity],
+                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  check=False, timeout=15) if activity
+                   else subprocess.CompletedProcess([], 1, "No launcher activity resolved"))
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"Android am start did not respond; trying the package launcher: {error}", file=sys.stderr)
         started = subprocess.CompletedProcess([], 1, str(error))

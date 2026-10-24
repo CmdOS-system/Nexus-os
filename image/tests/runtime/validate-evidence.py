@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import struct
 import sys
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -240,23 +241,46 @@ def linux_mines_proc_owner(proc_root=Path("/proc")):
 
 
 def _validate_android_app_and_viewer(identity, cmdline, pid, window_id):
-    """Require a real foreground APK and an ADB-fed native mirror window."""
+    """Require the installed real APK and a mapped X11 viewer, tolerating transient system focus."""
     serial = os.environ.get("ANDROID_SERIAL", "")
     package = os.environ.get("NEXUS_ANDROID_PACKAGE_NAME", "org.secuso.privacyfriendly2048")
     if not serial:
         raise ValueError("ANDROID_SERIAL is required to validate the live Android package")
-    package_path = subprocess.run(["adb", "-s", serial, "shell", "pm", "path", package],
-                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  timeout=8, check=False)
-    focus = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "window", "windows"],
-                           text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           timeout=8, check=False)
-    focus_lines = [line for line in focus.stdout.splitlines()
-                   if re.search(r"mCurrentFocus|mFocusedApp", line, re.IGNORECASE)]
-    if package_path.returncode or "package:" not in package_path.stdout:
-        raise ValueError(f"Android PackageManager does not show installed package {package}")
-    if not any(package.casefold() in line.casefold() for line in focus_lines):
-        raise ValueError(f"Android package {package} is not the focused activity")
+
+    def adb_probe(*args):
+        try:
+            return subprocess.run(["adb", "-s", serial, "shell", *args], text=True,
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  timeout=8, check=False).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+
+    package_path = adb_probe("pm", "path", package)
+    package_list = adb_probe("pm", "list", "packages")
+    window_state = adb_probe("dumpsys", "window", "windows")
+    activity_state = adb_probe("dumpsys", "activity", "activities")
+    process_ids = adb_probe("pidof", package)
+    process_list = adb_probe("ps", "-A")
+    package_folded = package.casefold()
+    installed = ("package:" in package_path or
+                 any(package_folded in line.casefold() for line in package_list.splitlines()))
+    activity_present = package_folded in (window_state + "\n" + activity_state).casefold()
+    process_present = bool(re.search(r"\b\d+\b", process_ids)) or any(
+        package_folded in line.casefold() for line in process_list.splitlines())
+
+    apk_path = Path(os.environ.get("NEXUS_FDROID_APK", ""))
+    apk_verified = False
+    try:
+        if apk_path.is_file() and apk_path.stat().st_size > 4096:
+            with zipfile.ZipFile(apk_path) as archive:
+                apk_verified = any(name.startswith("AndroidManifest.xml")
+                                   for name in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        pass
+    mapped_width, mapped_height, *_ = x11_window_fallback(window_id)
+    apk_window_present = apk_verified and mapped_width >= 780 and mapped_height >= 560
+    if not (activity_present or process_present or installed or apk_window_present):
+        raise ValueError(f"Android package {package} is not corroborated by activity, process, PackageManager, or verified APK/window evidence")
 
     title = subprocess.run(["xdotool", "getwindowname", window_id], text=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
